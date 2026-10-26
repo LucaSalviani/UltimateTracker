@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QVariantAnimation>
 #include <QWidget>
 
 // Pestañita fina pegada a un borde de la pantalla (estilo Samsung Edge).
@@ -25,6 +26,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent*) override;
 
 private:
+    void animateGrow(qreal to);
+
     Edge m_edge = Edge::Right;
-    bool m_hover = false;
+    qreal m_grow = 0.0;             // 0 = en reposo, 1 = desplegada por el hover
+    QVariantAnimation m_growAnim;
 };

@@ -17,7 +17,7 @@ QString duration(qint64 s)
 {
     if (s < 0) s = 0;
     const qint64 totalMin = (s + 30) / 60;
-    if (totalMin < 60) return QString("%1'").arg(totalMin);
+    if (totalMin < 60) return QString("%1m").arg(totalMin);
     const qint64 h = totalMin / 60;
     const qint64 m = totalMin % 60;
     if (h >= 100) return QString("%1h").arg(h);

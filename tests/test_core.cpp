@@ -56,37 +56,38 @@ private slots:
         QCOMPARE(s->state(), SessionController::State::Running);
         advance(db, *s, 10 * 60);
         s->pause();
-        advance(db, *s, 2 * 60);                      // 2' de pausa → indebido
-        s->resume();
+        advance(db, *s, 2 * 60);                      // 2' de pausa
+        s->resume();                                  // volvió → era indebido
         advance(db, *s, 15 * 60);                     // completa
         QCOMPARE(s->state(), SessionController::State::WorkDone);
         QCOMPARE(completed.count(), 1);
 
-        advance(db, *s, 30);                          // tardó 30 s en elegir → indebido
-        s->startBreak();
+        advance(db, *s, 30);                          // tardó 30 s en elegir
+        s->startBreak();                              // → indebido
         advance(db, *s, 12 * 60);                     // recreo de 10' + 2' de alarma
         QCOMPARE(s->state(), SessionController::State::BreakOver);
         QCOMPARE(alarm.count(), 1);
         s->silenceAlarm();
-        advance(db, *s, 60);                          // 1' hasta dar play → indebido
-        s->start();
+        advance(db, *s, 60);                          // 1' hasta dar play
+        s->start();                                   // → los 3' de alarma+espera son indebidos
         advance(db, *s, 7 * 60);
-        s->endSession();                              // a mitad: el último queda rojo
+        s->endPomodoro();                             // lo corta a mano a los 7'
+        QCOMPARE(s->state(), SessionController::State::WorkDone);
+        QCOMPARE(completed.count(), 1);               // cortado a mano: sin sonido
 
         const QDate d(2026, 10, 26);
         const auto pomos = db.pomodorosBetween(d, d);
         QCOMPARE(pomos.size(), 2);
         QCOMPARE(pomos[0].status, PomoStatus::Completed);
         QCOMPARE(pomos[0].studiedSec, 25 * 60);
-        QCOMPARE(pomos[1].status, PomoStatus::Final);
+        QCOMPARE(pomos[1].status, PomoStatus::Completed);
         QCOMPARE(pomos[1].studiedSec, 7 * 60);
 
         QCOMPARE(sum(db, IntervalKind::Break, d), 10 * 60);
         QCOMPARE(sum(db, IntervalKind::Undue, d), 2 * 60 + 30 + 2 * 60 + 60);
-        QCOMPARE(s->sessionUndueSec(), 2 * 60 + 30 + 2 * 60 + 60);
     }
 
-    void endSessionAfterCompletedMarksItRed()
+    void idleAtEndOfDayIsInactiveNotUndue()
     {
         Database db;
         QVERIFY(db.open(":memory:"));
@@ -94,27 +95,36 @@ private slots:
         s->setWorkSec(20 * 60);
         s->start();
         advance(db, *s, 20 * 60);
-        s->startBreak();
-        advance(db, *s, 60);
-        s->endSession();
+        advance(db, *s, 3 * 3600);                    // no tomó recreo ni volvió
         const QDate d(2026, 10, 26);
-        const auto pomos = db.pomodorosBetween(d, d);
-        QCOMPARE(pomos.size(), 1);
-        QCOMPARE(pomos[0].status, PomoStatus::Final);
-        QCOMPARE(pomos[0].studiedSec, 20 * 60);
+        QCOMPARE(sum(db, IntervalKind::Undue, d), 0);
+        QVERIFY(sum(db, IntervalKind::Pending, d) >= 3 * 3600 - 5);   // se persiste cada 5 s
+        s->closeDay();
+        QCOMPARE(s->state(), SessionController::State::Idle);
+        QCOMPARE(sum(db, IntervalKind::Undue, d), 0);
 
-        // Después de terminar la sesión no se cuenta nada más como indebido.
-        const qint64 undueBefore = sum(db, IntervalKind::Undue, d);
-        advance(db, *s, 3600);
-        QCOMPARE(sum(db, IntervalKind::Undue, d), undueBefore);
-
-        // Retomar: arranca un pomodoro nuevo.
-        s->start();
-        QCOMPARE(s->state(), SessionController::State::Running);
-        QCOMPARE(db.pomodorosBetween(d, d).size(), 2);
+        // Para las estadísticas, ese tiempo es inactivo.
+        const auto t = stats::totals(db, d, d, nullptr, QDateTime(d, QTime(23, 59)));
+        QCOMPARE(t.undue, 0);
+        QCOMPARE(t.study, 20 * 60);
     }
 
-    void endSessionWhilePaused()
+    void gapThenStudyAgainIsUndue()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        auto* s = make(db);
+        s->setWorkSec(25 * 60);
+        s->start();
+        advance(db, *s, 25 * 60);
+        advance(db, *s, 3600);                        // se colgó una hora sin recreo
+        s->start();                                   // pero volvió: indebido
+        const QDate d(2026, 10, 26);
+        QCOMPARE(sum(db, IntervalKind::Undue, d), 3600);
+        QCOMPARE(sum(db, IntervalKind::Pending, d), 0);
+    }
+
+    void endPomodoroWhilePaused()
     {
         Database db;
         QVERIFY(db.open(":memory:"));
@@ -123,13 +133,27 @@ private slots:
         advance(db, *s, 300);
         s->pause();
         advance(db, *s, 120);
-        s->endSession();
+        s->endPomodoro();
         const QDate d(2026, 10, 26);
         const auto pomos = db.pomodorosBetween(d, d);
         QCOMPARE(pomos.size(), 1);
-        QCOMPARE(pomos[0].status, PomoStatus::Final);
         QCOMPARE(pomos[0].studiedSec, 300);
+        // Pausó y cortó: hasta que vuelva a estudiar, la pausa queda pendiente.
+        QCOMPARE(sum(db, IntervalKind::Undue, d), 0);
+        s->start();
         QCOMPARE(sum(db, IntervalKind::Undue, d), 120);
+    }
+
+    void endPomodoroRightAwayDiscardsIt()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        auto* s = make(db);
+        s->start();
+        s->endPomodoro();
+        const QDate d(2026, 10, 26);
+        QCOMPARE(db.pomodorosBetween(d, d).size(), 0);
+        QCOMPARE(s->state(), SessionController::State::Idle);
     }
 
     void crashRecovery()
@@ -147,7 +171,7 @@ private slots:
         const QDate d(2026, 10, 26);
         const auto pomos = db.pomodorosBetween(d, d);
         QCOMPARE(pomos.size(), 1);
-        QCOMPARE(pomos[0].status, PomoStatus::Final);
+        QCOMPARE(pomos[0].status, PomoStatus::Completed);
         QVERIFY(pomos[0].studiedSec >= 595);
     }
 

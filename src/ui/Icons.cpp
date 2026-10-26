@@ -91,6 +91,9 @@ void draw(QPainter& p, Id id, const QColor& c)
         p.drawLine(QPointF(5, 12), QPointF(15, 12));
         p.drawPolyline(QPolygonF({{11, 8}, {15, 12}, {11, 16}}));
         break;
+    case Id::Minimize:
+        p.drawLine(QPointF(6.5, 12.5), QPointF(17.5, 12.5));
+        break;
     case Id::Close:
         p.drawLine(QPointF(7, 7), QPointF(17, 17));
         p.drawLine(QPointF(17, 7), QPointF(7, 17));

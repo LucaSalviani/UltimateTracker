@@ -7,14 +7,17 @@
 // Estado de un pomodoro tal como se guarda en la base.
 enum class PomoStatus {
     Running   = 0,  // en curso (o quedó así si la app se cerró de golpe)
-    Completed = 1,  // llegó al final del tiempo: se pinta negro
-    Final     = 2,  // último de una sesión (terminada o abandonada): se pinta rojo
+    Completed = 1,  // terminado (por tiempo o a mano; studiedSec dice cuánto duró)
+    Final     = 2,  // versiones viejas: se trata igual que Completed
 };
+// El rojo NO se guarda: se pinta rojo el último pomodoro de cada día (ver GridWidget).
 
 // Tipos de intervalos que no son estudio.
 enum class IntervalKind {
-    Break = 1,  // recreo dentro del tiempo pactado
-    Undue = 2,  // recreo indebido: pausas y tiempo muerto con la sesión abierta
+    Break   = 1,  // recreo dentro del tiempo pactado
+    Undue   = 2,  // recreo indebido: tiempo muerto entre medio de la jornada
+    Pending = 3,  // tiempo muerto todavía sin decidir: si después se vuelve a
+                  // estudiar pasa a Undue; si no, era el final del día (inactivo)
 };
 
 struct Folder {

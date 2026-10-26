@@ -1,5 +1,6 @@
 #include "ui/SettingsDialog.h"
 
+#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QLabel>
@@ -7,7 +8,7 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-SettingsDialog::SettingsDialog(int workMin, int breakMin, int jokers, QWidget* parent)
+SettingsDialog::SettingsDialog(int workMin, int breakMin, int jokers, bool resizable, QWidget* parent)
     : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("Ajustes"));
@@ -25,6 +26,9 @@ SettingsDialog::SettingsDialog(int workMin, int breakMin, int jokers, QWidget* p
     m_jokers = new QSpinBox(this);
     m_jokers->setRange(0, 3);
     m_jokers->setValue(jokers);
+
+    m_resizable = new QCheckBox(QStringLiteral("Permitir cambiar el tamaño de la ventana desde los bordes"), this);
+    m_resizable->setChecked(resizable);
 
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Pomodoro por defecto"), m_work);
@@ -44,9 +48,12 @@ SettingsDialog::SettingsDialog(int workMin, int breakMin, int jokers, QWidget* p
     auto* lay = new QVBoxLayout(this);
     lay->addLayout(form);
     lay->addWidget(note);
+    lay->addSpacing(6);
+    lay->addWidget(m_resizable);
     lay->addWidget(buttons);
 }
 
 int SettingsDialog::workMinutes() const { return m_work->value(); }
 int SettingsDialog::breakMinutes() const { return m_break->value(); }
 int SettingsDialog::jokersPerWeek() const { return m_jokers->value(); }
+bool SettingsDialog::resizable() const { return m_resizable->isChecked(); }

@@ -7,26 +7,30 @@
 #include <functional>
 #include <optional>
 
-// Motor de la sesión de estudio. Es una máquina de estados que lleva el tiempo
+// Motor de la jornada de estudio. Es una máquina de estados que lleva el tiempo
 // de cada pomodoro, recreo y "recreo indebido", y lo va guardando en la base.
 //
-//   Closed ──start──▶ Running ◀──resume── Paused
-//                       │  ▲                ▲
-//          (se cumple)  │  └──pause─────────┘
-//                       ▼
-//                    WorkDone ──startBreak──▶ Break ──(se cumple)──▶ BreakOver
-//                       │                       │                       │
-//                   skipBreak             endBreakEarly            silenceAlarm
-//                       └──────────▶ Ready ◀────┴───────────────────────┘
-//                                     │
-//                                   start ──▶ Running
+//   Idle ──start──▶ Running ◀──resume── Paused
+//                    │  ▲  │               ▲
+//   (se cumple o     │  │  └──pause────────┘
+//    endPomodoro)    ▼  │
+//                  WorkDone ──startBreak──▶ Break ──(se cumple)──▶ BreakOver
+//                    │                        │                       │
+//                skipBreak               endBreakEarly           silenceAlarm
+//                    └──────────▶ Ready ◀─────┴───────────────────────┘
+//                                   │
+//                                 start ──▶ Running
 //
-// endSession() vuelve a Closed desde cualquier estado.
-// Tiempo que cuenta como indebido: Ready, Paused, WorkDone y BreakOver.
+// La sesión es el día: no se "termina" a mano. closeDay() la cierra a la
+// medianoche o al salir de la app.
+//
+// Tiempo muerto (Ready, Paused, WorkDone, BreakOver): se guarda como "pendiente".
+// Si después volvés a estudiar o arrancás un recreo, era un recreo indebido.
+// Si no volvés en todo el día, era el final de la jornada y cuenta como inactivo.
 class SessionController : public QObject {
     Q_OBJECT
 public:
-    enum class State { Closed, Ready, Running, Paused, WorkDone, Break, BreakOver };
+    enum class State { Idle, Ready, Running, Paused, WorkDone, Break, BreakOver };
     Q_ENUM(State)
 
     using Clock = std::function<qint64()>; // milisegundos epoch
@@ -35,7 +39,8 @@ public:
                                QObject* parent = nullptr);
 
     State state() const { return m_state; }
-    bool  sessionOpen() const { return m_state != State::Closed; }
+    // Hay algo corriendo que no conviene cortar (pomodoro, pausa o recreo).
+    bool inProgress() const;
 
     // ---- Configuración del próximo pomodoro / recreo --------------------
     qint64 folderId() const { return m_folderId; }
@@ -46,20 +51,21 @@ public:
     void   setBreakSec(int sec);
 
     // ---- Acciones --------------------------------------------------------
-    void start();          // Closed / Ready / WorkDone / BreakOver → Running
+    void start();          // Idle / Ready / WorkDone / BreakOver → Running
     void pause();          // Running → Paused
     void resume();         // Paused → Running
+    void endPomodoro();    // Running / Paused → WorkDone (guarda lo que llegó a correr)
     void startBreak();     // WorkDone → Break
     void skipBreak();      // WorkDone → Ready
     void endBreakEarly();  // Break → Ready
     void silenceAlarm();   // BreakOver → Ready
-    void endSession();     // * → Closed
+    void closeDay();       // * → Idle (medianoche o salir de la app)
 
     // Avanza el reloj. Lo llama un QTimer interno (o los tests a mano).
     void tick();
 
     // Al abrir la app: un pomodoro que quedó "corriendo" (cierre o corte de luz)
-    // se guarda hasta donde llegó y se marca final.
+    // se guarda hasta donde llegó, y se retoma el tiempo pendiente de hoy.
     void recoverAfterRestart();
 
     // ---- Lectura para la interfaz --------------------------------------
@@ -67,22 +73,18 @@ public:
     double progress() const;                           // 0..1 del pomodoro actual
     int    remainingSec() const;                       // pomodoro o recreo
     int    stateElapsedSec() const;                    // tiempo en el estado actual
-    qint64 sessionStudySec() const { return m_sesStudyMs / 1000; }
-    qint64 sessionBreakSec() const { return m_sesBreakMs / 1000; }
-    qint64 sessionUndueSec() const { return m_sesUndueMs / 1000; }
 
 signals:
     void stateChanged(SessionController::State state);
     void ticked();
     void pomodoroStarted(qint64 id);
-    void pomodoroCompleted(qint64 id);          // terminó su tiempo (sonido de progreso)
-    void pomodoroFinalized(qint64 id);          // cambió a estado final (rojo)
+    void pomodoroCompleted(qint64 id);          // se cumplió el tiempo (sonido de progreso)
+    void pomodoroSaved(qint64 id);              // terminó (por tiempo o a mano)
     void studyRecorded(qint64 folderId, qint64 seconds); // para hitos
     void breakFinished();                       // alarma
-    void sessionEnded(qint64 studySec, qint64 breakSec, qint64 undueSec);
 
 private:
-    enum class IvKind { None, Break, Undue };
+    enum class IvKind { None, Break, Pending };
     static IvKind kindFor(State s);
 
     qint64 now() const { return m_clock(); }
@@ -91,14 +93,15 @@ private:
     void   openInterval(IvKind kind);
     void   closeInterval();
     void   addToInterval(qint64 ms);
-    void   finishPomodoro(PomoStatus status);
+    void   confirmPending();
+    void   finishPomodoro();
     void   persist();
 
     Database* m_db;
     Clock     m_clock;
     QTimer    m_timer;
 
-    State  m_state  = State::Closed;
+    State  m_state  = State::Idle;
     qint64 m_lastMs = 0;
     qint64 m_stateMs = 0;
     qint64 m_lastPersistMs = 0;
@@ -120,7 +123,5 @@ private:
     qint64 m_ivMs = 0;
     QDate  m_ivDay;
 
-    qint64 m_sesStudyMs = 0;
-    qint64 m_sesBreakMs = 0;
-    qint64 m_sesUndueMs = 0;
+    QVector<qint64> m_pendingIds;   // intervalos "pendientes" de hoy sin confirmar
 };

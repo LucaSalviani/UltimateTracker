@@ -278,7 +278,7 @@ private:
 
     void paintFolders(QPainter& p, double L, double y, double W)
     {
-        sectionTitle(p, L, y, QStringLiteral("Carpetas"));
+        sectionTitle(p, L, y, QStringLiteral("Actividades"));
         p.setFont(theme::uiFont(8));
         p.setPen(theme::textFaint);
         const double cPeriod = L + W * 0.42, cTotal = L + W * 0.56, cBar = L + W * 0.70;
@@ -455,7 +455,7 @@ void StatsWidget::rebuildFolderCombo()
     const FolderTree tree(m_db->folders());
     QSignalBlocker block(m_folder);
     m_folder->clear();
-    m_folder->addItem(QStringLiteral("Todas las carpetas"), qint64(0));
+    m_folder->addItem(QStringLiteral("Todas las actividades"), qint64(0));
     std::function<void(qint64, int)> add = [&](qint64 parent, int depth) {
         for (qint64 id : tree.children(parent)) {
             m_folder->addItem(QString(depth * 3, QChar(' ')) + tree.find(id)->name, id);
@@ -511,7 +511,7 @@ void StatsWidget::refresh()
         addRows(0, 0);
         const qint64 orphanAll = m_db->studyByFolder().value(0);
         if (orphanAll > 0)
-            d.rows.append({QStringLiteral("Sin carpeta"), 0, m_db->studyByFolder(d.from, d.to).value(0), orphanAll});
+            d.rows.append({QStringLiteral("Sin actividad"), 0, m_db->studyByFolder(d.from, d.to).value(0), orphanAll});
     }
     m_canvas->relayout();
 }

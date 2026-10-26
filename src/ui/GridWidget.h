@@ -32,14 +32,19 @@ public:
     void setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QString>& titles);
     void setLive(const std::optional<Pomodoro>& running, double progress);
     void setFolderPaths(const QHash<qint64, QString>& paths) { m_paths = paths; }
+    // Si hay algo en marcha hoy (pomodoro, pausa o recreo), el último pomodoro
+    // de hoy todavía no es "el final del día" y no se pinta rojo.
+    void setTodayActive(bool active) { m_todayActive = active; update(); }
 
 signals:
     void dayActivated(const QDate& day);
+    void deleteRequested(qint64 pomodoroId);
 
 protected:
     void paintEvent(QPaintEvent*) override;
     void mouseMoveEvent(QMouseEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
+    void contextMenuEvent(QContextMenuEvent*) override;
 
 private:
     struct Placed { QRectF rect; int index; };
@@ -52,6 +57,8 @@ private:
     void paintWeek(QPainter& p);
     void paintMonth(QPainter& p);
     qint64 studyOn(const QDate& d) const;
+    bool   isDayEnd(const Pomodoro& p) const;
+    void   recomputeDayEnds();
 
     Zoom  m_zoom = Zoom::Day;
     QDate m_anchor;
@@ -62,6 +69,8 @@ private:
     QHash<QDate, QVector<int>>   m_byDay;
     QHash<QDate, QString>        m_titles;
     QHash<qint64, QString>       m_paths;
+    QHash<QDate, qint64>         m_lastOfDay;   // id del último pomodoro de cada día
+    bool   m_todayActive = false;
     qint64 m_liveId = 0;
     double m_liveProgress = 0.0;
 

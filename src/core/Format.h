@@ -5,7 +5,7 @@
 
 namespace fmt {
 
-// 25'  ·  1h05  ·  132h
+// 25m  ·  1h05  ·  132h
 QString duration(qint64 seconds);
 // 3h 05m  (para totales grandes)
 QString hours(qint64 seconds);

@@ -164,6 +164,16 @@ bool Database::moveFolder(qint64 id, qint64 newParentId)
     return q.exec();
 }
 
+void Database::setFolderPlacement(qint64 id, qint64 parentId, int sort)
+{
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE folders SET parent_id = ?, sort = ? WHERE id = ?");
+    q.addBindValue(parentId > 0 ? QVariant(parentId) : QVariant(QMetaType(QMetaType::LongLong)));
+    q.addBindValue(sort);
+    q.addBindValue(id);
+    q.exec();
+}
+
 // ---------------------------------------------------------------------------
 // Días
 // ---------------------------------------------------------------------------
@@ -343,6 +353,20 @@ void Database::updateIntervalSeconds(qint64 id, qint64 seconds)
     q.addBindValue(seconds);
     q.addBindValue(id);
     q.exec();
+}
+
+void Database::setIntervalsKind(const QVector<qint64>& ids, IntervalKind kind)
+{
+    if (ids.isEmpty()) return;
+    m_db.transaction();
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE intervals SET kind = ? WHERE id = ?");
+    for (qint64 id : ids) {
+        q.addBindValue(int(kind));
+        q.addBindValue(id);
+        q.exec();
+    }
+    m_db.commit();
 }
 
 QVector<Interval> Database::intervalsBetween(const QDate& from, const QDate& to) const

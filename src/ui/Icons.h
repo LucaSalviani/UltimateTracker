@@ -7,7 +7,7 @@ namespace icons {
 
 enum class Id {
     Play, Pause, Stop, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
-    Proportional, Stats, Menu, Pin, Dock, Close, Folder, Back, AppLogo,
+    Proportional, Stats, Menu, Pin, Dock, Minimize, Close, Folder, Back, AppLogo,
 };
 
 QIcon get(Id id, const QColor& color = QColor(0xd8, 0xd8, 0xd8));

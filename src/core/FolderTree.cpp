@@ -60,7 +60,7 @@ QVector<qint64> FolderTree::ancestorsAndSelf(qint64 id) const
 QString FolderTree::path(qint64 id, const QString& sep) const
 {
     const QVector<qint64> chain = ancestorsAndSelf(id);
-    if (chain.isEmpty()) return QStringLiteral("Sin carpeta");
+    if (chain.isEmpty()) return QStringLiteral("Sin actividad");
     QStringList parts;
     for (auto it = chain.crbegin(); it != chain.crend(); ++it)
         parts << find(*it)->name;

@@ -1,6 +1,6 @@
 # Constancia
 
-App de escritorio para gamificar el estudio: pomodoros como cuadraditos en una grilla, horas por carpeta camino a las 10.000 h, recreos, recreos indebidos y estadísticas. C++20 + Qt 6, nativa, sin navegador embebido.
+App de escritorio para gamificar el estudio: pomodoros como cuadraditos en una grilla, horas por actividad camino a las 10.000 h, recreos, recreos indebidos y estadísticas. C++20 + Qt 6, nativa, sin navegador embebido.
 
 La especificación completa está en [`SPEC.md`](SPEC.md).
 
@@ -44,20 +44,22 @@ C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\Constancia\Constancia
 | Acción | Cómo |
 |---|---|
 | Arrancar / pausar / seguir | Botón redondo o **Espacio** |
-| Elegir carpeta y duración | Abajo a la izquierda, antes de darle play |
+| Elegir actividad y duración | Abajo a la izquierda, antes de darle play |
 | Vista día → semana → mes | Botones de la barra superior, **Ctrl + rueda** o **Ctrl −** / **Ctrl +** |
 | Ir a un día | Click sobre el día en la vista semana o mes |
 | Cuadraditos proporcionales al tiempo | Botón de los dos cuadrados en la barra superior |
 | Esconder en un borde | Botón ⇥, o arrastrar la ventana y soltar con el mouse contra cualquier borde. Se vuelve a abrir con un click en la pestañita. |
 | Siempre visible | Botón del pin |
-| Carpetas y ajustes | Botón ⋯ |
+| Actividades y ajustes | Botón ⋯ |
+| Borrar un pomodoro | Click derecho sobre el cuadradito |
+| Volver al tamaño original | Click derecho en la barra de arriba |
 | Estadísticas | Botón de barras |
 
-- Cerrar la ventana con una sesión abierta la manda a la bandeja del sistema y el tiempo sigue contando. Sin sesión abierta, cierra la app.
+- Cerrar la ventana con un pomodoro, pausa o recreo en marcha la manda a la bandeja del sistema y el tiempo sigue contando. Si no, cierra la app.
 - Cuando termina un pomodoro o un recreo, la ventana aparece sola, aunque esté escondida en el borde o en la bandeja.
 - La alarma del recreo se repite y sube de volumen hasta que la cortás.
 
-**Colores de los cuadraditos:** gris llenándose = en curso · negro = completo · rojo = último de la sesión (terminada o abandonada).
+**Colores de los cuadraditos:** gris llenándose = en curso · negro = terminado · rojo = último del día.
 
 ## Datos
 
@@ -69,15 +71,16 @@ Si la app se cierra de golpe (corte de luz, cuelgue), el pomodoro en curso se gu
 
 ```
 src/core/                 lógica pura, sin interfaz (testeable)
-  Database                SQLite: carpetas, pomodoros, recreos, hitos, ajustes
+  Database                SQLite: actividades, pomodoros, recreos, hitos, ajustes
   SessionController       máquina de estados del timer (ver diagrama en el .h)
   Stats                   totales, horas inactivas, racha con comodines, hitos
-  FolderTree              árbol de carpetas y suma de horas hacia arriba
+  FolderTree              árbol de actividades y suma de horas hacia arriba
 src/ui/
   MainWindow              ventana gadget, controles por estado, borde, bandeja
   GridWidget              la grilla pintada a mano (día / semana / mes)
   StatsWidget             estadísticas y mapa de calor
-  EdgeTab, FolderMenu, FoldersDialog, SettingsDialog, Sounds, Icons, Theme
+  ActivitiesWidget        gestor de actividades
+  EdgeTab, FolderMenu, SettingsDialog, Sounds, Icons, Theme
 resources/                style.qss (tema gris) y sonidos
 tools/make_sounds.py      genera los .wav (sonidos propios)
 tests/test_core.cpp       tests del motor con reloj simulado

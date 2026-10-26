@@ -32,7 +32,7 @@ qt_add_executable(Constancia WIN32
     src/ui/GridWidget.h        src/ui/GridWidget.cpp
     src/ui/EdgeTab.h           src/ui/EdgeTab.cpp
     src/ui/FolderMenu.h        src/ui/FolderMenu.cpp
-    src/ui/FoldersDialog.h     src/ui/FoldersDialog.cpp
+    src/ui/ActivitiesWidget.h  src/ui/ActivitiesWidget.cpp
     src/ui/SettingsDialog.h    src/ui/SettingsDialog.cpp
     src/ui/StatsWidget.h       src/ui/StatsWidget.cpp
     src/ui/MainWindow.h        src/ui/MainWindow.cpp

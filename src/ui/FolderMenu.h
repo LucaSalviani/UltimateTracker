@@ -4,8 +4,8 @@
 
 #include <QMenu>
 
-// Menú desplegable con el árbol de carpetas. Las carpetas con hijos se abren
-// como submenú, cuyo primer ítem es la carpeta misma.
+// Menú desplegable con el árbol de actividades. Las que tienen subactividades
+// se abren como submenú, cuyo primer ítem es la actividad misma.
 class FolderMenu : public QMenu {
     Q_OBJECT
 public:

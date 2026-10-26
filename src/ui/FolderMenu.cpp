@@ -10,7 +10,7 @@ void FolderMenu::rebuild(const FolderTree& tree, qint64 current)
     clear();
     addLevel(this, tree, 0, current);
     addSeparator();
-    addAction(QStringLiteral("Administrar carpetas…"), this, &FolderMenu::manageRequested);
+    addAction(QStringLiteral("Administrar actividades…"), this, &FolderMenu::manageRequested);
 }
 
 void FolderMenu::addLevel(QMenu* menu, const FolderTree& tree, qint64 parent, qint64 current)

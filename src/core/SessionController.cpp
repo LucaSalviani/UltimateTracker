@@ -5,8 +5,6 @@
 namespace {
 constexpr qint64 kPersistEveryMs = 5000;
 constexpr int    kTickMs = 250;
-const QString kOpenSessionKey = QStringLiteral("session/open");
-const QString kLastPomoKey    = QStringLiteral("session/last_pomodoro");
 } // namespace
 
 SessionController::SessionController(Database* db, Clock clock, bool autoTick, QObject* parent)
@@ -28,13 +26,19 @@ QDate SessionController::today() const
     return QDateTime::fromMSecsSinceEpoch(now()).date();
 }
 
+bool SessionController::inProgress() const
+{
+    return m_state == State::Running || m_state == State::Paused ||
+           m_state == State::Break || m_state == State::BreakOver;
+}
+
 SessionController::IvKind SessionController::kindFor(State s)
 {
     switch (s) {
     case State::Ready:
     case State::Paused:
     case State::WorkDone:
-    case State::BreakOver: return IvKind::Undue;
+    case State::BreakOver: return IvKind::Pending;
     case State::Break:     return IvKind::Break;
     default:               return IvKind::None;
     }
@@ -46,7 +50,7 @@ SessionController::IvKind SessionController::kindFor(State s)
 void SessionController::setFolderId(qint64 id)
 {
     m_folderId = id;
-    // Si el pomodoro todavía no arrancó de verdad, se puede corregir la carpeta.
+    // Si el pomodoro recién arrancó, todavía se puede corregir la actividad.
     if (m_hasPomo && m_pomoMs < 60 * 1000) {
         m_pomo.folderId = id;
         m_db->updatePomodoro(m_pomo);
@@ -64,7 +68,7 @@ void SessionController::tick()
     const qint64 t = now();
     const qint64 delta = qMax<qint64>(0, t - m_lastMs);
     m_lastMs = t;
-    if (m_state == State::Closed) return;
+    if (m_state == State::Idle) return;
 
     m_stateMs += delta;
 
@@ -75,14 +79,11 @@ void SessionController::tick()
         if (m_pomoMs >= plannedMs) {
             const qint64 over = m_pomoMs - plannedMs;
             m_pomoMs = plannedMs;
-            m_sesStudyMs += delta - over;
             const qint64 id = m_pomo.id;
-            finishPomodoro(PomoStatus::Completed);
+            finishPomodoro();
             setState(State::WorkDone);
             addToInterval(over);
             emit pomodoroCompleted(id);
-        } else {
-            m_sesStudyMs += delta;
         }
         break;
     }
@@ -117,12 +118,6 @@ void SessionController::start()
     tick();
     if (m_state == State::Running || m_state == State::Paused || m_state == State::Break) return;
 
-    if (m_state == State::Closed) {
-        m_sesStudyMs = m_sesBreakMs = m_sesUndueMs = 0;
-        m_lastPomoId = 0;
-        m_db->setSetting(kOpenSessionKey, 1);
-    }
-
     const qint64 t = now();
     m_pomo = Pomodoro{};
     m_pomo.folderId   = m_folderId;
@@ -134,7 +129,6 @@ void SessionController::start()
     m_pomo.id         = m_db->insertPomodoro(m_pomo);
     m_pomoMs  = 0;
     m_hasPomo = true;
-    m_db->setSetting(kLastPomoKey, m_pomo.id);
 
     setState(State::Running);
     emit pomodoroStarted(m_pomo.id);
@@ -153,6 +147,22 @@ void SessionController::resume()
     tick();
     if (m_state != State::Paused) return;
     setState(State::Running);
+}
+
+void SessionController::endPomodoro()
+{
+    tick();
+    if (m_state != State::Running && m_state != State::Paused) return;
+    if (m_pomoMs < 1000) {
+        // Le diste play y lo cortaste enseguida: no hay nada que registrar.
+        m_db->deletePomodoro(m_pomo.id);
+        m_hasPomo = false;
+        emit pomodoroSaved(0);
+        setState(m_lastPomoId ? State::Ready : State::Idle);
+        return;
+    }
+    finishPomodoro();
+    setState(State::WorkDone);
 }
 
 void SessionController::startBreak()
@@ -182,48 +192,39 @@ void SessionController::silenceAlarm()
     if (m_state == State::BreakOver) setState(State::Ready);
 }
 
-void SessionController::endSession()
+void SessionController::closeDay()
 {
     tick();
-    if (m_state == State::Closed) return;
-
+    if (m_state == State::Idle) return;
     if (m_hasPomo) {
         if (m_pomoMs < 1000) {
-            // Le diste play y terminaste enseguida: no hay nada que registrar.
             m_db->deletePomodoro(m_pomo.id);
             m_hasPomo = false;
         } else {
-            finishPomodoro(PomoStatus::Final);
+            finishPomodoro();
         }
     }
-    if (m_lastPomoId) {
-        if (auto p = m_db->pomodoro(m_lastPomoId); p && p->status != PomoStatus::Final) {
-            p->status = PomoStatus::Final;
-            m_db->updatePomodoro(*p);
-        }
-        emit pomodoroFinalized(m_lastPomoId);
-    }
-
-    setState(State::Closed);
-    m_db->setSetting(kOpenSessionKey, 0);
-    emit sessionEnded(sessionStudySec(), sessionBreakSec(), sessionUndueSec());
+    // Lo que quedó pendiente no se confirma: era el final del día (inactivo).
+    setState(State::Idle);
+    m_pendingIds.clear();
+    m_lastPomoId = 0;
 }
 
 void SessionController::recoverAfterRestart()
 {
     for (Pomodoro p : m_db->pomodorosWithStatus(PomoStatus::Running)) {
-        p.status = PomoStatus::Final;
-        if (p.studiedSec <= 0) m_db->deletePomodoro(p.id);
-        else                   m_db->updatePomodoro(p);
-    }
-    if (m_db->setting(kOpenSessionKey, 0).toInt() == 1) {
-        const qint64 last = m_db->setting(kLastPomoKey, 0).toLongLong();
-        if (auto p = m_db->pomodoro(last); p && p->status == PomoStatus::Completed) {
-            p->status = PomoStatus::Final;
-            m_db->updatePomodoro(*p);
+        if (p.studiedSec <= 0) {
+            m_db->deletePomodoro(p.id);
+        } else {
+            p.status = PomoStatus::Completed;
+            m_db->updatePomodoro(p);
         }
-        m_db->setSetting(kOpenSessionKey, 0);
     }
+    // Si cerraste la app hoy con tiempo muerto pendiente, sigue pendiente: si
+    // volvés a estudiar hoy, cuenta como recreo indebido.
+    const QDate d = today();
+    for (const Interval& i : m_db->intervalsBetween(d, d))
+        if (i.kind == IntervalKind::Pending) m_pendingIds.append(i.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +236,9 @@ void SessionController::setState(State s)
     const IvKind newKind = kindFor(s);
     if (newKind != m_ivKind) {
         closeInterval();
+        // Volviste a estudiar (o arrancaste un recreo): el tiempo muerto de
+        // antes era un recreo indebido.
+        if (s == State::Running || s == State::Break) confirmPending();
         if (newKind != IvKind::None) openInterval(newKind);
     }
     m_state = s;
@@ -247,8 +251,9 @@ void SessionController::openInterval(IvKind kind)
     m_ivKind = kind;
     m_ivMs = 0;
     m_ivDay = today();
-    m_ivId = m_db->insertInterval(kind == IvKind::Break ? IntervalKind::Break : IntervalKind::Undue,
+    m_ivId = m_db->insertInterval(kind == IvKind::Break ? IntervalKind::Break : IntervalKind::Pending,
                                   m_ivDay, now() / 1000, 0);
+    if (kind == IvKind::Pending) m_pendingIds.append(m_ivId);
 }
 
 void SessionController::closeInterval()
@@ -260,34 +265,37 @@ void SessionController::closeInterval()
     m_ivMs = 0;
 }
 
+void SessionController::confirmPending()
+{
+    m_db->setIntervalsKind(m_pendingIds, IntervalKind::Undue);
+    m_pendingIds.clear();
+}
+
 void SessionController::addToInterval(qint64 ms)
 {
     if (m_ivKind == IvKind::None || ms <= 0) return;
-    // Si pasó la medianoche, el resto va al día nuevo.
+    // Si pasó la medianoche, el resto va al día nuevo. Lo pendiente del día
+    // anterior queda como inactivo para siempre.
     if (m_ivDay != today()) {
         const IvKind k = m_ivKind;
         closeInterval();
+        m_pendingIds.clear();
         openInterval(k);
     }
     m_ivMs += ms;
-    if (m_ivKind == IvKind::Break) m_sesBreakMs += ms;
-    else                           m_sesUndueMs += ms;
 }
 
-void SessionController::finishPomodoro(PomoStatus status)
+void SessionController::finishPomodoro()
 {
     if (!m_hasPomo) return;
     m_pomo.studiedSec = int((m_pomoMs + 500) / 1000);
     m_pomo.endedAt    = now() / 1000;
-    m_pomo.status     = status;
+    m_pomo.status     = PomoStatus::Completed;
     m_db->updatePomodoro(m_pomo);
     m_lastPomoId = m_pomo.id;
     m_hasPomo = false;
     emit studyRecorded(m_pomo.folderId, m_pomo.studiedSec);
-    if (status == PomoStatus::Final) {
-        emit pomodoroFinalized(m_pomo.id);
-        m_lastPomoId = 0; // ya está marcado, que endSession no lo vuelva a tocar
-    }
+    emit pomodoroSaved(m_pomo.id);
 }
 
 void SessionController::persist()

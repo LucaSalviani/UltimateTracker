@@ -29,6 +29,8 @@ public:
     // para no perder horas de las estadísticas globales.
     bool   deleteFolder(qint64 id);
     bool   moveFolder(qint64 id, qint64 newParentId);
+    // Padre y orden entre hermanos (después de arrastrar en el gestor).
+    void   setFolderPlacement(qint64 id, qint64 parentId, int sort);
 
     // ---- Días ------------------------------------------------------------
     QString dayTitle(const QDate& day) const;
@@ -49,6 +51,7 @@ public:
     // ---- Recreos e indebidos --------------------------------------------
     qint64 insertInterval(IntervalKind kind, const QDate& day, qint64 startedAt, qint64 seconds);
     void   updateIntervalSeconds(qint64 id, qint64 seconds);
+    void   setIntervalsKind(const QVector<qint64>& ids, IntervalKind kind);
     QVector<Interval> intervalsBetween(const QDate& from, const QDate& to) const;
 
     // ---- Hitos (avisos de horas) ----------------------------------------

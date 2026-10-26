@@ -12,8 +12,9 @@ Totals totals(const Database& db, const QDate& from, const QDate& to,
         t.study += p.studiedSec;
     }
     for (const Interval& i : db.intervalsBetween(from, to)) {
-        if (i.kind == IntervalKind::Break) t.breaks += i.seconds;
-        else                               t.undue  += i.seconds;
+        if (i.kind == IntervalKind::Break)      t.breaks += i.seconds;
+        else if (i.kind == IntervalKind::Undue) t.undue  += i.seconds;
+        // Pending = tiempo que terminó siendo el final del día: cuenta como inactivo.
     }
 
     // Horas inactivas = tiempo transcurrido del período − lo usado en la app.

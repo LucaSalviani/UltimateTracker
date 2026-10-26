@@ -2,7 +2,9 @@
 #include "core/Format.h"
 #include "ui/Theme.h"
 
+#include <QContextMenuEvent>
 #include <QDateTime>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -59,7 +61,28 @@ void GridWidget::setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QStr
     m_byDay.clear();
     for (int i = 0; i < m_pomos.size(); ++i)
         m_byDay[m_pomos[i].day].append(i);
+    recomputeDayEnds();
     update();
+}
+
+void GridWidget::recomputeDayEnds()
+{
+    m_lastOfDay.clear();
+    for (auto it = m_byDay.cbegin(); it != m_byDay.cend(); ++it) {
+        const Pomodoro* last = nullptr;
+        for (int i : it.value())
+            if (!last || m_pomos[i].startedAt >= last->startedAt) last = &m_pomos[i];
+        if (last) m_lastOfDay.insert(it.key(), last->id);
+    }
+}
+
+// Rojo = el pomodoro con el que terminó el día. Para hoy es "provisorio": se
+// pinta rojo mientras no haya nada en marcha (si volvés a estudiar, pasa a negro).
+bool GridWidget::isDayEnd(const Pomodoro& p) const
+{
+    if (p.status == PomoStatus::Running) return false;
+    if (m_lastOfDay.value(p.day) != p.id) return false;
+    return !(p.day == m_today && m_todayActive);
 }
 
 void GridWidget::setLive(const std::optional<Pomodoro>& running, double progress)
@@ -153,7 +176,8 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
     QColor textColor;
 
     p.setPen(Qt::NoPen);
-    switch (pomo.status) {
+    const bool dayEnd = isDayEnd(pomo);
+    switch (dayEnd ? PomoStatus::Final : (pomo.status == PomoStatus::Final ? PomoStatus::Completed : pomo.status)) {
     case PomoStatus::Completed:
         p.setBrush(theme::squareDone);
         p.setPen(QPen(theme::squareDoneEdge, 1));
@@ -172,15 +196,15 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
         p.setBrush(theme::squareEmpty);
         p.setPen(QPen(theme::squareFill.darker(150), 1));
         p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-        // Se llena de abajo hacia arriba.
+        // Se llena de izquierda a derecha, como una barra que sigue a la anterior.
         p.save();
         QPainterPath clip;
         clip.addRoundedRect(r, radius, radius);
         p.setClipPath(clip);
         p.setPen(Qt::NoPen);
         p.setBrush(theme::squareFill);
-        const double h = s * qBound(0.0, progress, 1.0);
-        p.drawRect(QRectF(r.left(), r.bottom() - h, s, h));
+        const double w = s * qBound(0.0, progress, 1.0);
+        p.drawRect(QRectF(r.left(), r.top(), w, s));
         p.restore();
         textColor = theme::text;
         break;
@@ -348,20 +372,35 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         const Pomodoro& pm = m_pomos[pl.index];
         const QString start = QDateTime::fromSecsSinceEpoch(pm.startedAt).time().toString("HH:mm");
         QString status;
-        switch (pm.status) {
-        case PomoStatus::Running:   status = QStringLiteral("en curso"); break;
-        case PomoStatus::Completed: status = QStringLiteral("completo"); break;
-        case PomoStatus::Final:     status = pm.studiedSec >= pm.plannedSec ? QStringLiteral("completo · final de sesión")
-                                                                            : QStringLiteral("final de sesión"); break;
-        }
+        if (pm.status == PomoStatus::Running)       status = QStringLiteral("en curso");
+        else if (pm.studiedSec >= pm.plannedSec)    status = QStringLiteral("completo");
+        else                                        status = QStringLiteral("cortado antes");
+        if (isDayEnd(pm)) status += QStringLiteral(" · último del día");
         QToolTip::showText(e->globalPosition().toPoint(),
                            QString("%1\n%2 · %3 de %4 · %5")
-                               .arg(m_paths.value(pm.folderId, QStringLiteral("Sin carpeta")), start,
+                               .arg(m_paths.value(pm.folderId, QStringLiteral("Sin actividad")), start,
                                     fmt::duration(pm.studiedSec), fmt::duration(pm.plannedSec), status),
                            this);
         return;
     }
     QToolTip::hideText();
+}
+
+void GridWidget::contextMenuEvent(QContextMenuEvent* e)
+{
+    for (const Placed& pl : m_placed) {
+        if (!pl.rect.contains(e->pos())) continue;
+        const Pomodoro& pm = m_pomos[pl.index];
+        QMenu menu(this);
+        QAction* del = menu.addAction(QStringLiteral("Borrar pomodoro…"));
+        if (pm.status == PomoStatus::Running) {
+            del->setEnabled(false);
+            del->setText(QStringLiteral("Borrar pomodoro (terminalo primero)"));
+        }
+        const qint64 id = pm.id;
+        if (menu.exec(e->globalPos()) == del) emit deleteRequested(id);
+        return;
+    }
 }
 
 void GridWidget::mousePressEvent(QMouseEvent* e)
