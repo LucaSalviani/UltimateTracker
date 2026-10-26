@@ -1,4 +1,4 @@
-# Constancia — Especificación v1
+# UltimateTracker — Especificación
 
 App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, reemplaza la hoja de pomodoros en la pared y el cronómetro online.
 
@@ -16,13 +16,23 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## Ciclo de un pomodoro
 1. Se configura actividad + duración (default 25 min) y se le da **play** manualmente.
-2. Se puede **pausar** (solo dice "Pausa", sin contador) o **terminar el pomodoro** antes de tiempo: se guarda lo que llegó a correr.
+2. Se puede **pausar** (cartel grande de PAUSA, sin contador de indebidos) o **terminar el pomodoro** antes de tiempo: se guarda lo que llegó a correr. Menos de 1 minuto no se guarda.
 3. Al terminar: suena el sonido de progreso. Pantalla con:
    - Botón principal: **Iniciar recreo** (duración editable, default 10 min).
-   - Botón chico: **Saltear recreo**.
+   - **Saltear recreo**: arranca el siguiente pomodoro al instante, "pegado" al anterior (súper pomodoro).
    - No tomar recreo y no volver es un posible final del día.
 4. El recreo tiene timer. Al terminar suena una **alarma fuerte que se repite hasta que el usuario la corta** (para despertar).
 5. Después del recreo (o al saltearlo) se muestra el siguiente pomodoro **pre-cargado con la configuración del anterior**; se edita ahí mismo si se quiere y se le da play.
+
+## Reproductor (cronómetro)
+- Panel a la derecha de la grilla, ~80 % del alto de la vista día. Inspirado en caseteras/DVD: visor con contador grande, LED, carretes que giran, barra de progreso con transcurrido/total como Spotify.
+- Rojo = pomodoro; verde agua = recreo.
+- Adentro está todo lo que avanza, cambia o mueve el tiempo: actividad, duración (− / +), play/pausa, terminar pomodoro, iniciar/saltear recreo, terminar recreo, silenciar.
+- La actividad se puede cambiar en cualquier momento; si hay un pomodoro corriendo, pasa entero a la actividad nueva.
+
+## Stats en vivo
+- Abajo de la grilla: pomodoros, minutos // horas y un tercer dato.
+- Por defecto muestra la actividad actual (tercer dato: total histórico de la actividad); se puede cambiar a todo el día (tercer dato: cuántas actividades distintas).
 
 ## Tiempos
 | Contador | Qué suma |
@@ -42,15 +52,16 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## La grilla
 - Un cuadradito por pomodoro, se agregan a medida que se arrancan (no hay cantidad fija).
-- Dentro de cada cuadradito: el tiempo que representa (ej. `25m`, `1h05`).
+- Dentro de cada cuadradito: su número del día (1, 2, 3…) y el tiempo que representa (ej. `25m`, `1h05`).
+- Los pomodoros arrancados salteando el recreo van pegados al anterior con un puente.
 - Estados:
   - **En curso:** se va llenando de gris.
   - **Terminado:** negro (como tachar la hoja), con el tiempo que duró.
   - **Último del día:** **rojo**. Para hoy es provisorio: se pinta rojo mientras no haya nada en marcha.
-- Click derecho sobre un cuadradito → **Borrar pomodoro** (con confirmación; se descuenta de las estadísticas).
+- Click derecho sobre un cuadradito → **Mover a actividad** o **Borrar pomodoro** (con confirmación; se descuenta de las estadísticas).
 - Toggle **proporcional**: el área de cada cuadradito pasa a ser proporcional a sus minutos.
 - Vistas tipo Google Calendar:
-  - **Día** (al abrir siempre muestra hoy): ventana horizontal del tamaño aprox. de la calculadora. Banda gris con la tarea del día (opcional) a la izquierda y la fecha a la derecha.
+  - **Día** (al abrir siempre muestra hoy): ventana horizontal chica. Banda gris con la tarea del día (opcional) a la izquierda y la fecha a la derecha (por defecto `26/10/26`; en Ajustes se puede poner escrita).
   - **Semana** (lunes a domingo): la ventana se agranda.
   - **Mes**: la ventana se agranda más. Siempre se ven los cuadraditos.
 

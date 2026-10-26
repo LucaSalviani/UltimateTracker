@@ -4,7 +4,6 @@
 
 #include <QContextMenuEvent>
 #include <QDateTime>
-#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -13,6 +12,7 @@
 
 namespace {
 const char* kWeekdays[] = {"lun", "mar", "mié", "jue", "vie", "sáb", "dom"};
+constexpr double kLinkGap = 2.0;   // separación entre pomodoros encadenados
 }
 
 GridWidget::GridWidget(QWidget* parent)
@@ -68,10 +68,15 @@ void GridWidget::setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QStr
 void GridWidget::recomputeDayEnds()
 {
     m_lastOfDay.clear();
+    m_number.clear();
     for (auto it = m_byDay.cbegin(); it != m_byDay.cend(); ++it) {
+        // m_pomos viene ordenado por inicio: el orden de la lista es la numeración.
+        int n = 0;
         const Pomodoro* last = nullptr;
-        for (int i : it.value())
+        for (int i : it.value()) {
+            m_number.insert(m_pomos[i].id, ++n);
             if (!last || m_pomos[i].startedAt >= last->startedAt) last = &m_pomos[i];
+        }
         if (last) m_lastOfDay.insert(it.key(), last->id);
     }
 }
@@ -138,6 +143,8 @@ QVector<GridWidget::Placed> GridWidget::layoutSquares(const QRectF& area, const 
         };
         for (int i = 0; i < indices.size(); ++i) {
             const double s = k * w[i];
+            // Un pomodoro encadenado (sin recreo) va pegado al anterior.
+            if (i > 0 && m_pomos[indices[i]].linked && x > area.left()) x -= gap - kLinkGap;
             if (x + s > area.right() + 0.01 && x > area.left()) {
                 closeRow(i);
                 rowStart = i;
@@ -212,6 +219,16 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
     }
 
     if (s < 15) return;
+    if (s >= 30) {
+        const int n = m_number.value(pomo.id);
+        QFont nf = theme::uiFont(8, QFont::DemiBold);
+        nf.setPixelSize(qMax(8, int(s * 0.17)));
+        p.setFont(nf);
+        QColor nc = textColor;
+        nc.setAlphaF(0.55);
+        p.setPen(nc);
+        p.drawText(r.adjusted(s * 0.09, s * 0.05, 0, 0), Qt::AlignLeft | Qt::AlignTop, QString::number(n));
+    }
     const QString label = fmt::duration(pomo.representedSec());
     QFont f = theme::uiFont(9, QFont::DemiBold);
     double px = s * 0.30;
@@ -232,6 +249,17 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
     const auto placed = layoutSquares(area, m_byDay.value(day), maxSide, minSide);
     p.save();
     p.setClipRect(area.adjusted(-1, -1, 1, 1));
+    // "Súper pomodoro": un puente une a los que se hicieron sin recreo.
+    for (int k = 1; k < placed.size(); ++k) {
+        const QRectF& a = placed[k - 1].rect;
+        const QRectF& b = placed[k].rect;
+        if (!m_pomos[placed[k].index].linked || qAbs(a.bottom() - b.bottom()) > 0.5 || b.left() < a.right()) continue;
+        const double h = qMin(a.height(), b.height()) * 0.56;
+        const double cy = b.bottom() - qMin(a.height(), b.height()) / 2;
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x6a, 0x6a, 0x6a));
+        p.drawRect(QRectF(a.right() - 3, cy - h / 2, b.left() - a.right() + 6, h));
+    }
     for (const Placed& pl : placed) {
         paintSquare(p, pl.rect, m_pomos[pl.index]);
         m_placed.append(pl);
@@ -376,8 +404,10 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         else if (pm.studiedSec >= pm.plannedSec)    status = QStringLiteral("completo");
         else                                        status = QStringLiteral("cortado antes");
         if (isDayEnd(pm)) status += QStringLiteral(" · último del día");
+        if (pm.linked) status += QStringLiteral(" · sin recreo antes");
         QToolTip::showText(e->globalPosition().toPoint(),
-                           QString("%1\n%2 · %3 de %4 · %5")
+                           QString("#%1  %2\n%3 · %4 de %5 · %6")
+                               .arg(m_number.value(pm.id))
                                .arg(m_paths.value(pm.folderId, QStringLiteral("Sin actividad")), start,
                                     fmt::duration(pm.studiedSec), fmt::duration(pm.plannedSec), status),
                            this);
@@ -390,15 +420,7 @@ void GridWidget::contextMenuEvent(QContextMenuEvent* e)
 {
     for (const Placed& pl : m_placed) {
         if (!pl.rect.contains(e->pos())) continue;
-        const Pomodoro& pm = m_pomos[pl.index];
-        QMenu menu(this);
-        QAction* del = menu.addAction(QStringLiteral("Borrar pomodoro…"));
-        if (pm.status == PomoStatus::Running) {
-            del->setEnabled(false);
-            del->setText(QStringLiteral("Borrar pomodoro (terminalo primero)"));
-        }
-        const qint64 id = pm.id;
-        if (menu.exec(e->globalPos()) == del) emit deleteRequested(id);
+        emit pomodoroMenuRequested(m_pomos[pl.index].id, e->globalPos());
         return;
     }
 }

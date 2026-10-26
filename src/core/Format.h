@@ -20,6 +20,11 @@ QString monthYear(const QDate& d);
 // "26 oct – 1 nov 2026"
 QString weekRange(const QDate& monday);
 
+// Versiones numéricas: 26/10/26 · 26/10 – 01/11/26 · 10/2026
+QString numericDate(const QDate& d);
+QString numericWeekRange(const QDate& monday);
+QString numericMonth(const QDate& d);
+
 QString dayKey(const QDate& d);   // 2026-10-26
 QDate   fromDayKey(const QString& s);
 

@@ -1,6 +1,8 @@
 #include "ui/SettingsDialog.h"
 
 #include <QCheckBox>
+#include <QComboBox>
+#include <QDate>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QLabel>
@@ -8,7 +10,8 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-SettingsDialog::SettingsDialog(int workMin, int breakMin, int jokers, bool resizable, QWidget* parent)
+SettingsDialog::SettingsDialog(int workMin, int breakMin, int jokers, bool resizable, bool numericDate,
+                               QWidget* parent)
     : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("Ajustes"));
@@ -30,10 +33,17 @@ SettingsDialog::SettingsDialog(int workMin, int breakMin, int jokers, bool resiz
     m_resizable = new QCheckBox(QStringLiteral("Permitir cambiar el tamaño de la ventana desde los bordes"), this);
     m_resizable->setChecked(resizable);
 
+    m_dateFormat = new QComboBox(this);
+    const QDate sample = QDate::currentDate();
+    m_dateFormat->addItem(sample.toString(QStringLiteral("dd/MM/yy")) + QStringLiteral("  (solo números)"));
+    m_dateFormat->addItem(QStringLiteral("Escrita (lunes 26 de octubre)"));
+    m_dateFormat->setCurrentIndex(numericDate ? 0 : 1);
+
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Pomodoro por defecto"), m_work);
     form->addRow(QStringLiteral("Recreo por defecto"), m_break);
     form->addRow(QStringLiteral("Comodines por semana"), m_jokers);
+    form->addRow(QStringLiteral("Formato de la fecha"), m_dateFormat);
 
     auto* note = new QLabel(QStringLiteral("Los comodines son días sin estudiar que no cortan la racha."), this);
     note->setWordWrap(true);
@@ -57,3 +67,4 @@ int SettingsDialog::workMinutes() const { return m_work->value(); }
 int SettingsDialog::breakMinutes() const { return m_break->value(); }
 int SettingsDialog::jokersPerWeek() const { return m_jokers->value(); }
 bool SettingsDialog::resizable() const { return m_resizable->isChecked(); }
+bool SettingsDialog::numericDate() const { return m_dateFormat->currentIndex() == 0; }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Constancia VERSION 0.1.0 LANGUAGES CXX)
+project(UltimateTracker VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,7 +24,7 @@ target_link_libraries(constancia_core PUBLIC Qt6::Core Qt6::Sql)
 # ---------------------------------------------------------------------------
 # Aplicación
 # ---------------------------------------------------------------------------
-qt_add_executable(Constancia WIN32
+qt_add_executable(UltimateTracker WIN32
     src/main.cpp
     src/ui/Theme.h             src/ui/Theme.cpp
     src/ui/Icons.h             src/ui/Icons.cpp
@@ -33,11 +33,13 @@ qt_add_executable(Constancia WIN32
     src/ui/EdgeTab.h           src/ui/EdgeTab.cpp
     src/ui/FolderMenu.h        src/ui/FolderMenu.cpp
     src/ui/ActivitiesWidget.h  src/ui/ActivitiesWidget.cpp
+    src/ui/TimerDeck.h         src/ui/TimerDeck.cpp
+    src/ui/LiveStats.h         src/ui/LiveStats.cpp
     src/ui/SettingsDialog.h    src/ui/SettingsDialog.cpp
     src/ui/StatsWidget.h       src/ui/StatsWidget.cpp
     src/ui/MainWindow.h        src/ui/MainWindow.cpp
 )
-qt_add_resources(Constancia "assets"
+qt_add_resources(UltimateTracker "assets"
     PREFIX "/"
     BASE resources
     FILES
@@ -45,10 +47,14 @@ qt_add_resources(Constancia "assets"
         resources/sounds/chime.wav
         resources/sounds/alarm.wav
 )
-target_link_libraries(Constancia PRIVATE constancia_core Qt6::Widgets Qt6::Multimedia Qt6::Network)
+target_link_libraries(UltimateTracker PRIVATE constancia_core Qt6::Widgets Qt6::Multimedia Qt6::Network)
 if(WIN32)
     # Esquinas redondeadas, sombra y modo oscuro de Windows 11 (DWM).
-    target_link_libraries(Constancia PRIVATE dwmapi)
+    target_link_libraries(UltimateTracker PRIVATE dwmapi)
+    # Ícono del .exe (el mismo de la barra de tareas).
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/app.rc
+         "IDI_ICON1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/resources/app.ico\"\n")
+    target_sources(UltimateTracker PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/app.rc)
 endif()
 
 # ---------------------------------------------------------------------------

@@ -38,7 +38,8 @@ public:
 
 signals:
     void dayActivated(const QDate& day);
-    void deleteRequested(qint64 pomodoroId);
+    // Click derecho sobre un cuadradito (MainWindow arma el menú).
+    void pomodoroMenuRequested(qint64 pomodoroId, const QPoint& globalPos);
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -70,6 +71,7 @@ private:
     QHash<QDate, QString>        m_titles;
     QHash<qint64, QString>       m_paths;
     QHash<QDate, qint64>         m_lastOfDay;   // id del último pomodoro de cada día
+    QHash<qint64, int>           m_number;      // número del pomodoro dentro de su día (1, 2, …)
     bool   m_todayActive = false;
     qint64 m_liveId = 0;
     double m_liveProgress = 0.0;

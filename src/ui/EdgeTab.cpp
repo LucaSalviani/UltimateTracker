@@ -24,7 +24,7 @@ EdgeTab::EdgeTab(QWidget* parent)
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
     setCursor(Qt::PointingHandCursor);
-    setToolTip(QStringLiteral("Abrir Constancia"));
+    setToolTip(QStringLiteral("Abrir UltimateTracker"));
 
     m_growAnim.setDuration(140);
     m_growAnim.setEasingCurve(QEasingCurve::OutCubic);

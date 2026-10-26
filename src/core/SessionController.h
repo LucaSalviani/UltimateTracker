@@ -17,9 +17,12 @@
 //                  WorkDone ──startBreak──▶ Break ──(se cumple)──▶ BreakOver
 //                    │                        │                       │
 //                skipBreak               endBreakEarly           silenceAlarm
-//                    └──────────▶ Ready ◀─────┴───────────────────────┘
+//         (arranca otro pomodoro     │                       │
+//          "encadenado" al anterior) └──▶ Ready ◀────────────┘
 //                                   │
 //                                 start ──▶ Running
+//
+// Un pomodoro de menos de 1 minuto no se guarda.
 //
 // La sesión es el día: no se "termina" a mano. closeDay() la cierra a la
 // medianoche o al salir de la app.
@@ -56,7 +59,7 @@ public:
     void resume();         // Paused → Running
     void endPomodoro();    // Running / Paused → WorkDone (guarda lo que llegó a correr)
     void startBreak();     // WorkDone → Break
-    void skipBreak();      // WorkDone → Ready
+    void skipBreak();      // WorkDone → Running (el siguiente, pegado al anterior)
     void endBreakEarly();  // Break → Ready
     void silenceAlarm();   // BreakOver → Ready
     void closeDay();       // * → Idle (medianoche o salir de la app)
@@ -79,7 +82,8 @@ signals:
     void ticked();
     void pomodoroStarted(qint64 id);
     void pomodoroCompleted(qint64 id);          // se cumplió el tiempo (sonido de progreso)
-    void pomodoroSaved(qint64 id);              // terminó (por tiempo o a mano)
+    void pomodoroSaved(qint64 id);              // terminó (por tiempo o a mano); 0 = descartado
+    void pomodoroChanged();                     // cambió la actividad del pomodoro en curso
     void studyRecorded(qint64 folderId, qint64 seconds); // para hitos
     void breakFinished();                       // alarma
 
@@ -94,7 +98,8 @@ private:
     void   closeInterval();
     void   addToInterval(qint64 ms);
     void   confirmPending();
-    void   finishPomodoro();
+    bool   finishPomodoro();   // false si duró menos del mínimo y se descartó
+    void   startPomodoro(bool linked);
     void   persist();
 
     Database* m_db;

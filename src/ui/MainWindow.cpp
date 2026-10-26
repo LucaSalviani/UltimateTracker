@@ -3,6 +3,8 @@
 #include "core/Stats.h"
 #include "ui/ActivitiesWidget.h"
 #include "ui/FolderMenu.h"
+#include "ui/LiveStats.h"
+#include "ui/TimerDeck.h"
 #include "ui/Icons.h"
 #include "ui/SettingsDialog.h"
 #include "ui/Sounds.h"
@@ -138,7 +140,6 @@ QLabel* dimLabel(QWidget* parent, const QString& text = {})
     return l;
 }
 
-enum ControlPage { PageIdle, PageRunning, PagePaused, PageWorkDone, PageBreak, PageBreakOver };
 enum Page { PageGrid = 0, PageStats = 1, PageActivities = 2 };
 
 constexpr int kResizeMargin = 6;   // píxeles del borde que sirven para redimensionar
@@ -146,11 +147,11 @@ constexpr int kResizeMargin = 6;   // píxeles del borde que sirven para redimen
 QSize defaultSize(const QString& key)
 {
     // Día: del tamaño de la calculadora pero apaisada.
-    if (key == "week")       return {1078, 616};
-    if (key == "month")      return {1254, 880};
+    if (key == "week")       return {1180, 640};
+    if (key == "month")      return {1340, 900};
     if (key == "stats")      return {1034, 704};
     if (key == "activities") return {594, 560};
-    return {594, 374};
+    return {700, 400};
 }
 } // namespace
 
@@ -160,7 +161,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     , m_db(db)
 {
     setObjectName("Root");
-    setWindowTitle(QStringLiteral("Constancia"));
+    setWindowTitle(QStringLiteral("UltimateTracker"));
     setWindowIcon(icons::get(icons::Id::AppLogo));
     setAttribute(Qt::WA_StyledBackground);
     setAttribute(Qt::WA_AlwaysShowToolTips);   // tooltips aunque la ventana no tenga foco
@@ -172,6 +173,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_today = QDate::currentDate();
     m_jokers = m_db->setting("jokers_per_week", 2).toInt();
     m_resizable = m_db->setting("resizable", 1).toBool();
+    m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
 
     m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
     m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -191,13 +193,33 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_toastTimer.setSingleShot(true);
     connect(&m_toastTimer, &QTimer::timeout, m_toast, &QLabel::hide);
 
+    m_liveStats = new LiveStats(gridPage);
+    m_liveActivityScope = m_db->setting("live_scope", "activity").toString() == QLatin1String("activity");
+    connect(m_liveStats, &LiveStats::scopeToggled, this, [this] {
+        m_liveActivityScope = !m_liveActivityScope;
+        m_db->setSetting("live_scope", m_liveActivityScope ? "activity" : "day");
+        refreshLiveStats();
+    });
+
+    // Columna izquierda: grilla + stats en vivo. Derecha: el reproductor.
+    auto* left = new QVBoxLayout;
+    left->setContentsMargins(0, 0, 0, 0);
+    left->setSpacing(6);
+    left->addWidget(m_grid, 1);
+    left->addWidget(m_toast);
+    left->addWidget(m_liveStats);
+
+    auto* body = new QHBoxLayout;
+    body->setContentsMargins(10, 4, 10, 10);
+    body->setSpacing(10);
+    body->addLayout(left, 1);
+    body->addWidget(buildDeck());
+
     auto* gridLay = new QVBoxLayout(gridPage);
     gridLay->setContentsMargins(0, 0, 0, 0);
     gridLay->setSpacing(0);
     gridLay->addWidget(buildDateBand());
-    gridLay->addWidget(m_grid, 1);
-    gridLay->addWidget(m_toast);
-    gridLay->addWidget(buildControls());
+    gridLay->addLayout(body, 1);
 
     // ---- Páginas superpuestas
     m_stats = new StatsWidget(m_db, this);
@@ -236,6 +258,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         reloadGrid();
     });
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::reloadGrid);
+    connect(m_session, &SessionController::pomodoroChanged, this, &MainWindow::reloadGrid);
     connect(m_session, &SessionController::studyRecorded, this, &MainWindow::onStudyRecorded);
     connect(m_session, &SessionController::pomodoroCompleted, this, [this] {
         m_sounds->playChime();
@@ -250,7 +273,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         m_grid->setAnchor(d);
         setZoom(GridWidget::Zoom::Day);
     });
-    connect(m_grid, &GridWidget::deleteRequested, this, &MainWindow::deletePomodoro);
+    connect(m_grid, &GridWidget::pomodoroMenuRequested, this, &MainWindow::showPomodoroMenu);
 
     // ---- Atajos
     auto* space = new QShortcut(QKeySequence(Qt::Key_Space), this);
@@ -311,7 +334,7 @@ QWidget* MainWindow::buildTitleBar()
 
     auto* logo = new QLabel(bar);
     logo->setPixmap(icons::get(icons::Id::AppLogo).pixmap(16, 16));
-    auto* name = dimLabel(bar, QStringLiteral("Constancia"));
+    auto* name = dimLabel(bar, QStringLiteral("UltimateTracker"));
 
     m_btnProportional = iconButton(bar, icons::Id::Proportional,
                                    QStringLiteral("Tamaño proporcional: cada cuadradito según cuánto duró"));
@@ -337,13 +360,16 @@ QWidget* MainWindow::buildTitleBar()
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
     menu->addAction(QStringLiteral("Ajustes…"), this, [this] {
         SettingsDialog dlg(m_db->setting("work_min", 25).toInt(), m_db->setting("break_min", 10).toInt(),
-                           m_jokers, m_resizable, this);
+                           m_jokers, m_resizable, m_numericDate, this);
         win::applyChrome(&dlg);
         if (dlg.exec() != QDialog::Accepted) return;
         m_db->setSetting("work_min", dlg.workMinutes());
         m_db->setSetting("break_min", dlg.breakMinutes());
         m_db->setSetting("jokers_per_week", dlg.jokersPerWeek());
         m_db->setSetting("resizable", dlg.resizable() ? 1 : 0);
+        m_db->setSetting("date_format", dlg.numericDate() ? "numeric" : "long");
+        m_numericDate = dlg.numericDate();
+        refreshBand();
         m_jokers = dlg.jokersPerWeek();
         m_resizable = dlg.resizable();
         if (!m_resizable) setEdgeCursor({});
@@ -351,7 +377,7 @@ QWidget* MainWindow::buildTitleBar()
         if (!m_session->inProgress()) {
             m_session->setWorkSec(dlg.workMinutes() * 60);
             m_session->setBreakSec(dlg.breakMinutes() * 60);
-            refreshControls();
+            refreshDeck();
         }
     });
     menu->addSeparator();
@@ -442,137 +468,40 @@ QWidget* MainWindow::buildDateBand()
     return outer;
 }
 
-QWidget* MainWindow::buildControls()
+QWidget* MainWindow::buildDeck()
 {
-    m_controls = new QStackedWidget(this);
-    m_controls->setObjectName("Controls");
-    m_controls->setFixedHeight(58);
+    m_deck = new TimerDeck(this);
+    m_deck->setFixedWidth(282);
 
-    auto page = [this]() {
-        auto* w = new QWidget(m_controls);
-        auto* lay = new QHBoxLayout(w);
-        lay->setContentsMargins(12, 6, 12, 10);
-        lay->setSpacing(8);
-        m_controls->addWidget(w);
-        return lay;
-    };
+    m_folderMenu = new FolderMenu(this);
+    connect(m_folderMenu, &FolderMenu::folderChosen, this, &MainWindow::chooseFolder);
+    connect(m_folderMenu, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
+    m_deck->setActivityMenu(m_folderMenu);
 
-    // --- Listo para arrancar
-    {
-        auto* lay = page();
-        m_folderMenu = new FolderMenu(this);
-        connect(m_folderMenu, &FolderMenu::folderChosen, this, &MainWindow::chooseFolder);
-        connect(m_folderMenu, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
-        m_folderBtn = new QToolButton;
-        m_folderBtn->setProperty("role", "folder");
-        m_folderBtn->setIcon(icons::get(icons::Id::Folder, theme::textDim));
-        m_folderBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        m_folderBtn->setPopupMode(QToolButton::InstantPopup);
-        m_folderBtn->setMenu(m_folderMenu);
-        m_folderBtn->setFocusPolicy(Qt::NoFocus);
-        m_folderBtn->setMaximumWidth(240);
-
-        m_workSpin = new QSpinBox;
-        m_workSpin->setRange(1, 240);
-        m_workSpin->setFocusPolicy(Qt::ClickFocus);   // que no arranque con el cursor adentro
-        m_workSpin->setSuffix(QStringLiteral(" min"));
-        m_workSpin->setToolTip(QStringLiteral("Duración del pomodoro"));
-        m_workSpin->setValue(m_session->workSec() / 60);
-        connect(m_workSpin, &QSpinBox::valueChanged, this, [this](int v) { m_session->setWorkSec(v * 60); });
-
-        m_todayLabel = dimLabel(nullptr);
-        auto* play = roundButton(nullptr, icons::Id::Play, QStringLiteral("Arrancar (Espacio)"));
-        connect(play, &QToolButton::clicked, m_session, &SessionController::start);
-
-        lay->addWidget(m_folderBtn);
-        lay->addWidget(m_workSpin);
-        lay->addStretch();
-        lay->addWidget(m_todayLabel);
-        lay->addWidget(play);
-    }
-    // --- Corriendo
-    {
-        auto* lay = page();
-        m_runFolder = dimLabel(nullptr);
-        m_runClock = new QLabel;
-        m_runClock->setProperty("role", "clock");
-        auto* end = textButton(nullptr, QStringLiteral("Terminar pomodoro"), "link");
-        end->setToolTip(QStringLiteral("Lo corta acá y guarda el tiempo que llevás"));
-        connect(end, &QPushButton::clicked, m_session, &SessionController::endPomodoro);
-        auto* pause = roundButton(nullptr, icons::Id::Pause, QStringLiteral("Pausar (Espacio)"));
-        connect(pause, &QToolButton::clicked, m_session, &SessionController::pause);
-        lay->addWidget(m_runFolder, 1);
-        lay->addWidget(m_runClock);
-        lay->addSpacing(6);
-        lay->addWidget(end);
-        lay->addWidget(pause);
-    }
-    // --- En pausa (el recreo indebido no se muestra: es una estadística "secreta")
-    {
-        auto* lay = page();
-        auto* label = dimLabel(nullptr, QStringLiteral("Pausa"));
-        auto* end = textButton(nullptr, QStringLiteral("Terminar pomodoro"), "link");
-        end->setToolTip(QStringLiteral("Lo corta acá y guarda el tiempo que llevás"));
-        connect(end, &QPushButton::clicked, m_session, &SessionController::endPomodoro);
-        auto* resume = roundButton(nullptr, icons::Id::Play, QStringLiteral("Seguir (Espacio)"));
-        connect(resume, &QToolButton::clicked, m_session, &SessionController::resume);
-        lay->addWidget(label, 1);
-        lay->addWidget(end);
-        lay->addWidget(resume);
-    }
-    // --- Terminó el pomodoro
-    {
-        auto* lay = page();
-        auto* startBreak = textButton(nullptr, QStringLiteral("Iniciar recreo"), "primary");
-        connect(startBreak, &QPushButton::clicked, m_session, &SessionController::startBreak);
-        m_breakSpin = new QSpinBox;
-        m_breakSpin->setRange(1, 120);
-        m_breakSpin->setFocusPolicy(Qt::ClickFocus);   // que no arranque con el cursor adentro
-        m_breakSpin->setSuffix(QStringLiteral(" min"));
-        m_breakSpin->setValue(m_session->breakSec() / 60);
-        connect(m_breakSpin, &QSpinBox::valueChanged, this, [this](int v) { m_session->setBreakSec(v * 60); });
-        auto* skip = textButton(nullptr, QStringLiteral("Saltear recreo"), "link");
-        skip->setToolTip(QStringLiteral("Seguir con otro pomodoro sin recreo"));
-        connect(skip, &QPushButton::clicked, m_session, &SessionController::skipBreak);
-        lay->addWidget(startBreak);
-        lay->addWidget(m_breakSpin);
-        lay->addStretch();
-        lay->addWidget(skip);
-    }
-    // --- Recreo
-    {
-        auto* lay = page();
-        auto* label = dimLabel(nullptr, QStringLiteral("Recreo"));
-        m_breakClock = new QLabel;
-        m_breakClock->setProperty("role", "clock");
-        auto* endBreak = textButton(nullptr, QStringLiteral("Terminar recreo"), "link");
-        connect(endBreak, &QPushButton::clicked, m_session, &SessionController::endBreakEarly);
-        lay->addWidget(label);
-        lay->addWidget(m_breakClock);
-        lay->addStretch();
-        lay->addWidget(endBreak);
-    }
-    // --- Se terminó el recreo (alarma sonando)
-    {
-        auto* lay = page();
-        auto* label = new QLabel(QStringLiteral("Se terminó el recreo"));
-        label->setProperty("role", "warn");
-        auto* silence = textButton(nullptr, QStringLiteral("Silenciar"), "link");
-        connect(silence, &QPushButton::clicked, m_session, &SessionController::silenceAlarm);
-        auto* next = roundButton(nullptr, icons::Id::Play, QStringLiteral("Siguiente pomodoro (Espacio)"));
-        connect(next, &QToolButton::clicked, m_session, &SessionController::start);
-        lay->addWidget(label, 1);
-        lay->addWidget(silence);
-        lay->addWidget(next);
-    }
-    return m_controls;
+    connect(m_deck, &TimerDeck::playClicked, this, [this] {
+        if (m_session->state() == SessionController::State::Paused) m_session->resume();
+        else m_session->start();
+    });
+    connect(m_deck, &TimerDeck::pauseClicked, m_session, &SessionController::pause);
+    connect(m_deck, &TimerDeck::endPomodoroClicked, m_session, &SessionController::endPomodoro);
+    connect(m_deck, &TimerDeck::startBreakClicked, m_session, &SessionController::startBreak);
+    connect(m_deck, &TimerDeck::skipBreakClicked, m_session, &SessionController::skipBreak);
+    connect(m_deck, &TimerDeck::endBreakClicked, m_session, &SessionController::endBreakEarly);
+    connect(m_deck, &TimerDeck::silenceClicked, m_session, &SessionController::silenceAlarm);
+    connect(m_deck, &TimerDeck::durationChanged, this, [this](int min) {
+        // El − / + ajusta lo que está por arrancar: el pomodoro o el recreo.
+        if (m_session->state() == SessionController::State::WorkDone) m_session->setBreakSec(min * 60);
+        else m_session->setWorkSec(min * 60);
+        refreshDeck();
+    });
+    return m_deck;
 }
 
 void MainWindow::buildTray()
 {
     if (!QSystemTrayIcon::isSystemTrayAvailable()) return;
     m_tray = new QSystemTrayIcon(icons::get(icons::Id::AppLogo), this);
-    m_tray->setToolTip(QStringLiteral("Constancia"));
+    m_tray->setToolTip(QStringLiteral("UltimateTracker"));
     auto* menu = new QMenu(this);
     menu->addAction(QStringLiteral("Mostrar"), this, &MainWindow::bringToFront);
     menu->addSeparator();
@@ -823,15 +752,16 @@ void MainWindow::refreshBand()
     bool showingToday = false;
     switch (m_grid->zoom()) {
     case GridWidget::Zoom::Day:
-        m_dateLabel->setText(fmt::longDate(a));
+        m_dateLabel->setText(m_numericDate ? fmt::numericDate(a) : fmt::longDate(a));
         showingToday = a == m_today;
         break;
     case GridWidget::Zoom::Week:
-        m_dateLabel->setText(fmt::weekRange(fmt::mondayOf(a)));
+        m_dateLabel->setText(m_numericDate ? fmt::numericWeekRange(fmt::mondayOf(a))
+                                           : fmt::weekRange(fmt::mondayOf(a)));
         showingToday = fmt::mondayOf(a) == fmt::mondayOf(m_today);
         break;
     case GridWidget::Zoom::Month:
-        m_dateLabel->setText(fmt::monthYear(a));
+        m_dateLabel->setText(m_numericDate ? fmt::numericMonth(a) : fmt::monthYear(a));
         showingToday = a.year() == m_today.year() && a.month() == m_today.month();
         break;
     }
@@ -850,12 +780,13 @@ void MainWindow::reloadGrid()
     m_grid->setData(pomos, m_db->dayTitles(m_grid->rangeStart(), m_grid->rangeEnd()));
     m_grid->setLive(m_session->currentPomodoro(), m_session->progress());
 
-    // Estudio de hoy (para el contador de la barra de controles).
+    // Pomodoros de hoy ya guardados (para numerar y para las stats en vivo).
     const auto running = m_session->currentPomodoro();
-    m_todayBaseSec = 0;
+    m_todayPomos.clear();
     for (const Pomodoro& p : m_db->pomodorosBetween(m_today, m_today))
-        if (!running || p.id != running->id) m_todayBaseSec += p.studiedSec;
-    refreshControls();
+        if (!running || p.id != running->id) m_todayPomos.append(p);
+    refreshDeck();
+    refreshLiveStats();
 }
 
 void MainWindow::reloadFolders()
@@ -868,7 +799,10 @@ void MainWindow::reloadFolders()
         m_session->setFolderId(m_tree.children(0).isEmpty() ? 0 : m_tree.children(0).first());
     if (m_folderMenu) m_folderMenu->rebuild(m_tree, m_session->folderId());
     if (m_stats && m_overlay == Overlay::Stats) m_stats->refresh();
-    if (m_controls) refreshControls();
+    if (m_deck) {
+        refreshDeck();
+        refreshLiveStats();
+    }
 }
 
 void MainWindow::chooseFolder(qint64 id)
@@ -876,47 +810,75 @@ void MainWindow::chooseFolder(qint64 id)
     m_session->setFolderId(id);
     m_db->setSetting("last_folder", id);
     m_folderMenu->rebuild(m_tree, id);
-    refreshControls();
     reloadGrid();
 }
 
-void MainWindow::refreshControls()
+int MainWindow::todayCount() const
+{
+    return int(m_todayPomos.size());
+}
+
+void MainWindow::refreshDeck()
 {
     using S = SessionController::State;
-    const S s = m_session->state();
-
-    const QString folderText = m_tree.path(m_session->folderId());
-    m_folderBtn->setText(QFontMetrics(m_folderBtn->font()).elidedText(folderText, Qt::ElideLeft, 190));
-    m_folderBtn->setToolTip(QStringLiteral("Actividad: %1").arg(folderText));
-
-    const auto running = m_session->currentPomodoro();
-    const qint64 todaySec = m_todayBaseSec + (running ? running->studiedSec : 0);
-    m_todayLabel->setText(todaySec > 0 ? QStringLiteral("Hoy %1").arg(fmt::duration(todaySec)) : QString());
-
-    switch (s) {
+    using M = TimerDeck::Mode;
+    TimerDeck::Model m;
+    m.activity = m_tree.path(m_session->folderId());
+    const auto cur = m_session->currentPomodoro();
+    switch (m_session->state()) {
     case S::Idle:
-    case S::Ready:
-        if (m_workSpin->value() != m_session->workSec() / 60) {
-            QSignalBlocker b(m_workSpin);
-            m_workSpin->setValue(m_session->workSec() / 60);
-        }
-        break;
-    case S::Running:
-        m_runFolder->setText(QFontMetrics(m_runFolder->font()).elidedText(folderText, Qt::ElideLeft, 220));
-        m_runClock->setText(fmt::clock(m_session->remainingSec()));
-        break;
-    case S::Break:
-        m_breakClock->setText(fmt::clock(m_session->remainingSec()));
-        break;
-    default:
-        break;
+    case S::Ready:     m.mode = M::Ready; break;
+    case S::Running:   m.mode = M::Running; break;
+    case S::Paused:    m.mode = M::Paused; break;
+    case S::WorkDone:  m.mode = M::BreakReady; break;
+    case S::Break:     m.mode = M::Break; break;
+    case S::BreakOver: m.mode = M::BreakOver; break;
     }
+    // Número: el que corre, o el próximo.
+    m.number = todayCount() + 1;
+    if (m.mode == M::BreakReady || m.mode == M::Break) m.number = todayCount();
+    m.remainingSec = m_session->remainingSec();
+    m.totalSec = cur ? cur->plannedSec : (m.mode == M::Break ? m_session->breakSec() : m_session->workSec());
+    m.durationMin = (m.mode == M::BreakReady ? m_session->breakSec() : m_session->workSec()) / 60;
+    m_deck->setModel(m);
+}
+
+void MainWindow::refreshLiveStats()
+{
+    const auto cur = m_session->currentPomodoro();
+    const qint64 folder = m_session->folderId();
+    const QSet<qint64> scope = m_tree.subtree(folder);
+
+    LiveStats::Data d;
+    d.activityScope = m_liveActivityScope;
+    d.scopeName = m_tree.find(folder) ? m_tree.find(folder)->name : QStringLiteral("Sin actividad");
+    QSet<qint64> activities;
+    for (const Pomodoro& p : m_todayPomos) {
+        if (m_liveActivityScope && !scope.contains(p.folderId)) continue;
+        ++d.pomos;
+        d.seconds += p.studiedSec;
+        activities.insert(p.folderId);
+    }
+    if (cur && (!m_liveActivityScope || scope.contains(cur->folderId))) {
+        d.seconds += cur->studiedSec;       // el que corre suma minutos en vivo
+        activities.insert(cur->folderId);
+    }
+    d.activities = int(activities.size());
+    if (m_liveActivityScope) {
+        // Total histórico de la actividad (con lo que está corriendo ahora).
+        d.activityTotalSec = m_tree.rollUp(m_db->studyByFolder()).value(folder);
+        if (cur && scope.contains(cur->folderId)) d.activityTotalSec += cur->studiedSec;
+    }
+    m_liveStats->setData(d);
 }
 
 void MainWindow::onTick()
 {
     m_grid->setLive(m_session->currentPomodoro(), m_session->progress());
-    refreshControls();
+    refreshDeck();
+    // Las stats en vivo cambian de a minutos: alcanza con refrescarlas cada 5 s.
+    static int n = 0;
+    if (++n % 20 == 0) refreshLiveStats();
 }
 
 // ===========================================================================
@@ -925,22 +887,7 @@ void MainWindow::onTick()
 void MainWindow::onStateChanged(SessionController::State s)
 {
     using S = SessionController::State;
-    int page = PageIdle;
-    switch (s) {
-    case S::Idle:
-    case S::Ready:     page = PageIdle; break;
-    case S::Running:   page = PageRunning; break;
-    case S::Paused:    page = PagePaused; break;
-    case S::WorkDone:  page = PageWorkDone; break;
-    case S::Break:     page = PageBreak; break;
-    case S::BreakOver: page = PageBreakOver; break;
-    }
-    m_controls->setCurrentIndex(page);
     if (s != S::BreakOver) m_sounds->stopAlarm();
-    if (s == S::WorkDone) {
-        QSignalBlocker b(m_breakSpin);
-        m_breakSpin->setValue(m_session->breakSec() / 60);
-    }
     // Mientras hay algo en marcha, el último pomodoro de hoy no es el final del día.
     m_grid->setTodayActive(s == S::Running || s == S::Paused || s == S::Break);
     // Al arrancar un pomodoro, la grilla vuelve a mostrar hoy.
@@ -976,9 +923,38 @@ void MainWindow::onStudyRecorded(qint64 folderId, qint64 seconds)
                 ? QStringLiteral("%1: ¡llegaste a %2 %3!").arg(name).arg(h).arg(h == 1 ? "hora" : "horas")
                 : QStringLiteral("%1: ¡%2 horas! (de 10.000)").arg(name).arg(h);
             toast(msg);
-            if (m_tray) m_tray->showMessage(QStringLiteral("Constancia"), msg, QSystemTrayIcon::Information, 5000);
+            if (m_tray) m_tray->showMessage(QStringLiteral("UltimateTracker"), msg, QSystemTrayIcon::Information, 5000);
         }
     }
+}
+
+void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
+{
+    const auto p = m_db->pomodoro(id);
+    if (!p) return;
+    const bool running = p->status == PomoStatus::Running;
+
+    QMenu menu(this);
+    auto* move = new FolderMenu(&menu);
+    move->setTitle(QStringLiteral("Mover a actividad"));
+    move->rebuild(m_tree, p->folderId);
+    connect(move, &FolderMenu::folderChosen, this, [this, id, running](qint64 folder) {
+        if (running) {
+            chooseFolder(folder);              // el que corre: cambia la actividad en curso
+        } else {
+            m_db->setPomodoroFolder(id, folder);
+            reloadGrid();
+            toast(QStringLiteral("Pomodoro movido a %1").arg(m_tree.path(folder)));
+        }
+    });
+    connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
+    menu.addMenu(move);
+    menu.addSeparator();
+    QAction* del = menu.addAction(running ? QStringLiteral("Borrar pomodoro (terminalo primero)")
+                                          : QStringLiteral("Borrar pomodoro…"));
+    del->setEnabled(!running);
+    connect(del, &QAction::triggered, this, [this, id] { deletePomodoro(id); });
+    menu.exec(globalPos);
 }
 
 void MainWindow::deletePomodoro(qint64 id)
@@ -1250,7 +1226,7 @@ void MainWindow::closeEvent(QCloseEvent* e)
         hide();
         if (!m_trayHintShown) {
             m_trayHintShown = true;
-            m_tray->showMessage(QStringLiteral("Constancia"),
+            m_tray->showMessage(QStringLiteral("UltimateTracker"),
                                 QStringLiteral("Sigo contando en segundo plano. Te aviso cuando termine el timer."),
                                 QSystemTrayIcon::Information, 4000);
         }

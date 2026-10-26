@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -96,17 +96,30 @@ bool Database::migrate()
     for (const char* stmt : kSchema)
         if (!exec(QString::fromUtf8(stmt))) return false;
 
-    QSqlQuery q(m_db);
-    q.exec("PRAGMA user_version");
-    const int version = q.next() ? q.value(0).toInt() : 0;
-    if (version < kSchemaVersion) {
-        // Primera vez: una carpeta para arrancar sin fricción.
+    int version = 0;
+    {
+        QSqlQuery q(m_db);
+        q.exec("PRAGMA user_version");
+        if (q.next()) version = q.value(0).toInt();
+    }
+    if (version < 1) {
+        // Primera vez: una actividad para arrancar sin fricción.
         QSqlQuery c(m_db);
         c.exec("SELECT COUNT(*) FROM folders");
-        if (c.next() && c.value(0).toInt() == 0)
-            addFolder(0, QStringLiteral("General"));
-        exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
+        const bool empty = c.next() && c.value(0).toInt() == 0;
+        c.finish();
+        if (empty) addFolder(0, QStringLiteral("General"));
     }
+    if (version < 2) {
+        // v2: pomodoros "encadenados" (arrancados salteando el recreo).
+        QSqlQuery info(m_db);
+        info.exec("PRAGMA table_info(pomodoros)");
+        bool has = false;
+        while (info.next()) has |= info.value(1).toString() == QLatin1String("linked");
+        info.finish();
+        if (!has) exec("ALTER TABLE pomodoros ADD COLUMN linked INTEGER NOT NULL DEFAULT 0");
+    }
+    if (version < kSchemaVersion) exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
     return true;
 }
 
@@ -223,16 +236,17 @@ Pomodoro Database::readPomodoro(const QSqlQuery& q)
     p.plannedSec = q.value(5).toInt();
     p.studiedSec = q.value(6).toInt();
     p.status     = PomoStatus(q.value(7).toInt());
+    p.linked     = q.value(8).toInt() != 0;
     return p;
 }
 
-#define POMO_COLUMNS "id, COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status"
+#define POMO_COLUMNS "id, COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked"
 
 qint64 Database::insertPomodoro(const Pomodoro& p)
 {
     QSqlQuery q(m_db);
-    q.prepare("INSERT INTO pomodoros(folder_id, day, started_at, ended_at, planned_sec, studied_sec, status) "
-              "VALUES(?, ?, ?, ?, ?, ?, ?)");
+    q.prepare("INSERT INTO pomodoros(folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked) "
+              "VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
     q.addBindValue(p.folderId > 0 ? QVariant(p.folderId) : QVariant(QMetaType(QMetaType::LongLong)));
     q.addBindValue(fmt::dayKey(p.day));
     q.addBindValue(p.startedAt);
@@ -240,6 +254,7 @@ qint64 Database::insertPomodoro(const Pomodoro& p)
     q.addBindValue(p.plannedSec);
     q.addBindValue(p.studiedSec);
     q.addBindValue(int(p.status));
+    q.addBindValue(p.linked ? 1 : 0);
     if (!q.exec()) {
         m_error = q.lastError().text();
         return 0;
@@ -258,6 +273,15 @@ void Database::updatePomodoro(const Pomodoro& p)
     q.addBindValue(p.studiedSec);
     q.addBindValue(int(p.status));
     q.addBindValue(p.id);
+    q.exec();
+}
+
+void Database::setPomodoroFolder(qint64 id, qint64 folderId)
+{
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE pomodoros SET folder_id = ? WHERE id = ?");
+    q.addBindValue(folderId > 0 ? QVariant(folderId) : QVariant(QMetaType(QMetaType::LongLong)));
+    q.addBindValue(id);
     q.exec();
 }
 

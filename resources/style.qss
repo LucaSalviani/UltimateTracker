@@ -185,14 +185,18 @@ QTreeWidget#Activities {
     background: transparent;
     border: none;
     padding: 0;
+    outline: 0;                    /* sin rectángulo de foco */
     font-size: 10.5pt;
+    show-decoration-selected: 1;   /* la fila entera (flecha incluida) es una sola línea */
+    selection-background-color: #2e2e2e;
 }
 QTreeWidget#Activities::item {
     padding: 7px 4px;
-    border-radius: 6px;
+    border: none;
+    border-radius: 0;
 }
-QTreeWidget#Activities::item:hover { background: #262626; }
-QTreeWidget#Activities::item:selected { background: #303030; color: #ffffff; }
+QTreeWidget#Activities::item:hover { background: #242424; }
+QTreeWidget#Activities::item:selected { background: #2e2e2e; color: #ffffff; }
 QTreeWidget#Activities QLineEdit {
     background: #1f1f1f;
     border: 1px solid #5a5a5a;
@@ -215,3 +219,63 @@ QCheckBox::indicator {
     background: #262626;
 }
 QCheckBox::indicator:checked { background: #e8e8e8; border-color: #e8e8e8; }
+
+/* ---- Reproductor (cronómetro) ----------------------------------------- */
+QWidget#Deck {
+    background: #202020;
+    border: 1px solid #2e2e2e;
+    border-radius: 14px;
+}
+QToolButton#DeckActivity {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 4px 6px;
+    color: #cfcfcf;
+    text-align: left;
+}
+QToolButton#DeckActivity:hover { background: #2a2a2a; }
+
+QToolButton#DeckStep {
+    background: #2a2a2a;
+    border: 1px solid #353535;
+    border-radius: 14px;
+    min-width: 28px; max-width: 28px;
+    min-height: 28px; max-height: 28px;
+    font-size: 14pt;
+    font-weight: 600;
+    color: #d8d8d8;
+}
+QToolButton#DeckStep:hover { background: #343434; }
+QLabel#DeckStepLabel {
+    font-family: "Bahnschrift", "Inter", "Segoe UI";
+    font-size: 12pt;
+    font-weight: 600;
+    color: #e8e8e8;
+}
+
+/* Botón grande: rojo pomodoro / verde agua recreo */
+QToolButton#DeckPlay {
+    border: none;
+    border-radius: 29px;
+    background: #e0483f;
+}
+QToolButton#DeckPlay:hover { background: #ea5a51; }
+QToolButton#DeckPlay:pressed { background: #c43c34; }
+QToolButton#DeckPlay[accent="break"] { background: #3cb89b; }
+QToolButton#DeckPlay[accent="break"]:hover { background: #4cc8aa; }
+QToolButton#DeckPlay[accent="break"]:pressed { background: #2f9b82; }
+
+/* Acción "hefty": Terminar pomodoro / Saltear recreo / Silenciar */
+QPushButton#DeckAction {
+    background: #2b2b2b;
+    border: 1px solid #3c3c3c;
+    border-radius: 12px;
+    padding: 11px 14px;
+    font-size: 10.5pt;
+    font-weight: 700;
+    color: #f0f0f0;
+}
+QPushButton#DeckAction:hover { background: #343434; border-color: #e0483f; }
+QPushButton#DeckAction[accent="break"]:hover { border-color: #3cb89b; }
+QPushButton#DeckAction:pressed { background: #2a2a2a; }

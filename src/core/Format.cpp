@@ -70,6 +70,16 @@ QString weekRange(const QDate& monday)
         .arg(sunday.day()).arg(kMonthsShort[sunday.month() - 1]).arg(sunday.year());
 }
 
+QString numericDate(const QDate& d) { return d.toString(QStringLiteral("dd/MM/yy")); }
+
+QString numericWeekRange(const QDate& monday)
+{
+    const QDate sunday = monday.addDays(6);
+    return monday.toString(QStringLiteral("dd/MM")) + QStringLiteral(" – ") + sunday.toString(QStringLiteral("dd/MM/yy"));
+}
+
+QString numericMonth(const QDate& d) { return d.toString(QStringLiteral("MM/yyyy")); }
+
 QString dayKey(const QDate& d) { return d.toString(Qt::ISODate); }
 QDate fromDayKey(const QString& s) { return QDate::fromString(s, Qt::ISODate); }
 

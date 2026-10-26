@@ -41,6 +41,7 @@ public:
     qint64 insertPomodoro(const Pomodoro& p);
     void   updatePomodoro(const Pomodoro& p);
     void   deletePomodoro(qint64 id);
+    void   setPomodoroFolder(qint64 id, qint64 folderId);
     std::optional<Pomodoro> pomodoro(qint64 id) const;
     QVector<Pomodoro> pomodorosBetween(const QDate& from, const QDate& to) const; // inclusivo
     QVector<Pomodoro> pomodorosWithStatus(PomoStatus st) const;

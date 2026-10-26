@@ -22,6 +22,8 @@ class QPropertyAnimation;
 class QAbstractAnimation;
 class ActivitiesWidget;
 class FolderMenu;
+class LiveStats;
+class TimerDeck;
 class Sounds;
 class StatsWidget;
 
@@ -49,7 +51,7 @@ private:
     // ---- construcción
     QWidget* buildTitleBar();
     QWidget* buildDateBand();
-    QWidget* buildControls();
+    QWidget* buildDeck();
     void     buildTray();
 
     // ---- vista
@@ -58,7 +60,8 @@ private:
     void goToday();
     void reloadGrid();
     void refreshBand();
-    void refreshControls();
+    void refreshDeck();
+    void refreshLiveStats();
     void onTick();
     void reloadFolders();
     void showOverlay(Overlay o);
@@ -89,6 +92,8 @@ private:
     void togglePlay();
     void chooseFolder(qint64 id);
     void deletePomodoro(qint64 id);
+    void showPomodoroMenu(qint64 id, const QPoint& globalPos);
+    int  todayCount() const;
     void checkDayRollover();
     void maybeShowDaySummary();
 
@@ -119,16 +124,13 @@ private:
     QLabel*     m_toast = nullptr;
     QTimer      m_toastTimer;
 
-    // Controles por estado
-    QStackedWidget* m_controls = nullptr;
-    QToolButton*    m_folderBtn = nullptr;
-    FolderMenu*     m_folderMenu = nullptr;
-    QSpinBox*       m_workSpin = nullptr;
-    QLabel*         m_todayLabel = nullptr;
-    QLabel*         m_runFolder = nullptr;
-    QLabel*         m_runClock = nullptr;
-    QSpinBox*       m_breakSpin = nullptr;
-    QLabel*         m_breakClock = nullptr;
+    // Reproductor y stats en vivo
+    TimerDeck*  m_deck = nullptr;
+    FolderMenu* m_folderMenu = nullptr;
+    LiveStats*  m_liveStats = nullptr;
+    bool        m_liveActivityScope = true;
+    QVector<Pomodoro> m_todayPomos;      // pomodoros de hoy ya guardados (para stats en vivo)
+    bool        m_numericDate = true;
 
     // Bandeja y borde
     QSystemTrayIcon* m_tray = nullptr;
@@ -150,7 +152,6 @@ private:
     int                 m_level = 0;       // nivel actual (ver level())
     QHash<int, QRect>   m_savedRects;      // dónde estaba la ventana en cada nivel
 
-    qint64 m_todayBaseSec = 0;   // estudio de hoy sin contar el pomodoro en curso
     QDate  m_today;
     QDate  m_sessionDay;         // día de la jornada en curso
     int    m_jokers = 2;

@@ -156,6 +156,64 @@ private slots:
         QCOMPARE(s->state(), SessionController::State::Idle);
     }
 
+    void underOneMinuteIsNotSaved()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        auto* s = make(db);
+        s->start();
+        advance(db, *s, 45);
+        s->endPomodoro();
+        const QDate d(2026, 10, 26);
+        QCOMPARE(db.pomodorosBetween(d, d).size(), 0);
+        QCOMPARE(s->state(), SessionController::State::Idle);
+        s->start();
+        advance(db, *s, 61);
+        s->endPomodoro();
+        QCOMPARE(db.pomodorosBetween(d, d).size(), 1);
+        QCOMPARE(s->state(), SessionController::State::WorkDone);
+    }
+
+    void skipBreakStartsNextLinked()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        auto* s = make(db);
+        s->setWorkSec(20 * 60);
+        s->start();
+        advance(db, *s, 20 * 60);
+        advance(db, *s, 10);
+        s->skipBreak();                               // arranca el siguiente directo
+        QCOMPARE(s->state(), SessionController::State::Running);
+        advance(db, *s, 20 * 60);
+        const QDate d(2026, 10, 26);
+        const auto pomos = db.pomodorosBetween(d, d);
+        QCOMPARE(pomos.size(), 2);
+        QCOMPARE(pomos[0].linked, false);
+        QCOMPARE(pomos[1].linked, true);
+        QCOMPARE(sum(db, IntervalKind::Undue, d), 10);
+    }
+
+    void hotSwapActivityMovesCurrentPomodoro()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 so = db.addFolder(0, "SO");
+        const qint64 axel = db.addFolder(0, "Clases Axel");
+        auto* s = make(db);
+        s->setFolderId(so);
+        s->start();
+        advance(db, *s, 15 * 60);
+        s->setFolderId(axel);                         // te diste cuenta a mitad
+        advance(db, *s, 10 * 60);
+        const QDate d(2026, 10, 26);
+        const auto pomos = db.pomodorosBetween(d, d);
+        QCOMPARE(pomos.size(), 1);
+        QCOMPARE(pomos[0].folderId, axel);
+        QCOMPARE(db.studyByFolder().value(so), 0);
+        QCOMPARE(db.studyByFolder().value(axel), 25 * 60);
+    }
+
     void crashRecovery()
     {
         Database db;

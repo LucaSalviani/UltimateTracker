@@ -22,6 +22,10 @@ inline const QColor squareDoneEdge{0x4a, 0x4a, 0x4a};
 inline const QColor squareFinal   {0xd2, 0x3b, 0x34};  // rojo: final de sesión
 inline const QColor accent        {0xd2, 0x3b, 0x34};
 
+// Reproductor: cada modo tiene su color
+inline const QColor pomoAccent    {0xe0, 0x48, 0x3f};  // pomodoro
+inline const QColor breakAccent   {0x3c, 0xb8, 0x9b};  // recreo
+
 QFont uiFont(qreal pointSize, int weight = QFont::Normal);
 
 } // namespace theme

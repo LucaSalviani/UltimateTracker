@@ -1,6 +1,7 @@
 #include "ui/Icons.h"
 #include "ui/Theme.h"
 
+#include <QIconEngine>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -94,6 +95,33 @@ void draw(QPainter& p, Id id, const QColor& c)
     case Id::Minimize:
         p.drawLine(QPointF(6.5, 12.5), QPointF(17.5, 12.5));
         break;
+    case Id::Skip: {     // ⏭
+        QPainterPath path;
+        path.moveTo(6, 6.5);
+        path.lineTo(14, 12);
+        path.lineTo(6, 17.5);
+        path.closeSubpath();
+        p.setBrush(c);
+        p.setPen(Qt::NoPen);
+        p.drawPath(path);
+        p.drawRoundedRect(QRectF(15.2, 6.5, 2.8, 11), 0.8, 0.8);
+        break;
+    }
+    case Id::Mute: {     // campana tachada
+        QPainterPath bell;
+        bell.moveTo(7, 16);
+        bell.lineTo(17, 16);
+        bell.lineTo(15.8, 14.2);
+        bell.lineTo(15.8, 10.5);
+        bell.cubicTo(15.8, 8, 14.2, 6.2, 12, 6.2);
+        bell.cubicTo(9.8, 6.2, 8.2, 8, 8.2, 10.5);
+        bell.lineTo(8.2, 14.2);
+        bell.closeSubpath();
+        p.drawPath(bell);
+        p.drawLine(QPointF(10.6, 18.4), QPointF(13.4, 18.4));
+        p.drawLine(QPointF(5.5, 5.5), QPointF(18.5, 18.5));
+        break;
+    }
     case Id::Close:
         p.drawLine(QPointF(7, 7), QPointF(17, 17));
         p.drawLine(QPointF(17, 7), QPointF(7, 17));
@@ -124,29 +152,52 @@ void draw(QPainter& p, Id id, const QColor& c)
     }
 }
 
-QPixmap render(Id id, const QColor& color, int size)
-{
-    QPixmap pm(size, size);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing);
-    p.scale(size / 24.0, size / 24.0);
-    draw(p, id, color);
-    return pm;
-}
+// Motor de íconos vectorial: cada vez que Qt necesita el ícono lo dibuja al
+// tamaño exacto y a la densidad real de la pantalla (125 %, 150 %, 200 %…),
+// así nunca se escala un bitmap y se ve nítido siempre.
+class VectorIconEngine : public QIconEngine {
+public:
+    VectorIconEngine(Id id, const QColor& color) : m_id(id), m_color(color) {}
+
+    void paint(QPainter* p, const QRect& rect, QIcon::Mode mode, QIcon::State) override
+    {
+        QColor c = m_color;
+        if (mode == QIcon::Disabled) c.setAlphaF(c.alphaF() * 0.35);
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing);
+        p->translate(rect.topLeft());
+        p->scale(rect.width() / 24.0, rect.height() / 24.0);
+        draw(*p, m_id, c);
+        p->restore();
+    }
+
+    QPixmap pixmap(const QSize& size, QIcon::Mode mode, QIcon::State state) override
+    {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+
+    QPixmap scaledPixmap(const QSize& size, QIcon::Mode mode, QIcon::State state, qreal scale) override
+    {
+        QPixmap pm(size * scale);
+        pm.fill(Qt::transparent);
+        pm.setDevicePixelRatio(scale);
+        QPainter p(&pm);
+        paint(&p, QRect(QPoint(), size), mode, state);
+        return pm;
+    }
+
+    QIconEngine* clone() const override { return new VectorIconEngine(m_id, m_color); }
+
+private:
+    Id     m_id;
+    QColor m_color;
+};
 
 } // namespace
 
 QIcon get(Id id, const QColor& color)
 {
-    QIcon icon;
-    QColor disabled = color;
-    disabled.setAlphaF(0.35);
-    for (int s : {16, 20, 24, 32, 40, 48, 64, 128, 256}) {
-        icon.addPixmap(render(id, color, s), QIcon::Normal);
-        icon.addPixmap(render(id, disabled, s), QIcon::Disabled);
-    }
-    return icon;
+    return QIcon(new VectorIconEngine(id, color));
 }
 
 } // namespace icons
