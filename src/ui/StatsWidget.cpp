@@ -29,14 +29,9 @@
 // ===========================================================================
 // Lienzo: todo lo que se dibuja en la página de estadísticas
 // ===========================================================================
-// M35: color de las estadísticas. En el tema gris (sin acentos fuertes) queda
-// monocromo, como siempre; en los temas de color usa el acento del tema.
-static QColor statsInk()
-{
-    const QString k = theme::current().key;
-    if ((k == QLatin1String("dark") || k == QLatin1String("light")) && !theme::strongAccents()) return theme::text;
-    return theme::pomoAccent;
-}
+// M35 → M41: color de las estadísticas = el del visor del cronómetro (el rojo
+// suave en el tema gris, el acento en los temas de color).
+static QColor statsInk() { return theme::pomoAccent; }
 
 struct StatsData {
     StatsWidget::Period period = StatsWidget::Period::Week;
