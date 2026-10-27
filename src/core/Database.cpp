@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 3;
+constexpr int kSchemaVersion = 4;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -45,6 +45,16 @@ const char* kSchema[] = {
         hours     INTEGER NOT NULL,
         reached_at INTEGER NOT NULL,
         PRIMARY KEY (folder_id, hours)
+    ))",
+    // M7: metas diarias (ver core/Goals.h)
+    R"(CREATE TABLE IF NOT EXISTS goals (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        title      TEXT NOT NULL DEFAULT '',
+        spec       TEXT NOT NULL DEFAULT '',
+        start_day  TEXT NOT NULL,
+        end_day    TEXT,
+        weekdays   INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
     ))",
     R"(CREATE TABLE IF NOT EXISTS settings (
         key   TEXT PRIMARY KEY,
@@ -449,6 +459,65 @@ QVector<Interval> Database::intervalsBetween(const QDate& from, const QDate& to)
 // ---------------------------------------------------------------------------
 // Hitos y ajustes
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Metas (M7)
+// ---------------------------------------------------------------------------
+QVector<GoalRule> Database::goals() const
+{
+    QVector<GoalRule> out;
+    QSqlQuery q(m_db);
+    q.exec("SELECT id, title, spec, start_day, COALESCE(end_day, ''), weekdays FROM goals ORDER BY id");
+    while (q.next()) {
+        GoalRule r;
+        r.id = q.value(0).toLongLong();
+        r.title = q.value(1).toString();
+        r.spec = q.value(2).toString();
+        r.start = fmt::fromDayKey(q.value(3).toString());
+        const QString end = q.value(4).toString();
+        if (!end.isEmpty()) r.end = fmt::fromDayKey(end);
+        r.weekdays = q.value(5).toInt();
+        out.append(r);
+    }
+    return out;
+}
+
+static QVariant nonNull(const QString& s) { return s.isNull() ? QStringLiteral("") : s; }
+
+qint64 Database::insertGoal(const GoalRule& r)
+{
+    QSqlQuery q(m_db);
+    q.prepare("INSERT INTO goals(title, spec, start_day, end_day, weekdays, created_at) VALUES(?, ?, ?, ?, ?, ?)");
+    q.addBindValue(nonNull(r.title));
+    q.addBindValue(nonNull(r.spec));
+    q.addBindValue(fmt::dayKey(r.start));
+    q.addBindValue(r.end.isValid() ? QVariant(fmt::dayKey(r.end)) : QVariant(QMetaType(QMetaType::QString)));
+    q.addBindValue(r.weekdays);
+    q.addBindValue(QDateTime::currentSecsSinceEpoch());
+    if (!q.exec()) { m_error = q.lastError().text(); return 0; }
+    return q.lastInsertId().toLongLong();
+}
+
+void Database::updateGoal(const GoalRule& r)
+{
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE goals SET title = ?, spec = ?, start_day = ?, end_day = ?, weekdays = ? WHERE id = ?");
+    q.addBindValue(nonNull(r.title));
+    q.addBindValue(nonNull(r.spec));
+    q.addBindValue(fmt::dayKey(r.start));
+    q.addBindValue(r.end.isValid() ? QVariant(fmt::dayKey(r.end)) : QVariant(QMetaType(QMetaType::QString)));
+    q.addBindValue(r.weekdays);
+    q.addBindValue(r.id);
+    q.exec();
+}
+
+void Database::deleteGoal(qint64 id)
+{
+    QSqlQuery q(m_db);
+    q.prepare("DELETE FROM goals WHERE id = ?");
+    q.addBindValue(id);
+    q.exec();
+}
+
 bool Database::markMilestone(qint64 folderId, int hours)
 {
     QSqlQuery q(m_db);

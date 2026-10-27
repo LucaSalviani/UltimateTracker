@@ -1,5 +1,6 @@
 // Tests del núcleo con reloj simulado: no hace falta esperar 25 minutos reales.
 #include "core/Database.h"
+#include "core/Goals.h"
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
@@ -448,6 +449,56 @@ private slots:
         QVERIFY(!db.pomodoro(id));
         QCOMPARE(db.insertPomodoro(copy), id);
         QCOMPARE(db.pomodoro(id)->note, copy.note);
+    }
+
+    // M7: metas diarias
+    void goalParsing()
+    {
+        QCOMPARE(goals::normalizeCombo("3x30 + 2×25 + 2*60"), QString("3x30+2x25+2x60"));
+        QCOMPARE(goals::normalizeCombo("25, 25, 50"), QString("1x25+1x25+1x50"));
+        QCOMPARE(goals::normalizeCombo("2x1h"), QString("2x60"));
+        QCOMPARE(goals::normalizeCombo("1h30"), QString("1x90"));
+        QVERIFY(goals::normalizeCombo("hola").isEmpty());
+        const auto c = goals::parse("3x30+2x25", 25);
+        QVERIFY(c.ok);
+        QCOMPARE(c.blocks, (QVector<int>{30, 30, 30, 25, 25}));
+        QCOMPARE(c.totalMin, 140);
+        const auto t = goals::parse("t:240", 25);   // 4 h con pomodoros de 25 → 10
+        QVERIFY(t.timeMode);
+        QCOMPARE(t.blocks.size(), 10);
+        QCOMPARE(goals::parse("t:240", 50).blocks.size(), 5);
+        QVERIFY(!goals::parse("", 25).ok);
+    }
+
+    void goalRulesLikeACalendar()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const QDate mon(2026, 10, 26), tue = mon.addDays(1), sat = mon.addDays(5), nextMon = mon.addDays(7);
+        auto specOn = [&](const QDate& d) { auto r = goals::resolve(db.goals(), d); return r ? r->spec : QString("-"); };
+
+        goals::save(db, mon, "", "t:240", goals::kWeekdays);    // 4 h de lunes a viernes
+        QCOMPARE(specOn(mon), QString("t:240"));
+        QCOMPARE(specOn(tue), QString("t:240"));
+        QCOMPARE(specOn(sat), QString("-"));
+        QCOMPARE(specOn(nextMon), QString("t:240"));
+
+        goals::save(db, tue, "parcial", "3x50", 0);              // el martes, algo puntual
+        QCOMPARE(specOn(tue), QString("3x50"));
+        QCOMPARE(specOn(mon.addDays(2)), QString("t:240"));
+
+        goals::removeDay(db, mon.addDays(3));                    // el jueves libre
+        QCOMPARE(specOn(mon.addDays(3)), QString(""));
+        QVERIFY(goals::resolve(db.goals(), mon.addDays(3))->spec.isEmpty());
+
+        goals::save(db, nextMon, "", "t:180", goals::kEveryDay); // desde el lunes que viene cambia
+        QCOMPARE(specOn(mon), QString("t:240"));                 // el pasado no cambia
+        QCOMPARE(specOn(nextMon.addDays(5)), QString("t:180"));
+
+        goals::removeFromDay(db, nextMon.addDays(2));            // y desde el miércoles, nada
+        QCOMPARE(specOn(nextMon.addDays(1)), QString("t:180"));
+        QCOMPARE(specOn(nextMon.addDays(2)), QString("-"));
+        QCOMPARE(specOn(mon.addDays(4)), QString("t:240"));
     }
 };
 

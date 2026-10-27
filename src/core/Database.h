@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Goals.h"
 #include "core/Types.h"
 
 #include <QHash>
@@ -56,6 +57,12 @@ public:
     void   updateIntervalSeconds(qint64 id, qint64 seconds);
     void   setIntervalsKind(const QVector<qint64>& ids, IntervalKind kind);
     QVector<Interval> intervalsBetween(const QDate& from, const QDate& to) const;
+
+    // ---- Metas diarias (M7) ---------------------------------------------
+    QVector<GoalRule> goals() const;
+    qint64 insertGoal(const GoalRule& r);
+    void   updateGoal(const GoalRule& r);
+    void   deleteGoal(qint64 id);
 
     // ---- Hitos (avisos de horas) ----------------------------------------
     // true si el hito es nuevo (y queda registrado).

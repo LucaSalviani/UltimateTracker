@@ -4,6 +4,8 @@
 #include "core/Stats.h"
 #include "ui/ActivitiesWidget.h"
 #include "ui/FolderMenu.h"
+#include "ui/GoalPanel.h"
+#include "core/Goals.h"
 #include "ui/LiveStats.h"
 #include "ui/TimerDeck.h"
 #include "ui/Icons.h"
@@ -278,7 +280,8 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(1, 1, 1, 1);
     root->setSpacing(0);
-    root->addWidget(buildTitleBar());
+    m_titleBar = buildTitleBar();
+    root->addWidget(m_titleBar);
     root->addWidget(m_pages, 1);
 
     m_edgeTab = new EdgeTab();
@@ -303,6 +306,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
             if (saved && p.id != id && p.folderId == saved->folderId && !p.note.isEmpty()) hint = p.note;
         m_deck->clearNote(hint);
     });
+    connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::checkGoalReached);
     connect(m_deck, &TimerDeck::noteEdited, this, [this](const QString& text) {
         if (m_noteTarget <= 0) return;
         m_db->setPomodoroNote(m_noteTarget, text);
@@ -322,6 +326,8 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         bringToFront();
     });
 
+    connect(m_grid, &GridWidget::goalClicked, this, &MainWindow::openGoalPanel);
+    connect(m_grid, &GridWidget::dayMenuRequested, this, &MainWindow::showDayMenu);
     connect(m_grid, &GridWidget::dayActivated, this, [this](const QDate& d) {
         m_grid->setAnchor(d);
         setZoom(GridWidget::Zoom::Day);
@@ -354,7 +360,14 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     auto* f11 = new QShortcut(QKeySequence(Qt::Key_F11), this);
     connect(f11, &QShortcut::activated, this, &MainWindow::toggleFullScreen);
     auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
-    connect(esc, &QShortcut::activated, this, [this] { if (isFullScreen()) toggleFullScreen(); });
+    connect(esc, &QShortcut::activated, this, [this] {
+        if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
+        else if (isFullScreen()) toggleFullScreen();
+    });
+    auto* gKey = new QShortcut(QKeySequence(Qt::Key_G), this);
+    connect(gKey, &QShortcut::activated, this, [this] {
+        if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel(); else openGoalPanel(m_grid->anchor());
+    });
 
     // ---- Estado inicial: siempre abre en el día de hoy
     resize(viewSize("day"));
@@ -408,6 +421,12 @@ QWidget* MainWindow::buildTitleBar()
     m_btnZoomOut = iconButton(bar, icons::Id::ZoomOut, QStringLiteral("Alejar: día → semana → mes (Ctrl −)"));
     connect(m_btnZoomIn, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMax(0, int(m_grid->zoom()) - 1))); });
     connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMin(2, int(m_grid->zoom()) + 1))); });
+
+    auto* goalBtn = iconButton(bar, icons::Id::Goal, QStringLiteral("Meta del día (G)"));
+    connect(goalBtn, &QToolButton::clicked, this, [this] {
+        if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
+        else openGoalPanel(m_grid->zoom() == GridWidget::Zoom::Day ? m_grid->anchor() : m_today);
+    });
 
     auto* stats = iconButton(bar, icons::Id::Stats, QStringLiteral("Estadísticas"));
     connect(stats, &QToolButton::clicked, this, [this] {
@@ -470,6 +489,7 @@ QWidget* MainWindow::buildTitleBar()
     lay->addWidget(m_btnProportional);
     lay->addWidget(m_btnZoomIn);
     lay->addWidget(m_btnZoomOut);
+    lay->addWidget(goalBtn);
     lay->addWidget(stats);
     lay->addWidget(menuBtn);
     lay->addSpacing(6);
@@ -748,6 +768,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* ev)
 void MainWindow::resizeEvent(QResizeEvent* e)
 {
     QWidget::resizeEvent(e);
+    if (m_goalPanel && m_goalPanel->isVisible()) placeGoalPanel(true, false);
     if (isFullScreen()) { updateDeckWidth(); return; }
     // Tamaño que dejaste a mano: se recuerda para siempre para esta vista.
     if (m_userResizing) m_saveSizeTimer.start();
@@ -885,6 +906,7 @@ void MainWindow::reloadGrid()
         if (!m_liveActivityScope || scope.contains(p.folderId)) pomos.append(p);
     m_grid->setData(pomos, m_db->dayTitles(m_grid->rangeStart(), m_grid->rangeEnd()));
     m_grid->setLive(m_session->currentPomodoro(), m_session->progress());
+    refreshGoals();
 
     // Pomodoros de hoy ya guardados (para numerar y para las stats en vivo).
     const auto running = m_session->currentPomodoro();
@@ -1407,6 +1429,146 @@ void MainWindow::togglePin(bool on)
 {
     win::setTopmost(this, on);
     m_db->setSetting("pinned", on ? 1 : 0);
+}
+
+// ===========================================================================
+// Meta del día (M7)
+// ===========================================================================
+void MainWindow::openGoalPanel(const QDate& day)
+{
+    if (!m_goalPanel) {
+        m_goalPanel = new GoalPanel(this);
+        m_goalPanel->hide();
+        connect(m_goalPanel, &GoalPanel::closeRequested, this, &MainWindow::closeGoalPanel);
+        connect(m_goalPanel, &GoalPanel::dayTitleEdited, this, [this](const QDate& d, const QString& t) {
+            m_db->setDayTitle(d, t);
+            refreshBand();
+            reloadGrid();
+        });
+        connect(m_goalPanel, &GoalPanel::saveRequested, this,
+                [this](const QDate& d, const QString& title, const QString& spec, int weekdays) {
+            goals::save(*m_db, d, title, spec, weekdays);
+            if (d == m_today) m_db->setSetting("goal_done/" + fmt::dayKey(d), QString());
+            reloadGrid();
+            openGoalPanel(d);   // recarga el panel con lo guardado
+            toast(weekdays ? QStringLiteral("Meta guardada (se repite)") : QStringLiteral("Meta guardada"));
+        });
+        connect(m_goalPanel, &GoalPanel::removeDayRequested, this, [this](const QDate& d) {
+            goals::removeDay(*m_db, d);
+            reloadGrid();
+            openGoalPanel(d);
+        });
+        connect(m_goalPanel, &GoalPanel::removeFromDayRequested, this, [this](const QDate& d) {
+            goals::removeFromDay(*m_db, d);
+            reloadGrid();
+            openGoalPanel(d);
+        });
+    }
+    const bool wasOpen = m_goalPanel->isVisible();
+    m_goalPanel->load(day, goals::resolve(m_db->goals(), day), m_db->dayTitle(day),
+                      m_db->setting("work_min", 25).toInt(), day == m_today);
+    if (!wasOpen) placeGoalPanel(true, true);
+    refreshGoals();   // con el panel visible, también carga su progreso
+}
+
+void MainWindow::closeGoalPanel()
+{
+    if (m_goalPanel && m_goalPanel->isVisible()) placeGoalPanel(false, true);
+}
+
+// El panel tapa la parte derecha (el reproductor) y entra deslizándose.
+void MainWindow::placeGoalPanel(bool open, bool animate)
+{
+    const int w = qMin(320, width() - 40);
+    const int top = m_titleBar ? m_titleBar->geometry().bottom() + 1 : 0;
+    const QRect shown(width() - 1 - w, top, w, height() - top - 1);
+    const QRect hidden = shown.translated(w + 2, 0);
+    if (m_goalAnim) m_goalAnim->stop();
+    m_goalPanel->raise();
+    if (!animate) {
+        m_goalPanel->setGeometry(open ? shown : hidden);
+        m_goalPanel->setVisible(open);
+        return;
+    }
+    if (open) {
+        m_goalPanel->setGeometry(hidden);
+        m_goalPanel->show();
+    }
+    m_goalAnim = new QPropertyAnimation(m_goalPanel, "geometry", this);
+    m_goalAnim->setDuration(open ? 220 : 170);
+    m_goalAnim->setEasingCurve(open ? QEasingCurve::OutCubic : QEasingCurve::InCubic);
+    m_goalAnim->setStartValue(m_goalPanel->geometry());
+    m_goalAnim->setEndValue(open ? shown : hidden);
+    if (!open) connect(m_goalAnim, &QPropertyAnimation::finished, m_goalPanel, &QWidget::hide);
+    m_goalAnim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void MainWindow::refreshGoals()
+{
+    const QVector<GoalRule> rules = m_db->goals();
+    const int pomoMin = m_db->setting("work_min", 25).toInt();
+    // Hechos por día (todas las actividades: la meta es del día, no de una actividad).
+    const QDate from = m_grid->rangeStart(), to = m_grid->rangeEnd();
+    QHash<QDate, int> done;
+    QHash<QDate, qint64> studied;
+    for (const Pomodoro& p : m_db->pomodorosBetween(qMin(from, m_today), qMax(to, m_today))) {
+        done[p.day] += 1;
+        studied[p.day] += p.studiedSec;
+    }
+    QHash<QDate, QVector<int>> remaining;
+    for (QDate d = from; d <= to; d = d.addDays(1)) {
+        const auto r = goals::resolve(rules, d);
+        if (!r) continue;
+        const auto parsed = goals::parse(r->spec, pomoMin);
+        if (!parsed.ok) continue;
+        const int n = done.value(d);
+        if (n < parsed.blocks.size()) remaining.insert(d, parsed.blocks.mid(n));
+    }
+    m_grid->setGoalBlocks(remaining);
+    if (m_goalPanel && m_goalPanel->isVisible()) {
+        const QDate d = m_goalPanel->day();
+        int n = done.value(d);
+        qint64 sec = studied.value(d);
+        if (d < qMin(from, m_today) || d > qMax(to, m_today)) {
+            n = 0; sec = 0;
+            for (const Pomodoro& p : m_db->pomodorosBetween(d, d)) { ++n; sec += p.studiedSec; }
+        }
+        m_goalPanel->setProgress({n, sec});
+    }
+}
+
+// Festejo una sola vez por día, cuando lo estudiado llega a la meta.
+void MainWindow::checkGoalReached()
+{
+    const QString key = "goal_done/" + fmt::dayKey(m_today);
+    if (!m_db->setting(key).toString().isEmpty()) return;
+    const auto r = goals::resolve(m_db->goals(), m_today);
+    if (!r) return;
+    const auto parsed = goals::parse(r->spec, m_db->setting("work_min", 25).toInt());
+    if (!parsed.ok) return;
+    qint64 sec = 0;
+    for (const Pomodoro& p : m_db->pomodorosBetween(m_today, m_today))
+        if (p.status != PomoStatus::Running && p.status != PomoStatus::Parked) sec += p.studiedSec;
+    if (sec < qint64(parsed.totalMin) * 60) return;
+    m_db->setSetting(key, QDateTime::currentDateTime().toString(Qt::ISODate));
+    m_sounds->playChime();
+    toast(QStringLiteral("🎯 ¡Meta del día cumplida! %1").arg(fmt::duration(int(sec))));
+}
+
+void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)
+{
+    QMenu menu(this);
+    const auto r = goals::resolve(m_db->goals(), day);
+    const bool has = r && !r->spec.isEmpty();
+    menu.addAction(icons::get(icons::Id::Goal),
+                   has ? QStringLiteral("Meta: %1…").arg(goals::describe(r->spec)) : QStringLiteral("Poner meta…"),
+                   this, [this, day] { openGoalPanel(day); });
+    if (m_grid->zoom() != GridWidget::Zoom::Day)
+        menu.addAction(QStringLiteral("Ver día"), this, [this, day] {
+            m_grid->setAnchor(day);
+            setZoom(GridWidget::Zoom::Day);
+        });
+    menu.exec(globalPos);
 }
 
 void MainWindow::toast(const QString& text)

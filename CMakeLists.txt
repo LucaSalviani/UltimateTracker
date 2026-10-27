@@ -14,6 +14,7 @@ add_library(constancia_core STATIC
     src/core/Types.h
     src/core/Format.h          src/core/Format.cpp
     src/core/DayClock.h        src/core/DayClock.cpp
+    src/core/Goals.h           src/core/Goals.cpp
     src/core/FolderTree.h      src/core/FolderTree.cpp
     src/core/Database.h        src/core/Database.cpp
     src/core/Stats.h           src/core/Stats.cpp
@@ -36,6 +37,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/ActivitiesWidget.h  src/ui/ActivitiesWidget.cpp
     src/ui/TimerDeck.h         src/ui/TimerDeck.cpp
     src/ui/LiveStats.h         src/ui/LiveStats.cpp
+    src/ui/GoalPanel.h         src/ui/GoalPanel.cpp
     src/ui/SettingsDialog.h    src/ui/SettingsDialog.cpp
     src/ui/StatsWidget.h       src/ui/StatsWidget.cpp
     src/ui/MainWindow.h        src/ui/MainWindow.cpp

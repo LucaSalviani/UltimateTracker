@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <QPropertyAnimation>
 
 #include "core/Database.h"
 #include "core/FolderTree.h"
@@ -88,6 +89,14 @@ private:
     void dockToNearestEdge();
     void undock();
     QRect offscreenRect(const QRect& r, EdgeTab::Edge edge, const QRect& screen) const;
+    // ---- meta del día (M7)
+    void openGoalPanel(const QDate& day);
+    void closeGoalPanel();
+    void placeGoalPanel(bool open, bool animate);
+    void refreshGoals();                  // fantasmas de la grilla + progreso del panel
+    void checkGoalReached();
+    void showDayMenu(const QDate& day, const QPoint& globalPos);
+
     void toast(const QString& text);
     void toastAction(const QString& text, const QString& action, std::function<void()> fn);
     void quitApp();
@@ -121,7 +130,10 @@ private:
     QToolButton* m_btnProportional = nullptr;
     QToolButton* m_btnPin = nullptr;
     QToolButton* m_btnFull = nullptr;
-    qint64       m_noteTarget = 0;        // pomodoro al que va la nota del reproductor
+    qint64       m_noteTarget = 0;
+    class GoalPanel* m_goalPanel = nullptr;
+    QWidget*     m_titleBar = nullptr;
+    QPointer<QPropertyAnimation> m_goalAnim;        // pomodoro al que va la nota del reproductor
 
     // Banda de fecha
     QWidget*     m_band = nullptr;

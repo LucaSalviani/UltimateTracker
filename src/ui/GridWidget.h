@@ -30,6 +30,9 @@ public:
     QDate rangeEnd() const;
 
     void setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QString>& titles);
+    // M7: minutos de los cuadraditos de la meta que todavía faltan en cada día;
+    // se pintan "fantasma" después de los reales.
+    void setGoalBlocks(const QHash<QDate, QVector<int>>& blocks);
     void setLive(const std::optional<Pomodoro>& running, double progress);
     void setFolderPaths(const QHash<qint64, QString>& paths) { m_paths = paths; }
     // Si hay algo en marcha hoy (pomodoro, pausa o recreo), el último pomodoro
@@ -40,6 +43,9 @@ signals:
     void dayActivated(const QDate& day);
     // Click derecho sobre un cuadradito (MainWindow arma el menú).
     void pomodoroMenuRequested(qint64 pomodoroId, const QPoint& globalPos);
+    // Click derecho en un día fuera de los cuadraditos, o click en un fantasma.
+    void dayMenuRequested(const QDate& day, const QPoint& globalPos);
+    void goalClicked(const QDate& day);
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -61,13 +67,19 @@ private:
     qint64 studyOn(const QDate& d) const;
     bool   isDayEnd(const Pomodoro& p) const;
     void   recomputeDayEnds();
+    void   rebuild();                 // reales + fantasmas → m_pomos / m_byDay
+    static bool isGhost(const Pomodoro& p) { return p.id < 0; }
+    void   paintGhost(QPainter& p, const QRectF& r, const Pomodoro& g) const;
+    QDate  dayAt(const QPointF& pos) const;
 
     Zoom  m_zoom = Zoom::Day;
     QDate m_anchor;
     QDate m_today;
     bool  m_proportional = false;
 
-    QVector<Pomodoro>            m_pomos;
+    QVector<Pomodoro>            m_real;        // lo que viene de la base
+    QHash<QDate, QVector<int>>   m_goalBlocks;
+    QVector<Pomodoro>            m_pomos;       // reales + fantasmas (id < 0)
     QHash<QDate, QVector<int>>   m_byDay;
     QHash<QDate, QString>        m_titles;
     QHash<qint64, QString>       m_paths;

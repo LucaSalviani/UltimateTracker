@@ -63,11 +63,37 @@ QDate GridWidget::rangeEnd() const
 
 void GridWidget::setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QString>& titles)
 {
-    m_pomos = pomos;
+    m_real = pomos;
     m_titles = titles;
+    rebuild();
+}
+
+void GridWidget::setGoalBlocks(const QHash<QDate, QVector<int>>& blocks)
+{
+    m_goalBlocks = blocks;
+    rebuild();
+}
+
+void GridWidget::rebuild()
+{
+    m_pomos = m_real;
     m_byDay.clear();
     for (int i = 0; i < m_pomos.size(); ++i)
         m_byDay[m_pomos[i].day].append(i);
+    // Fantasmas: los cuadraditos de la meta que faltan, a continuación de los reales.
+    // (MainWindow ya descontó los hechos: acá llegan solo los que faltan.)
+    qint64 ghostId = -1;
+    for (auto it = m_goalBlocks.cbegin(); it != m_goalBlocks.cend(); ++it) {
+        for (int k = 0; k < it.value().size(); ++k) {
+            Pomodoro g;
+            g.id = ghostId--;
+            g.day = it.key();
+            g.plannedSec = g.studiedSec = it.value()[k] * 60;
+            g.status = PomoStatus::Completed;
+            m_byDay[g.day].append(int(m_pomos.size()));
+            m_pomos.append(g);
+        }
+    }
     recomputeDayEnds();
     update();
 }
@@ -81,6 +107,7 @@ void GridWidget::recomputeDayEnds()
         int n = 0;
         const Pomodoro* last = nullptr;
         for (int i : it.value()) {
+            if (isGhost(m_pomos[i])) continue;
             m_number.insert(m_pomos[i].id, ++n);
             if (!last || m_pomos[i].startedAt >= last->startedAt) last = &m_pomos[i];
         }
@@ -111,7 +138,7 @@ void GridWidget::setLive(const std::optional<Pomodoro>& running, double progress
 qint64 GridWidget::studyOn(const QDate& d) const
 {
     qint64 s = 0;
-    for (int i : m_byDay.value(d)) s += m_pomos[i].studiedSec;
+    for (int i : m_byDay.value(d)) if (!isGhost(m_pomos[i])) s += m_pomos[i].studiedSec;
     return s;
 }
 
@@ -183,8 +210,31 @@ QVector<GridWidget::Placed> GridWidget::layoutSquares(const QRectF& area, const 
     return out;
 }
 
+// Fantasma: el lugar de un pomodoro de la meta que todavía no hiciste.
+void GridWidget::paintGhost(QPainter& p, const QRectF& r, const Pomodoro& g) const
+{
+    const double s = r.width();
+    const double radius = qMax(1.0, s * 0.12);
+    QColor edge = theme::textFaint;
+    edge.setAlphaF(0.7);
+    QPen pen(edge, 1, Qt::DashLine);
+    pen.setDashPattern({3, 3});
+    p.setPen(pen);
+    QColor fill = theme::text;
+    fill.setAlphaF(0.025);
+    p.setBrush(fill);
+    p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+    if (s < 15) return;
+    QFont f = theme::uiFont(9, QFont::Medium);
+    f.setPixelSize(qMax(7, int(s * 0.26)));
+    p.setFont(f);
+    p.setPen(theme::textFaint);
+    p.drawText(r, Qt::AlignCenter, fmt::duration(g.plannedSec));
+}
+
 void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo) const
 {
+    if (isGhost(pomo)) { paintGhost(p, r, pomo); return; }
     const double s = r.width();
     const double radius = qMax(1.0, s * 0.12);
     QColor textColor;
@@ -272,7 +322,7 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
     for (int k = 1; k < placed.size(); ++k) {
         const QRectF& a = placed[k - 1].rect;
         const QRectF& b = placed[k].rect;
-        if (!m_pomos[placed[k].index].linked || qAbs(a.bottom() - b.bottom()) > 0.5 || b.left() < a.right()) continue;
+        if (!m_pomos[placed[k].index].linked || isGhost(m_pomos[placed[k].index]) || qAbs(a.bottom() - b.bottom()) > 0.5 || b.left() < a.right()) continue;
         const double h = qMin(a.height(), b.height()) * 0.56;
         const double cy = b.bottom() - qMin(a.height(), b.height()) / 2;
         p.setPen(Qt::NoPen);
@@ -444,9 +494,17 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
             update();
         }
     }
+    if (m_zoom == Zoom::Day) unsetCursor();
     for (const Placed& pl : m_placed) {
         if (!pl.rect.contains(e->position())) continue;
         const Pomodoro& pm = m_pomos[pl.index];
+        if (isGhost(pm)) {
+            QToolTip::showText(e->globalPosition().toPoint(),
+                               QStringLiteral("Meta: falta un pomodoro de %1\nClick para ver la meta del día")
+                                   .arg(fmt::duration(pm.plannedSec)), this);
+            setCursor(Qt::PointingHandCursor);
+            return;
+        }
         const QString start = QDateTime::fromSecsSinceEpoch(pm.startedAt).time().toString("HH:mm");
         QString status;
         if (pm.status == PomoStatus::Running)       status = QStringLiteral("en curso");
@@ -475,17 +533,36 @@ void GridWidget::leaveEvent(QEvent*)
     }
 }
 
+QDate GridWidget::dayAt(const QPointF& pos) const
+{
+    if (m_zoom == Zoom::Day) return m_anchor;
+    for (const auto& [r, d] : m_dayRects)
+        if (r.contains(pos)) return d;
+    return {};
+}
+
 void GridWidget::contextMenuEvent(QContextMenuEvent* e)
 {
     for (const Placed& pl : m_placed) {
         if (!pl.rect.contains(e->pos())) continue;
-        emit pomodoroMenuRequested(m_pomos[pl.index].id, e->globalPos());
+        const Pomodoro& pm = m_pomos[pl.index];
+        if (isGhost(pm)) break;   // un fantasma es parte del día: menú del día
+        emit pomodoroMenuRequested(pm.id, e->globalPos());
         return;
     }
+    const QDate d = dayAt(e->pos());
+    if (d.isValid()) emit dayMenuRequested(d, e->globalPos());
 }
 
 void GridWidget::mousePressEvent(QMouseEvent* e)
 {
+    if (e->button() == Qt::LeftButton) {
+        for (const Placed& pl : m_placed)
+            if (pl.rect.contains(e->position()) && isGhost(m_pomos[pl.index])) {
+                emit goalClicked(m_pomos[pl.index].day);
+                return;
+            }
+    }
     if (m_zoom == Zoom::Day || e->button() != Qt::LeftButton) return;
     for (const auto& [r, d] : m_dayRects) {
         if (r.contains(e->position())) {

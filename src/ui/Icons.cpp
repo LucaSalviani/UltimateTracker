@@ -92,6 +92,13 @@ void draw(QPainter& p, Id id, const QColor& c)
         p.drawLine(QPointF(5, 12), QPointF(15, 12));
         p.drawPolyline(QPolygonF({{11, 8}, {15, 12}, {11, 16}}));
         break;
+    case Id::Goal:            // diana
+        p.drawEllipse(QPointF(12, 12), 7.5, 7.5);
+        p.drawEllipse(QPointF(12, 12), 3.6, 3.6);
+        p.setBrush(c);
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(QPointF(12, 12), 1.3, 1.3);
+        break;
     case Id::FullScreen:      // cuatro esquinas hacia afuera
         p.drawPolyline(QPolygonF({{5, 9.5}, {5, 5}, {9.5, 5}}));
         p.drawPolyline(QPolygonF({{14.5, 5}, {19, 5}, {19, 9.5}}));
