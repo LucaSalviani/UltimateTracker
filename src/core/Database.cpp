@@ -185,6 +185,63 @@ bool Database::deleteFolder(qint64 id)
     return q.exec();
 }
 
+Database::FolderBackup Database::backupFolder(qint64 id) const
+{
+    FolderBackup b;
+    QSqlQuery info(m_db);
+    info.exec("PRAGMA table_info(folders)");
+    while (info.next()) b.columns << info.value(1).toString();
+    // Recorrido a lo ancho: así cada padre queda antes que sus hijos al restaurar.
+    QVector<qint64> order{id};
+    for (int i = 0; i < order.size(); ++i) {
+        QSqlQuery kids(m_db);
+        kids.prepare("SELECT id FROM folders WHERE parent_id = ? ORDER BY sort, id");
+        kids.addBindValue(order[i]);
+        kids.exec();
+        while (kids.next()) order.append(kids.value(0).toLongLong());
+    }
+    for (qint64 f : order) {
+        QSqlQuery q(m_db);
+        q.prepare(QStringLiteral("SELECT %1 FROM folders WHERE id = ?").arg(b.columns.join(QStringLiteral(", "))));
+        q.addBindValue(f);
+        if (q.exec() && q.next()) {
+            QVariantList row;
+            for (int c = 0; c < b.columns.size(); ++c) row << q.value(c);
+            b.rows.append(row);
+        }
+        QSqlQuery pq(m_db);
+        pq.prepare("SELECT id FROM pomodoros WHERE folder_id = ?");
+        pq.addBindValue(f);
+        pq.exec();
+        while (pq.next()) b.pomos.append({pq.value(0).toLongLong(), f});
+    }
+    return b;
+}
+
+bool Database::restoreFolder(const FolderBackup& b)
+{
+    if (b.isEmpty()) return false;
+    m_db.transaction();
+    QStringList marks;
+    for (int i = 0; i < b.columns.size(); ++i) marks << QStringLiteral("?");
+    const QString sql = QStringLiteral("INSERT OR REPLACE INTO folders(%1) VALUES(%2)")
+                            .arg(b.columns.join(QStringLiteral(", ")), marks.join(QStringLiteral(", ")));
+    for (const QVariantList& row : b.rows) {
+        QSqlQuery q(m_db);
+        q.prepare(sql);
+        for (const QVariant& v : row) q.addBindValue(v);
+        if (!q.exec()) { m_error = q.lastError().text(); m_db.rollback(); return false; }
+    }
+    for (const auto& [pomo, folder] : b.pomos) {
+        QSqlQuery q(m_db);
+        q.prepare("UPDATE pomodoros SET folder_id = ? WHERE id = ? AND folder_id IS NULL");
+        q.addBindValue(folder);
+        q.addBindValue(pomo);
+        q.exec();
+    }
+    return m_db.commit();
+}
+
 bool Database::moveFolder(qint64 id, qint64 newParentId)
 {
     QSqlQuery q(m_db);
@@ -559,6 +616,25 @@ void Database::deleteGoal(qint64 id)
     q.prepare("DELETE FROM goals WHERE id = ?");
     q.addBindValue(id);
     q.exec();
+}
+
+void Database::restoreGoals(const QVector<GoalRule>& rules)
+{
+    m_db.transaction();
+    QSqlQuery(m_db).exec("DELETE FROM goals");
+    for (const GoalRule& r : rules) {
+        QSqlQuery q(m_db);
+        q.prepare("INSERT INTO goals(id, title, spec, start_day, end_day, weekdays, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)");
+        q.addBindValue(r.id);
+        q.addBindValue(nonNull(r.title));
+        q.addBindValue(nonNull(r.spec));
+        q.addBindValue(fmt::dayKey(r.start));
+        q.addBindValue(r.end.isValid() ? QVariant(fmt::dayKey(r.end)) : QVariant(QMetaType(QMetaType::QString)));
+        q.addBindValue(r.weekdays);
+        q.addBindValue(QDateTime::currentSecsSinceEpoch());
+        q.exec();
+    }
+    m_db.commit();
 }
 
 bool Database::backupTo(const QString& path)

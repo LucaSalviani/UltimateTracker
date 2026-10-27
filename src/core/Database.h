@@ -38,6 +38,16 @@ public:
     // M25: color elegido para la actividad ("#rrggbb"; vacío = automático).
     QHash<qint64, QString> folderColors() const;
     void   setFolderColor(qint64 id, const QString& color);
+    // M40: foto de una actividad y sus subactividades (filas + qué pomodoros eran
+    // suyos) para poder deshacer el borrado tal cual estaba.
+    struct FolderBackup {
+        QStringList columns;
+        QVector<QVariantList> rows;              // padres antes que hijos
+        QVector<QPair<qint64, qint64>> pomos;    // (pomodoro, actividad)
+        bool isEmpty() const { return rows.isEmpty(); }
+    };
+    FolderBackup backupFolder(qint64 id) const;
+    bool restoreFolder(const FolderBackup& b);
 
     // ---- Días ------------------------------------------------------------
     QString dayTitle(const QDate& day) const;
@@ -69,6 +79,7 @@ public:
     qint64 insertGoal(const GoalRule& r);
     void   updateGoal(const GoalRule& r);
     void   deleteGoal(qint64 id);
+    void   restoreGoals(const QVector<GoalRule>& rules);   // M40: deshacer (mismos ids)
 
     // ---- Hitos (avisos de horas) ----------------------------------------
     // true si el hito es nuevo (y queda registrado).

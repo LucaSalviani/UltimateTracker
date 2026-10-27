@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "core/Database.h"
 
 #include <QWidget>
@@ -23,6 +25,8 @@ public:
 signals:
     void backRequested();
     void activitiesChanged();
+    // M40: se borró algo; el aviso de abajo ofrece deshacerlo.
+    void undoable(const QString& text, std::function<void()> undo);
 
 private:
     void addRoot();

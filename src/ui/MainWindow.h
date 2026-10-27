@@ -111,6 +111,7 @@ private:
     void editNote(qint64 pomodoroId);   // M37
     void showShortcuts();               // M37: panel de atajos (?)
     void openSettings();
+    void undoGoals(const QVector<GoalRule>& before, const QDate& day);   // M40
     QToolButton* buildDevButton(QWidget* bar);   // M20
     void applySoundSettings();   // M27
     void applySystemSettings();   // M9: atajo global, inicio con Windows
@@ -169,6 +170,9 @@ private:
 
     GridWidget* m_grid = nullptr;
     QLabel*     m_toast = nullptr;
+    QLabel*     m_floatToast = nullptr;   // M40: el mismo aviso, flotando sobre Estadísticas / Actividades
+    void        showToastHtml(const QString& html);
+    void        placeFloatToast();
     QTimer      m_toastTimer;
     std::function<void()> m_toastAction;
 

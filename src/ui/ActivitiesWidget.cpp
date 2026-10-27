@@ -13,7 +13,6 @@
 #include <QPainter>
 #include <QColorDialog>
 #include <QMenu>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -190,22 +189,23 @@ void ActivitiesWidget::onItemChanged(QTreeWidgetItem* item, int column)
 
 void ActivitiesWidget::deleteItem(QTreeWidgetItem* item)
 {
+    // M40: sin pregunta: se borra al toque y el aviso de abajo permite deshacer
+    // (vuelve todo: subactividades, colores, horas previas y sus pomodoros).
     if (!item) return;
+    const qint64 id = item->data(0, kIdRole).toLongLong();
+    const QString name = item->text(0);
     const int subs = countDescendants(item);
-    QMessageBox box(this);
-    box.setIcon(QMessageBox::Warning);
-    box.setWindowTitle(QStringLiteral("Eliminar actividad"));
-    box.setText(subs == 0
-        ? QStringLiteral("¿Eliminar «%1»?").arg(item->text(0))
-        : QStringLiteral("¿Eliminar «%1» y sus %2 subactividades?").arg(item->text(0)).arg(subs));
-    box.setInformativeText(QStringLiteral("Las horas no se pierden: siguen contando en el total y pasan a «Sin actividad»."));
-    QPushButton* yes = box.addButton(QStringLiteral("Eliminar"), QMessageBox::DestructiveRole);
-    box.addButton(QStringLiteral("Cancelar"), QMessageBox::RejectRole);
-    box.exec();
-    if (box.clickedButton() != yes) return;
-    m_db->deleteFolder(item->data(0, kIdRole).toLongLong());
+    const Database::FolderBackup backup = m_db->backupFolder(id);
+    m_db->deleteFolder(id);
     refresh();
     emit activitiesChanged();
+    emit undoable(subs == 0 ? QStringLiteral("«%1» eliminada").arg(name)
+                            : QStringLiteral("«%1» y %2 subactividades eliminadas").arg(name).arg(subs),
+                  [this, backup, id] {
+                      m_db->restoreFolder(backup);
+                      refresh(id);
+                      emit activitiesChanged();
+                  });
 }
 
 // Después de arrastrar: se guarda el padre y el orden de todas las actividades.

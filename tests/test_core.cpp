@@ -559,6 +559,47 @@ private slots:
         QVERIFY(!db.folderColors().contains(f));
     }
 
+    // M40: deshacer el borrado de una actividad (con subactividades y pomodoros)
+    void folderDeleteUndo()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const int base = db.folders().size();   // la base nueva ya trae "General"
+        const qint64 a = db.addFolder(0, "Facultad");
+        const qint64 b = db.addFolder(a, "Física");
+        const qint64 c = db.addFolder(b, "Unidad 1");
+        db.setFolderColor(b, "#123456");
+        Pomodoro p; p.folderId = c; p.day = QDate(2026, 10, 1); p.startedAt = 1000; p.endedAt = 2500;
+        p.plannedSec = 1500; p.studiedSec = 1500; p.status = PomoStatus::Completed;
+        const qint64 pid = db.insertPomodoro(p);
+        const auto backup = db.backupFolder(a);
+        QCOMPARE(backup.rows.size(), 3);
+        QVERIFY(db.deleteFolder(a));
+        QCOMPARE(db.folders().size(), base);
+        QCOMPARE(db.pomodoro(pid)->folderId, qint64(0));
+        QVERIFY(db.restoreFolder(backup));
+        QCOMPARE(db.folders().size(), base + 3);
+        QCOMPARE(db.pomodoro(pid)->folderId, c);
+        QCOMPARE(db.folderColors().value(b), QString("#123456"));
+        const FolderTree tree(db.folders());
+        QCOMPARE(tree.path(c), QString("Facultad › Física › Unidad 1"));
+    }
+
+    void goalsRestore()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        GoalRule r; r.title = "x"; r.spec = "t:120"; r.start = QDate(2026, 1, 1); r.weekdays = goals::kEveryDay;
+        r.id = db.insertGoal(r);
+        const auto before = db.goals();
+        db.deleteGoal(r.id);
+        QVERIFY(db.goals().isEmpty());
+        db.restoreGoals(before);
+        QCOMPARE(db.goals().size(), 1);
+        QCOMPARE(db.goals().first().id, r.id);
+        QCOMPARE(db.goals().first().spec, QString("t:120"));
+    }
+
     // M39: CSV
     void csvExport()
     {

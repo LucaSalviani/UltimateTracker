@@ -250,15 +250,27 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_toast->setTextFormat(Qt::RichText);
     m_toast->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
     m_toast->setCursor(Qt::ArrowCursor);
-    connect(m_toast, &QLabel::linkActivated, this, [this] {
-        auto fn = std::move(m_toastAction);
-        m_toastAction = nullptr;
-        m_toast->hide();
-        if (fn) fn();
-    });
-    m_toast->hide();
+    // M40: en Estadísticas y Actividades la columna de la grilla no se ve; ahí el
+    // aviso flota abajo al centro (si no, "Deshacer" o "Exportado" no aparecían).
+    m_floatToast = new QLabel(this);
+    m_floatToast->setProperty("role", "toast");
+    m_floatToast->setAlignment(Qt::AlignCenter);
+    m_floatToast->setTextFormat(Qt::RichText);
+    m_floatToast->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+    m_floatToast->setCursor(Qt::ArrowCursor);
+    for (QLabel* t : {m_toast, m_floatToast}) {
+        connect(t, &QLabel::linkActivated, this, [this] {
+            auto fn = std::move(m_toastAction);
+            m_toastAction = nullptr;
+            m_toast->hide();
+            m_floatToast->hide();
+            if (fn) fn();
+        });
+        t->hide();
+    }
     m_toastTimer.setSingleShot(true);
     connect(&m_toastTimer, &QTimer::timeout, m_toast, &QLabel::hide);
+    connect(&m_toastTimer, &QTimer::timeout, m_floatToast, &QLabel::hide);
 
     m_liveStats = new LiveStats(gridPage);
     m_liveActivityScope = m_db->setting("live_scope", "day").toString() == QLatin1String("activity");
@@ -297,6 +309,9 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_activities = new ActivitiesWidget(m_db, this);
     connect(m_activities, &ActivitiesWidget::backRequested, this, [this] { showOverlay(Overlay::None); });
     connect(m_activities, &ActivitiesWidget::activitiesChanged, this, &MainWindow::reloadFolders);
+    connect(m_activities, &ActivitiesWidget::undoable, this, [this](const QString& text, std::function<void()> undo) {
+        toastAction(text, QStringLiteral("Deshacer"), std::move(undo));
+    });
 
     m_pages = new QStackedWidget(this);
     m_pages->insertWidget(PageGrid, gridPage);
@@ -460,8 +475,9 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     key(QKeySequence(Qt::Key_F1), [this] { showShortcuts(); });
     key(QKeySequence::Undo, [this] {
         // Ctrl+Z = el "Deshacer" del aviso que está a la vista.
-        if (m_toast->isVisible() && m_toastAction && m_toast->text().contains(QStringLiteral(">Deshacer<")))
-            emit m_toast->linkActivated(QStringLiteral("act"));
+        QLabel* t = m_floatToast->isVisible() ? m_floatToast : m_toast;
+        if (t->isVisible() && m_toastAction && t->text().contains(QStringLiteral(">Deshacer<")))
+            emit t->linkActivated(QStringLiteral("act"));
         else
             toast(QStringLiteral("Nada para deshacer"));
     });
@@ -889,6 +905,7 @@ void MainWindow::resizeEvent(QResizeEvent* e)
 {
     QWidget::resizeEvent(e);
     if (m_goalPanel && m_goalPanel->isVisible()) placeGoalPanel(true, false);
+    if (m_floatToast && m_floatToast->isVisible()) placeFloatToast();
     if (isFullScreen()) { updateDeckWidth(); return; }
     // Tamaño que dejaste a mano: se recuerda para siempre para esta vista.
     if (m_userResizing) m_saveSizeTimer.start();
@@ -964,6 +981,7 @@ void MainWindow::showOverlay(Overlay o)
 {
     if (o == m_overlay) return;
     fade::cross(m_pages);   // M36
+    m_floatToast->hide();
     m_overlay = o;
     switch (o) {
     case Overlay::Stats:
@@ -1260,9 +1278,11 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
             else
                 toast(QStringLiteral("Pomodoro en pausa movido a %1").arg(m_tree.path(folder)));
         } else {
+            const qint64 from = m_db->pomodoro(id) ? m_db->pomodoro(id)->folderId : 0;
             m_db->setPomodoroFolder(id, folder);
             reloadGrid();
-            toast(QStringLiteral("Pomodoro movido a %1").arg(m_tree.path(folder)));
+            toastAction(QStringLiteral("Pomodoro movido a %1").arg(m_tree.path(folder)), QStringLiteral("Deshacer"),
+                        [this, id, from] { m_db->setPomodoroFolder(id, from); reloadGrid(); });   // M40
         }
     });
     connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
@@ -1746,22 +1766,30 @@ void MainWindow::openGoalPanel(const QDate& day)
         });
         connect(m_goalPanel, &GoalPanel::saveRequested, this,
                 [this](const QDate& d, const QString& title, const QString& spec, int weekdays) {
+            const auto before = m_db->goals();   // M40: para deshacer
             goals::save(*m_db, d, title, spec, weekdays);
             if (d == m_today) m_db->setSetting("goal_done/" + fmt::dayKey(d), QString());
             preloadFromGoal();
             reloadGrid();
             openGoalPanel(d);   // recarga el panel con lo guardado
-            toast(weekdays ? QStringLiteral("Objetivo guardado (se repite)") : QStringLiteral("Objetivo guardado"));
+            toastAction(weekdays ? QStringLiteral("Objetivo guardado (se repite)") : QStringLiteral("Objetivo guardado"),
+                        QStringLiteral("Deshacer"), [this, before, d] { undoGoals(before, d); });
         });
         connect(m_goalPanel, &GoalPanel::removeDayRequested, this, [this](const QDate& d) {
+            const auto before = m_db->goals();
             goals::removeDay(*m_db, d);
             reloadGrid();
             openGoalPanel(d);
+            toastAction(QStringLiteral("Objetivo quitado de este día"), QStringLiteral("Deshacer"),
+                        [this, before, d] { undoGoals(before, d); });
         });
         connect(m_goalPanel, &GoalPanel::removeFromDayRequested, this, [this](const QDate& d) {
+            const auto before = m_db->goals();
             goals::removeFromDay(*m_db, d);
             reloadGrid();
             openGoalPanel(d);
+            toastAction(QStringLiteral("Objetivo quitado desde este día"), QStringLiteral("Deshacer"),
+                        [this, before, d] { undoGoals(before, d); });
         });
     }
     const bool wasOpen = m_goalPanel->isVisible();
@@ -1929,9 +1957,27 @@ void MainWindow::celebrate(int kind, const QString& kicker, const QString& title
 void MainWindow::toast(const QString& text)
 {
     m_toastAction = nullptr;
-    m_toast->setText(text.toHtmlEscaped());
-    m_toast->adjustSize();
-    m_toast->show();
+    showToastHtml(text.toHtmlEscaped());
+}
+
+// Abajo al centro de la ventana, por encima del campo "Nueva actividad".
+void MainWindow::placeFloatToast()
+{
+    QLabel* t = m_floatToast;
+    const QSize sz(qMin(width() - 32, t->sizeHint().width() + 28), t->sizeHint().height() + 6);
+    t->setGeometry((width() - sz.width()) / 2, height() - sz.height() - 98, sz.width(), sz.height());
+    t->raise();
+}
+
+void MainWindow::showToastHtml(const QString& html)
+{
+    const bool floating = m_overlay != Overlay::None;
+    QLabel* t = floating ? m_floatToast : m_toast;
+    (floating ? m_toast : m_floatToast)->hide();
+    t->setText(html);
+    t->adjustSize();
+    if (floating) placeFloatToast();
+    t->show();
     m_toastTimer.start(8000);
 }
 
@@ -1939,11 +1985,8 @@ void MainWindow::toastAction(const QString& text, const QString& action, std::fu
 {
     m_toastAction = std::move(fn);
     // M32: sin color fijo en el enlace: toma el del tema (antes quedaba invisible al pasar a claro).
-    m_toast->setText(QStringLiteral("%1 &nbsp;·&nbsp; <a href=\"act\" style=\"text-decoration:none; font-weight:600\">%2</a>")
-                         .arg(text.toHtmlEscaped(), action.toHtmlEscaped()));
-    m_toast->adjustSize();
-    m_toast->show();
-    m_toastTimer.start(8000);
+    showToastHtml(QStringLiteral("%1 &nbsp;·&nbsp; <a href=\"act\" style=\"text-decoration:none; font-weight:600\">%2</a>")
+                      .arg(text.toHtmlEscaped(), action.toHtmlEscaped()));
 }
 
 void MainWindow::showEvent(QShowEvent* e)
@@ -2100,4 +2143,14 @@ void MainWindow::showShortcuts()
     }
     win::applyChrome(&dlg);
     dlg.exec();
+}
+
+// M40: vuelve las reglas de objetivos a como estaban antes del último cambio.
+void MainWindow::undoGoals(const QVector<GoalRule>& before, const QDate& day)
+{
+    m_db->restoreGoals(before);
+    preloadFromGoal();
+    reloadGrid();
+    if (m_goalPanel && m_goalPanel->isVisible()) openGoalPanel(day);
+    toast(QStringLiteral("Objetivo como estaba"));
 }
