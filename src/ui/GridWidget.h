@@ -78,6 +78,9 @@ private:
     // con un título arriba si headerH > 0). Busca el lado más grande que entra.
     Layout layoutGroups(const QRectF& area, const QVector<QVector<int>>& groups, double headerH,
                         bool breakLines, double maxSide, double minSide, bool groupGaps = false) const;
+    // M30: proporcional completo como rompecabezas: cada actividad en un bloque
+    // casi cuadrado y los bloques encastrados para que el total quede cuadrado.
+    Layout layoutPuzzle(const QRectF& area, const QVector<QVector<int>>& groups, double maxSide, double minSide) const;
     void paintSquares(QPainter& p, const QRectF& area, const QDate& day, double maxSide, double minSide,
                       double headerH, bool breakLines);
     void paintHeader(QPainter& p, const Header& h) const;

@@ -344,6 +344,127 @@ void GridWidget::markCompleted(qint64 id, int delayMs)
     update();
 }
 
+// ---------------------------------------------------------------------------
+// M30: rompecabezas (skyline). Unidades: el lado de un pomodoro de 25' = 1.
+// ---------------------------------------------------------------------------
+namespace {
+struct Item { double w, h; int ref; };
+struct Placement { double x, y; };
+
+// Coloca cada pieza en el punto más bajo del "horizonte" (y, a igualdad, más a la izquierda).
+double skylinePack(const QVector<Item>& items, double binW, QVector<Placement>* out)
+{
+    struct Seg { double x, y, w; };
+    QVector<Seg> sky{{0, 0, binW}};
+    double height = 0;
+    out->resize(items.size());
+    for (int n = 0; n < items.size(); ++n) {
+        const Item& it = items[n];
+        double bestY = 1e18, bestX = 0;
+        for (int i = 0; i < sky.size(); ++i) {
+            const double x = sky[i].x;
+            if (x + it.w > binW + 1e-9) break;
+            double y = 0;
+            for (int j = i; j < sky.size() && sky[j].x < x + it.w - 1e-9; ++j) y = qMax(y, sky[j].y);
+            if (y < bestY - 1e-9 || (qAbs(y - bestY) < 1e-9 && x < bestX)) { bestY = y; bestX = x; }
+        }
+        if (bestY > 1e17) { bestY = height; bestX = 0; }   // más ancha que el contenedor: abajo de todo
+        (*out)[n] = {bestX, bestY};
+        height = qMax(height, bestY + it.h);
+        // Actualizar el horizonte: el tramo [bestX, bestX + w) pasa a la altura nueva.
+        QVector<Seg> next;
+        const double x0 = bestX, x1 = bestX + it.w;
+        for (const Seg& sg : sky) {
+            const double a = sg.x, b = sg.x + sg.w;
+            if (b <= x0 + 1e-9 || a >= x1 - 1e-9) { next.append(sg); continue; }
+            if (a < x0) next.append({a, sg.y, x0 - a});
+            if (b > x1) next.append({x1, sg.y, b - x1});
+        }
+        next.append({x0, bestY + it.h, x1 - x0});
+        std::sort(next.begin(), next.end(), [](const Seg& l, const Seg& r) { return l.x < r.x; });
+        sky = next;
+    }
+    return height;
+}
+
+// Prueba varios anchos y se queda con el que deja el bloque más cuadrado y compacto.
+QSizeF packSquare(QVector<Item> items, QVector<Placement>* out, QVector<int>* order)
+{
+    // Las piezas grandes primero encastran mejor.
+    QVector<int> idx(items.size());
+    for (int i = 0; i < idx.size(); ++i) idx[i] = i;
+    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return items[a].w * items[a].h > items[b].w * items[b].h; });
+    QVector<Item> sorted;
+    for (int i : idx) sorted.append(items[i]);
+    double area = 0, maxW = 0, sumW = 0;
+    for (const Item& it : sorted) { area += it.w * it.h; maxW = qMax(maxW, it.w); sumW += it.w; }
+    double bestScore = 1e18;
+    QSizeF best;
+    QVector<Placement> bestPos;
+    for (int k = 0; k <= 16; ++k) {
+        const double W = maxW + (sumW - maxW) * k / 16.0;
+        QVector<Placement> pos;
+        const double H = skylinePack(sorted, W, &pos);
+        double usedW = 0;
+        for (int i = 0; i < sorted.size(); ++i) usedW = qMax(usedW, pos[i].x + sorted[i].w);
+        const double ratio = qMax(usedW, H) / qMax(1e-9, qMin(usedW, H));
+        const double waste = (usedW * H) / qMax(1e-9, area);
+        const double score = ratio * ratio * waste;
+        if (score < bestScore) { bestScore = score; best = QSizeF(usedW, H); bestPos = pos; }
+    }
+    *out = bestPos;
+    *order = idx;
+    return best;
+}
+} // namespace
+
+GridWidget::Layout GridWidget::layoutPuzzle(const QRectF& area, const QVector<QVector<int>>& groups,
+                                            double maxSide, double minSide) const
+{
+    // Todas las piezas en un solo horizonte, en orden de actividad (y dentro de
+    // cada una, las grandes primero): así cada actividad queda junta y el total
+    // encastra como un rompecabezas lo más cuadrado posible.
+    Layout out;
+    const double gapU = 0.12;
+    QVector<Item> items;
+    for (const auto& g : groups) {
+        QVector<Item> gi;
+        for (int idx : g) {
+            const Pomodoro& pm = m_pomos[idx];
+            const double side = std::sqrt(qMax(60, isGhost(pm) ? pm.plannedSec : pm.representedSec()) / 1500.0);
+            gi.append({side + gapU, side + gapU, idx});
+        }
+        std::stable_sort(gi.begin(), gi.end(), [](const Item& l, const Item& r) { return l.w > r.w; });
+        items += gi;
+    }
+    if (items.isEmpty()) return out;
+    double area2 = 0, maxW = 0, sumW = 0;
+    for (const Item& it : items) { area2 += it.w * it.h; maxW = qMax(maxW, it.w); sumW += it.w; }
+    double bestScore = 1e18;
+    QVector<Placement> bestPos;
+    QSizeF best;
+    for (int k = 0; k <= 24; ++k) {
+        const double W = maxW + (sumW - maxW) * k / 24.0;
+        QVector<Placement> pos;
+        const double H = skylinePack(items, W, &pos);
+        double usedW = 0;
+        for (int i = 0; i < items.size(); ++i) usedW = qMax(usedW, pos[i].x + items[i].w);
+        const double ratio = qMax(usedW, H) / qMax(1e-9, qMin(usedW, H));
+        const double waste = (usedW * H) / qMax(1e-9, area2);
+        const double score = ratio * waste * waste;   // prioriza que no queden huecos, después lo cuadrado
+        if (score < bestScore) { bestScore = score; bestPos = pos; best = QSizeF(usedW, H); }
+    }
+    const double k = qMax(minSide * 0.5, qMin(qMin(area.width() / qMax(0.1, best.width()),
+                                                   area.height() / qMax(0.1, best.height())),
+                                              maxSide * m_baseScale));
+    out.gap = gapU * k;
+    for (int i = 0; i < items.size(); ++i) {
+        const double side = (items[i].w - gapU) * k;
+        out.placed.append({QRectF(area.left() + bestPos[i].x * k, area.top() + bestPos[i].y * k, side, side), items[i].ref});
+    }
+    return out;
+}
+
 void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day, double maxSide, double minSide,
                               double headerH, bool breakLines)
 {
@@ -379,7 +500,9 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         else groups.last() += ghosts;
     }
     // Con recuadros se deja margen para el contorno (si no, queda cortado en el borde).
-    const Layout lay = boxed ? layoutGroups(area.adjusted(5, 5, -5, -5), groups, 0, false, maxSide, minSide, true)
+    const Layout lay = m_sizeMode == SizeMode::Area
+        ? layoutPuzzle(area.adjusted(5, 5, -5, -5), groups, maxSide, minSide)
+        : boxed ? layoutGroups(area.adjusted(5, 5, -5, -5), groups, 0, false, maxSide, minSide, true)
                              : layoutGroups(area, groups, titled ? headerH : 0, breakLines && titled, maxSide, minSide);
 
     p.save();
