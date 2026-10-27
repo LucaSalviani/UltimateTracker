@@ -161,6 +161,11 @@ Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert
 | `8e511c1` | M38 · «Restablecer esta sección» en Ajustes |
 | `44066c8` | M39 · exportar a CSV |
 | `63767c9` | M40 · deshacer en todo |
+| `19db0ed` | M41 · Estadísticas con el rojo suave del cronómetro |
+| `45bd0af` | M42 · proporcional completo rehecho (sin rompecabezas) |
+| `072e3fd` | M43 · proporcional a lo ancho prolijo |
+| `4b330b4` | M44 · hitos en tres plazos (lógica, menú ⋯ › Hitos, Ajustes › Hitos) |
+| `843cd32` | M45 · hitos a la vista (grilla, Estadísticas, resumen del mes) |
 
 ## Modo desarrollador
 

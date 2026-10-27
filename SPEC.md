@@ -69,7 +69,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
   - **Terminado:** negro (como tachar la hoja), con el tiempo que duró.
   - **Último del día:** **rojo**. Para hoy es provisorio: se pinta rojo mientras no haya nada en marcha.
 - Click derecho sobre un cuadradito → **Mover a actividad**, **Nota**, **Corregir duración** (solo terminados) o **Borrar pomodoro**. Uno terminado se borra al toque con **Deshacer** en el aviso; el que está en marcha o en pausa pide confirmación.
-- **Agrupar** (*Ajustes › Apariencia*): sin agrupar; por actividad con títulos (cada una en su renglón); o en línea, cada actividad recuadrada con una línea fina de su color. En proporcional completo siempre va en un bloque tipo tetris con el contorno de cada actividad.
+- **Agrupar** (*Ajustes › Apariencia*): sin agrupar; por actividad con títulos (cada una en su renglón); o en línea, cada actividad recuadrada con una línea fina de su color.
 - **Colores por actividad**: automáticos, elegidos a mano (Actividades → Color) o apagados.
 - Al cambiar de vista los cuadraditos entran en cascada con un rebote; uno nuevo "salta" solo.
 - **Fantasmas de la meta**: los pomodoros que faltan para la meta del día se ven punteados después de los reales (también en semana y mes). Click en uno abre la meta.
@@ -77,7 +77,8 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - **Tamaño**: el botón de la barra cicla entre todos iguales, proporcional solo a lo ancho (alto fijo, largo ∝ minutos) y proporcional completo (área ∝ minutos). En Ajustes se pueden desactivar variantes o fijar una y esconder el botón.
 - **Resaltar** (*Ajustes › Cuadraditos*): por defecto, el que está corriendo se llena con el color del pomodoro (texto negro encima; con la paleta roja, el resaltado es negro); el rojo del último del día queda como opción.
 - **Número**: adentro arriba al centro, afuera arriba (como en los bocetos) u oculto; con "Nº" opcional. Los números de los cuadraditos usan la fuente del cronómetro.
-- **Proporcional completo**: todas las piezas se encastran como un rompecabezas lo más cuadrado posible, cada actividad junta y con su contorno.
+- **Proporcional completo**: lado ∝ √minutos (área ∝ tiempo), en orden y alineados abajo como un gráfico, con el agrupado elegido. El de 25' conserva su tamaño salvo que el más grande no entre.
+- **Proporcional a lo ancho**: solo cambia el largo; el tiempo, el número y la marca tienen el mismo tamaño en todos y no se estiran. Los segmentos: 5 por cada 25'.
 - **Estilo** (*Ajustes › Cuadraditos*, con muestra en vivo):
   - Forma: Clásico, Inclinado (romboide apoyado sobre su base, esquinas suaves), Tarjeta (vertical), Biselado (dos esquinas cortadas suaves). El número va arriba al centro.
   - Marca de hecho: ninguna, diagonal (finita, del color del número, sin tapar el tiempo), cruz delicada, tilde redondo, tilde cuadrado.
@@ -112,14 +113,25 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Por día, semana, mes y año, filtrables por actividad, con los cuatro contadores.
 - **Mapa de calor** anual (una celda por día, más intensa cuanto más se estudió).
 - **Racha**: día estudiado = al menos 1 pomodoro iniciado. 1 o 2 comodines por semana (configurable) que no la rompen.
-- **Colores**: barras y mapa de calor en el acento del tema (monocromo en Gris); cada actividad con su color en las filas, la línea del día y el menú de actividades.
+- **Colores**: barras y mapa de calor en el color del visor del cronómetro (el rojo suave en Gris); cada actividad con su color en las filas, la línea del día y el menú de actividades.
 - **Exportar a CSV** (botón ⤓): lo que estás viendo (período + actividad) o todo el historial. Separador `;`, coma decimal, UTF-8: abre directo en Excel en español.
 - Cambiar de período o actividad hace un fundido corto; los períodos vacíos lo dicen ("Sin horas esta semana").
 
 ## Hitos
-- Aviso al llegar a 1, 2, …, 10 h y luego cada 25 h, en cada actividad.
-- **Horas previas**: en Actividades, click derecho → "Horas previas…" para sumar lo que ya tenías (la hoja de papel). Cuentan en el total y los hitos, no en los días.
-- Los stages hacia las 10.000 h quedan para una versión futura.
+Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, en *Ajustes › Hitos*).
+- **Corto plazo**
+  - *Marca del día*: bronce, plata y oro (2 h, 4 h y 6 h por defecto). Tres puntitos al lado de "estudiado" (vista de todo el día).
+  - *Rachas*: aviso a los 3, 7, 14, 30, 60, 100, 180 y 365 días. *Récords*: mejor día, mejor semana y racha más larga.
+  - *Meta semanal* (20 h por defecto): una línea finita abajo de la grilla que se llena; al cumplirla, aviso.
+  - Festejo: el estilo elegido para "objetivo" (minimalista por defecto).
+- **Mediano plazo**
+  - *Horas por actividad*: 1, 5, 10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1.000 y después cada 500 h.
+  - *Constancia*: 2, 4, 8, 12, 26 y 52 semanas seguidas cumpliendo la meta.
+  - *Resumen del mes*: al abrir la app en un mes nuevo, horas, días, comparación con el anterior, lo más estudiado y el mejor día.
+- **Largo plazo: etapas hacia las 10.000 h**, por actividad y un nivel global con la suma de todo:
+  Novato (0–20 h) · Aprendiz (20–100) · Practicante (100–500) · Competente (500–1.000) · Avanzado (1.000–2.500) · Especialista (2.500–5.000) · Experto (5.000–10.000) · Maestro. Cada etapa con subniveles I, II y III. En Estadísticas, cada actividad muestra su etapa y la barra hasta el próximo subnivel.
+- Los que saltan con el mismo pomodoro salen juntos en un solo aviso; el festejo es el del más importante.
+- **Horas previas**: en Actividades, click derecho → "Horas previas…" para sumar lo que ya tenías. Cuentan en el total, los hitos y las etapas, no en los días.
 
 ## Ventana
 - Visible mientras el usuario quiera; opción "siempre visible"; botón de minimizar.
@@ -150,4 +162,3 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## Fuera de la v1
 - Sincronizar con el celular.
-- Stages hacia las 10.000 h.

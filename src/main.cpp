@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("UltimateTracker"));
     QApplication::setApplicationDisplayName(QStringLiteral("UltimateTracker"));
-    QApplication::setApplicationVersion(QStringLiteral("0.9.0"));
+    QApplication::setApplicationVersion(QStringLiteral("0.10.0"));
     // Vive en la bandeja: cerrar la ventana con algo en marcha no cierra la app.
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
