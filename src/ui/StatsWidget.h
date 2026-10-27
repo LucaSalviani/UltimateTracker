@@ -22,6 +22,7 @@ public:
     void setJokersPerWeek(int n) { m_jokers = n; }
     void refresh();            // recarga datos (carpetas incluidas)
     void resetToToday();
+    void step(int dir);   // M37: ← → desde el teclado (con fundido)
 
 signals:
     void backRequested();

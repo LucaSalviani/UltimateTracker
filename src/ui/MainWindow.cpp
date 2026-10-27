@@ -426,10 +426,44 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     connect(esc, &QShortcut::activated, this, [this] {
         if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
+        else if (m_overlay != Overlay::None) showOverlay(Overlay::None);   // M37
         else if (isFullScreen()) toggleFullScreen();
     });
     auto* mKey = new QShortcut(QKeySequence(Qt::Key_M), this);
     connect(mKey, &QShortcut::activated, this, &MainWindow::toggleMini);
+    // M37: más atajos
+    auto key = [this](const QKeySequence& seq, auto fn) {
+        connect(new QShortcut(seq, this), &QShortcut::activated, this, fn);
+    };
+    key(QKeySequence(Qt::Key_Left), [this] {
+        if (m_overlay == Overlay::Stats) m_stats->step(-1); else if (m_overlay == Overlay::None) navigate(-1);
+    });
+    key(QKeySequence(Qt::Key_Right), [this] {
+        if (m_overlay == Overlay::Stats) m_stats->step(+1); else if (m_overlay == Overlay::None) navigate(+1);
+    });
+    key(QKeySequence(Qt::Key_T), [this] {
+        if (m_overlay == Overlay::Stats) { m_stats->resetToToday(); m_stats->refresh(); }
+        else { showOverlay(Overlay::None); goToday(); }
+    });
+    key(QKeySequence(Qt::Key_N), [this] {
+        // El que corre (o está en pausa) o, si no, el último que terminó hoy.
+        if (const auto cur = m_session->currentPomodoro()) { editNote(cur->id); return; }
+        if (!m_todayPomos.isEmpty()) { editNote(m_todayPomos.last().id); return; }
+        toast(QStringLiteral("Hoy todavía no hay pomodoros para anotar"));
+    });
+    key(QKeySequence(Qt::Key_S), [this] { showOverlay(m_overlay == Overlay::Stats ? Overlay::None : Overlay::Stats); });
+    key(QKeySequence(Qt::Key_A), [this] { showOverlay(m_overlay == Overlay::Activities ? Overlay::None : Overlay::Activities); });
+    key(QKeySequence(QStringLiteral("Ctrl+,")), [this] { openSettings(); });
+    key(QKeySequence(QStringLiteral("?")), [this] { showShortcuts(); });
+    key(QKeySequence(QStringLiteral("Shift+?")), [this] { showShortcuts(); });
+    key(QKeySequence(Qt::Key_F1), [this] { showShortcuts(); });
+    key(QKeySequence::Undo, [this] {
+        // Ctrl+Z = el "Deshacer" del aviso que está a la vista.
+        if (m_toast->isVisible() && m_toastAction && m_toast->text().contains(QStringLiteral(">Deshacer<")))
+            emit m_toast->linkActivated(QStringLiteral("act"));
+        else
+            toast(QStringLiteral("Nada para deshacer"));
+    });
     auto* gKey = new QShortcut(QKeySequence(Qt::Key_G), this);
     connect(gKey, &QShortcut::activated, this, [this] {
         if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel(); else openGoalPanel(m_grid->anchor());
@@ -512,36 +546,8 @@ QWidget* MainWindow::buildTitleBar()
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
     menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
-    menu->addAction(QStringLiteral("Ajustes…"), this, [this] {
-        SettingsDialog dlg(m_db, this);
-        win::applyChrome(&dlg);
-        connect(&dlg, &SettingsDialog::tileSizePreview, this, [this](int pct) { m_grid->setBaseScale(pct / 100.0); });
-        connect(&dlg, &SettingsDialog::soundPreview, m_sounds, &Sounds::preview);
-        connect(&dlg, &SettingsDialog::visorPreview, m_deck, &TimerDeck::setVisorStyle);
-        connect(&dlg, &SettingsDialog::groupPreview, this, [this](int g) { m_grid->setGroupStyle(GridWidget::GroupStyle(g)); });
-        // La vista previa del tema repinta todo mientras el diálogo está abierto.
-        if (dlg.exec() != QDialog::Accepted) return;
-        m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
-        refreshBand();
-        m_jokers = m_db->setting("jokers_per_week", 2).toInt();
-        m_resizable = m_db->setting("resizable", 1).toBool();
-        if (!m_resizable) setEdgeCursor({});
-        m_stats->setJokersPerWeek(m_jokers);
-        m_deck->setAdjustOptions(deckAdjustFrom(m_db));
-    m_deck->setVisorStyle(m_db->setting("visor_style", 0).toInt());
-        applySizePreset();
-        m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
-        applySystemSettings();
-        applySoundSettings();
-        reloadFolders();   // M25: colores por actividad prendidos/apagados
-        applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
-        if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
-        if (!m_session->inProgress()) {
-            m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
-            m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
-            refreshDeck();
-        }
-    });
+    menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, &MainWindow::openSettings);
+    menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);
     menu->addSeparator();
     menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
     connect(menuBtn, &QToolButton::clicked, this, [menuBtn, menu] {
@@ -1261,19 +1267,7 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
     connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
     menu.addMenu(move);
     // M6: nota y duración
-    menu.addAction(p->note.isEmpty() ? QStringLiteral("Agregar nota…") : QStringLiteral("Editar nota…"), this, [this, id] {
-        const auto cur = m_db->pomodoro(id);
-        if (!cur) return;
-        QInputDialog dlg(this);
-        dlg.setWindowTitle(QStringLiteral("Nota del pomodoro"));
-        dlg.setLabelText(QStringLiteral("¿En qué trabajaste?"));
-        dlg.setTextValue(cur->note);
-        dlg.resize(380, dlg.sizeHint().height());
-        win::applyChrome(&dlg);
-        if (dlg.exec() != QDialog::Accepted) return;
-        m_db->setPomodoroNote(id, dlg.textValue());
-        reloadGrid();
-    });
+    menu.addAction(p->note.isEmpty() ? QStringLiteral("Agregar nota…") : QStringLiteral("Editar nota…"), this, [this, id] { editNote(id); });
     if (!running && !parked) {
         menu.addAction(QStringLiteral("Corregir duración…"), this, [this, id] {
             const auto cur = m_db->pomodoro(id);
@@ -2006,4 +2000,103 @@ void MainWindow::quitApp()
     if (m_tray) m_tray->hide();
     m_edgeTab->close();
     qApp->quit();
+}
+
+// M37: Ajustes (desde el menú ⋯ o Ctrl+,)
+void MainWindow::openSettings()
+{
+    SettingsDialog dlg(m_db, this);
+    win::applyChrome(&dlg);
+    connect(&dlg, &SettingsDialog::tileSizePreview, this, [this](int pct) { m_grid->setBaseScale(pct / 100.0); });
+    connect(&dlg, &SettingsDialog::soundPreview, m_sounds, &Sounds::preview);
+    connect(&dlg, &SettingsDialog::visorPreview, m_deck, &TimerDeck::setVisorStyle);
+    connect(&dlg, &SettingsDialog::groupPreview, this, [this](int g) { m_grid->setGroupStyle(GridWidget::GroupStyle(g)); });
+    // La vista previa del tema repinta todo mientras el diálogo está abierto.
+    m_settingsOpen = true;   // el chequeo de "seguir a Windows" no pisa la vista previa
+    const int result = dlg.exec();
+    m_settingsOpen = false;
+    if (result != QDialog::Accepted) return;
+    if (dlg.restartRequested()) {
+        // Se prendió o apagó el modo de pruebas: reinicio por dentro, en cuanto se
+        // cierre el diálogo (antes esta llamada faltaba y había que reabrir a mano).
+        QTimer::singleShot(0, this, &MainWindow::restartInPlace);
+        return;
+    }
+    m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
+    refreshBand();
+    m_jokers = m_db->setting("jokers_per_week", 2).toInt();
+    m_resizable = m_db->setting("resizable", 1).toBool();
+    if (!m_resizable) setEdgeCursor({});
+    m_stats->setJokersPerWeek(m_jokers);
+    m_deck->setAdjustOptions(deckAdjustFrom(m_db));
+    m_deck->setVisorStyle(m_db->setting("visor_style", 0).toInt());
+    applySizePreset();
+    m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
+    applySystemSettings();
+    applySoundSettings();
+    reloadFolders();   // M25: colores por actividad prendidos/apagados
+    applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
+    if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
+    if (!m_session->inProgress()) {
+        m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
+        m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
+        refreshDeck();
+    }
+}
+
+void MainWindow::editNote(qint64 id)
+{
+    const auto cur = m_db->pomodoro(id);
+    if (!cur) return;
+    QInputDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Nota del pomodoro"));
+    dlg.setLabelText(QStringLiteral("¿En qué trabajaste?"));
+    dlg.setTextValue(cur->note);
+    dlg.resize(380, dlg.sizeHint().height());
+    win::applyChrome(&dlg);
+    if (dlg.exec() != QDialog::Accepted) return;
+    m_db->setPomodoroNote(id, dlg.textValue());
+    reloadGrid();
+}
+
+// M37: panel con todos los atajos. Se cierra con cualquier tecla o click.
+void MainWindow::showShortcuts()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Atajos de teclado"));
+    auto* grid = new QGridLayout(&dlg);
+    grid->setContentsMargins(22, 18, 22, 18);
+    grid->setHorizontalSpacing(14);
+    grid->setVerticalSpacing(7);
+    const QList<QPair<QString, QString>> rows = {
+        {QStringLiteral("Espacio"), QStringLiteral("Play / pausa")},
+        {QStringLiteral("← →"), QStringLiteral("Día (o período) anterior / siguiente")},
+        {QStringLiteral("T"), QStringLiteral("Volver a hoy")},
+        {QStringLiteral("Ctrl + −  /  Ctrl + +"), QStringLiteral("Día · semana · mes")},
+        {QStringLiteral("G"), QStringLiteral("Objetivo del día")},
+        {QStringLiteral("N"), QStringLiteral("Nota del último pomodoro")},
+        {QStringLiteral("S"), QStringLiteral("Estadísticas")},
+        {QStringLiteral("A"), QStringLiteral("Actividades")},
+        {QStringLiteral("M"), QStringLiteral("Mini reproductor")},
+        {QStringLiteral("F11"), QStringLiteral("Pantalla completa")},
+        {QStringLiteral("Esc"), QStringLiteral("Volver / cerrar")},
+        {QStringLiteral("Ctrl + ,"), QStringLiteral("Ajustes")},
+        {QStringLiteral("Ctrl + Z"), QStringLiteral("Deshacer lo último")},
+        {QStringLiteral("?"), QStringLiteral("Este panel")},
+    };
+    int r = 0;
+    for (const auto& [keys, what] : rows) {
+        auto* k = new QLabel(keys, &dlg);
+        k->setProperty("keycap", true);
+        k->setAlignment(Qt::AlignCenter);
+        k->setStyleSheet(QStringLiteral("QLabel { background: %1; border: 1px solid %2; border-radius: 5px; padding: 2px 8px; color: %3; font-weight: 600; }")
+                             .arg(theme::surfaceHi.name(), theme::line.name(), theme::text.name()));
+        auto* w = new QLabel(what, &dlg);
+        w->setStyleSheet(QStringLiteral("color: %1;").arg(theme::textDim.name()));
+        grid->addWidget(k, r, 0, Qt::AlignRight);
+        grid->addWidget(w, r, 1);
+        ++r;
+    }
+    win::applyChrome(&dlg);
+    dlg.exec();
 }

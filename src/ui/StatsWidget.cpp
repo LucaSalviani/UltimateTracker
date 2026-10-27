@@ -506,6 +506,12 @@ void StatsWidget::shift(int dir)
     refresh();
 }
 
+void StatsWidget::step(int dir)
+{
+    fade::cross(m_canvas, 150);
+    shift(dir);
+}
+
 void StatsWidget::rebuildFolderCombo()
 {
     const qint64 current = m_folder->currentData().toLongLong();
