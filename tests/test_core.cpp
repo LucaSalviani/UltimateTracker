@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QSignalSpy>
 #include <QtTest>
+#include <QTemporaryDir>
 
 class CoreTest : public QObject {
     Q_OBJECT
@@ -499,6 +500,20 @@ private slots:
         QCOMPARE(specOn(nextMon.addDays(1)), QString("t:180"));
         QCOMPARE(specOn(nextMon.addDays(2)), QString("-"));
         QCOMPARE(specOn(mon.addDays(4)), QString("t:240"));
+    }
+
+    // M9: copia de seguridad consistente
+    void backupCopiesData()
+    {
+        QTemporaryDir tmp;
+        Database db;
+        QVERIFY(db.open(tmp.filePath("a.db")));
+        Pomodoro p; p.day = QDate(2026, 10, 26); p.plannedSec = 1500; p.studiedSec = 1500; p.status = PomoStatus::Completed;
+        db.insertPomodoro(p);
+        QVERIFY(db.backupTo(tmp.filePath("copy.db")));
+        Database copy;
+        QVERIFY(copy.open(tmp.filePath("copy.db")));
+        QCOMPARE(copy.pomodorosBetween(p.day, p.day).size(), 1);
     }
 };
 

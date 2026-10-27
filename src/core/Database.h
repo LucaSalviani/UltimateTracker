@@ -68,6 +68,9 @@ public:
     // true si el hito es nuevo (y queda registrado).
     bool markMilestone(qint64 folderId, int hours);
 
+    // ---- Copia de seguridad (M9): copia consistente aunque haya WAL -----
+    bool backupTo(const QString& path);
+
     // ---- Ajustes --------------------------------------------------------
     QVariant setting(const QString& key, const QVariant& def = {}) const;
     void     setSetting(const QString& key, const QVariant& value);

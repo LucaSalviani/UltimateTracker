@@ -39,6 +39,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/LiveStats.h         src/ui/LiveStats.cpp
     src/ui/GoalPanel.h         src/ui/GoalPanel.cpp
     src/ui/Celebration.h       src/ui/Celebration.cpp
+    src/ui/SystemIntegration.h src/ui/SystemIntegration.cpp
     src/ui/SettingsDialog.h    src/ui/SettingsDialog.cpp
     src/ui/StatsWidget.h       src/ui/StatsWidget.cpp
     src/ui/MainWindow.h        src/ui/MainWindow.cpp
@@ -55,7 +56,7 @@ qt_add_resources(UltimateTracker "assets"
 target_link_libraries(UltimateTracker PRIVATE constancia_core Qt6::Widgets Qt6::Multimedia Qt6::Network)
 if(WIN32)
     # Esquinas redondeadas, sombra y modo oscuro de Windows 11 (DWM).
-    target_link_libraries(UltimateTracker PRIVATE dwmapi)
+    target_link_libraries(UltimateTracker PRIVATE dwmapi shell32 user32)
     # Ícono del .exe (el mismo de la barra de tareas).
     # Con MinGW se enlaza un objeto ya compilado: windres falla con rutas que
     # tienen espacios. Para regenerarlo, ver el comentario en resources/app.rc.

@@ -100,6 +100,9 @@ private:
     // ---- festejos (M8): si en el mismo momento pasan varias cosas, gana la más importante
     void celebrate(int kind, const QString& kicker, const QString& title, const QString& subtitle);
 
+    void applySystemSettings();   // M9: atajo global, inicio con Windows
+    void runDailyBackup();
+
     void toast(const QString& text);
     void toastAction(const QString& text, const QString& action, std::function<void()> fn);
     void quitApp();
@@ -136,6 +139,7 @@ private:
     qint64       m_noteTarget = 0;
     class GoalPanel* m_goalPanel = nullptr;
     class Celebration* m_celebration = nullptr;
+    class GlobalHotkey* m_hotkey = nullptr;   // M9
     struct PendingCelebration { int kind = -1; QString kicker, title, subtitle; } m_pendingCelebration;
     QWidget*     m_titleBar = nullptr;
     QPointer<QPropertyAnimation> m_goalAnim;        // pomodoro al que va la nota del reproductor

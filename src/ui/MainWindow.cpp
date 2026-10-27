@@ -6,6 +6,7 @@
 #include "ui/FolderMenu.h"
 #include "ui/GoalPanel.h"
 #include "ui/Celebration.h"
+#include "ui/SystemIntegration.h"
 #include "core/Goals.h"
 #include "ui/LiveStats.h"
 #include "ui/TimerDeck.h"
@@ -366,6 +367,20 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(midnight, &QTimer::timeout, this, &MainWindow::checkDayRollover);
     midnight->start();
 
+    // ---- M9: atajo global, inicio con Windows y copia de seguridad diaria
+    m_hotkey = new GlobalHotkey(this);
+    connect(m_hotkey, &GlobalHotkey::activated, this, [this] {
+        togglePlay();
+        const auto st = m_session->state();
+        const QString msg = st == SessionController::State::Running ? QStringLiteral("▶ Pomodoro en marcha")
+                          : st == SessionController::State::Paused  ? QStringLiteral("⏸ En pausa")
+                                                                    : QString();
+        if (!msg.isEmpty() && m_tray && !isActiveWindow())
+            m_tray->showMessage(QStringLiteral("UltimateTracker"), msg, QSystemTrayIcon::NoIcon, 1500);
+    });
+    applySystemSettings();
+    QTimer::singleShot(8000, this, &MainWindow::runDailyBackup);
+
     // ---- Pantalla completa: F11 alterna, Esc sale
     auto* f11 = new QShortcut(QKeySequence(Qt::Key_F11), this);
     connect(f11, &QShortcut::activated, this, &MainWindow::toggleFullScreen);
@@ -460,6 +475,7 @@ QWidget* MainWindow::buildTitleBar()
         m_deck->setAdjustOptions(deckAdjustFrom(m_db));
         applySizePreset();
         m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
+        applySystemSettings();
         if (!m_session->inProgress()) {
             m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
             m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -1250,6 +1266,7 @@ void MainWindow::checkDayRollover()
     if (m_sessionDay < now && !m_session->inProgress()) {
         m_session->closeDay(true);
         m_sessionDay = now;
+        runDailyBackup();
         rebuildFolderMenu();
     }
     if (now != m_today) {
@@ -1442,6 +1459,17 @@ void MainWindow::undock()
 
 void MainWindow::bringToFront()
 {
+    // M9: si estás en pantalla completa (juego, presentación, video), no se
+    // mete adelante: avisa en la bandeja y titila en la barra de tareas.
+    if (m_db->setting("quiet_fullscreen", 1).toBool() && sysint::userBusy() && !isActiveWindow()) {
+        if (m_tray) m_tray->showMessage(QStringLiteral("UltimateTracker"),
+                                        m_session->state() == SessionController::State::BreakOver
+                                            ? QStringLiteral("Terminó el recreo")
+                                            : QStringLiteral("Terminó el pomodoro"),
+                                        QSystemTrayIcon::Information, 4000);
+        QApplication::alert(this);
+        return;
+    }
     if (m_docked) {
         undock();
         return;
@@ -1450,6 +1478,24 @@ void MainWindow::bringToFront()
     show();
     win::forceForeground(this, m_btnPin->isChecked());
     QApplication::alert(this);
+}
+
+void MainWindow::applySystemSettings()
+{
+    sysint::setAutostart(m_db->setting("autostart", 0).toBool());
+    const bool wantHotkey = m_db->setting("hotkey", 1).toBool();
+    const bool ok = m_hotkey->setEnabled(wantHotkey);
+#ifdef Q_OS_WIN
+    if (!ok && wantHotkey) toast(QStringLiteral("Otra app ya usa Ctrl + Alt + P: el atajo global no está activo"));
+#else
+    Q_UNUSED(ok);
+#endif
+}
+
+void MainWindow::runDailyBackup()
+{
+    if (!m_db->setting("backup", 1).toBool()) return;
+    sysint::dailyBackup(*m_db, qApp->property("dataDir").toString(), m_db->setting("backup_dir").toString());
 }
 
 void MainWindow::togglePin(bool on)

@@ -518,6 +518,15 @@ void Database::deleteGoal(qint64 id)
     q.exec();
 }
 
+bool Database::backupTo(const QString& path)
+{
+    QSqlQuery q(m_db);
+    q.prepare("VACUUM INTO ?");
+    q.addBindValue(path);
+    if (!q.exec()) { m_error = q.lastError().text(); return false; }
+    return true;
+}
+
 bool Database::markMilestone(qint64 folderId, int hours)
 {
     QSqlQuery q(m_db);

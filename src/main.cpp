@@ -62,6 +62,7 @@ int main(int argc, char* argv[])
     QDir().mkpath(dataDir);
     const QString dbPath = QDir(dataDir).filePath(QStringLiteral("ultimatetracker.db"));
     migrateOldData(dataDir, dbPath);
+    app.setProperty("dataDir", dataDir);   // para las copias de seguridad (M9)
 
     Database db;
     if (!db.open(dbPath)) {
