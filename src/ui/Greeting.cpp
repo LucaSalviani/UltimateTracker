@@ -97,7 +97,7 @@ Greeting::Greeting(Database* db, const QRect& appGeometry)
         m_db->setSetting("summary/last_shown", last.toString(Qt::ISODate));
     }
     if (const auto g = goals::resolve(m_db->goals(), today); g && !g->spec.isEmpty())
-        facts << QStringLiteral("Meta de hoy: %1").arg(goals::describe(g->spec));
+        facts << QStringLiteral("Objetivo de hoy: %1").arg(goals::describe(g->spec));
 
     // ---- Contenido
     m_content = new QWidget(this);

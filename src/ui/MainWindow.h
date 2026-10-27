@@ -97,6 +97,7 @@ private:
     void closeGoalPanel();
     void placeGoalPanel(bool open, bool animate);
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel
+    void updateObjectiveBand();
     void checkGoalReached();
     void showDayMenu(const QDate& day, const QPoint& globalPos);
 
@@ -150,7 +151,7 @@ private:
     // Banda de fecha
     QWidget*     m_band = nullptr;
     QLabel*      m_dateLabel = nullptr;
-    QLineEdit*   m_titleEdit = nullptr;
+    QPushButton* m_objectiveBtn = nullptr;   // M14
     QPushButton* m_btnToday = nullptr;
 
     GridWidget* m_grid = nullptr;

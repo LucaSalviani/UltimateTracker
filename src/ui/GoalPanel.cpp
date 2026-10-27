@@ -36,7 +36,7 @@ GoalPanel::GoalPanel(QWidget* parent)
     setAttribute(Qt::WA_StyledBackground);
 
     // ---- Cabecera
-    auto* title = new QLabel(QStringLiteral("Meta del día"), this);
+    auto* title = new QLabel(QStringLiteral("Objetivo del día"), this);
     title->setProperty("heading", true);
     m_date = new QLabel(this);
     m_date->setProperty("dim", true);
@@ -57,7 +57,7 @@ GoalPanel::GoalPanel(QWidget* parent)
     // ---- Tarea del día (el mismo texto que la banda de arriba)
     m_dayTitle = new QLineEdit(this);
     m_dayTitle->setObjectName("GoalField");
-    m_dayTitle->setPlaceholderText(QStringLiteral("¿Qué querés lograr hoy? (opcional)"));
+    m_dayTitle->setPlaceholderText(QStringLiteral("¿Qué querés lograr hoy?"));
     connect(m_dayTitle, &QLineEdit::editingFinished, this, [this] {
         emit dayTitleEdited(m_day, m_dayTitle->text().trimmed());
     });
@@ -157,7 +157,7 @@ GoalPanel::GoalPanel(QWidget* parent)
     m_status->setObjectName("GoalStatus");
     m_status->setWordWrap(true);
 
-    m_save = new QPushButton(QStringLiteral("Guardar meta"), this);
+    m_save = new QPushButton(QStringLiteral("Guardar objetivo"), this);
     m_save->setObjectName("GoalSave");
     m_save->setCursor(Qt::PointingHandCursor);
     connect(m_save, &QPushButton::clicked, this, [this] {
@@ -183,7 +183,7 @@ GoalPanel::GoalPanel(QWidget* parent)
     buttons->addStretch();
     buttons->addWidget(m_save);
 
-    auto* hint = new QLabel(QStringLiteral("Tip: desde la semana o el mes, click derecho en un día para planear su meta."), this);
+    auto* hint = new QLabel(QStringLiteral("Tip: desde la semana o el mes, click derecho en un día para planear su objetivo."), this);
     hint->setProperty("dim", true);
     hint->setWordWrap(true);
 
@@ -259,7 +259,7 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
     m_daysRow->setVisible(repeatIdx == 3);
 
     m_remove->setVisible(has);
-    m_save->setText(has ? QStringLiteral("Guardar cambios") : QStringLiteral("Guardar meta"));
+    m_save->setText(has ? QStringLiteral("Guardar cambios") : QStringLiteral("Guardar objetivo"));
     m_offDay = rule && rule->weekdays == 0 && rule->spec.isEmpty();
     refreshPreview();
 }
@@ -308,7 +308,7 @@ void GoalPanel::refreshPreview()
     if (!p.ok) {
         m_preview->setBlocks({}, 0);
         m_summary->setText(QString());
-        m_status->setText(m_offDay ? QStringLiteral("Este día está marcado sin meta.") : QString());
+        m_status->setText(m_offDay ? QStringLiteral("Este día está marcado sin objetivo.") : QString());
         return;
     }
     m_preview->setBlocks(p.blocks, m_progress.done);
@@ -319,7 +319,7 @@ void GoalPanel::refreshPreview()
     const qint64 target = qint64(p.totalMin) * 60;
     const int pct = target > 0 ? int(qMin<qint64>(100, m_progress.studiedSec * 100 / target)) : 0;
     if (m_progress.studiedSec >= target && target > 0)
-        m_status->setText(QStringLiteral("✓ Meta cumplida · %1").arg(fmt::duration(int(m_progress.studiedSec))));
+        m_status->setText(QStringLiteral("✓ Objetivo cumplido · %1").arg(fmt::duration(int(m_progress.studiedSec))));
     else
         m_status->setText(QStringLiteral("%1 de %2 · %3 %")
                               .arg(fmt::duration(int(m_progress.studiedSec)), fmt::duration(int(target)))

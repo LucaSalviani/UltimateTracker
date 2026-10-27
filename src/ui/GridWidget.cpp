@@ -513,7 +513,7 @@ void GridWidget::paintHeader(QPainter& p, const Header& h) const
         p.drawEllipse(QRectF(x, r.center().y() - d / 2 + 1, d, d));
         x += d + 5;
     }
-    QString name = ghost ? QStringLiteral("Meta · faltan %1").arg(h.ghosts)
+    QString name = ghost ? QStringLiteral("Objetivo · faltan %1").arg(h.ghosts)
                          : m_names.value(h.folderId, m_paths.value(h.folderId, QStringLiteral("Sin actividad")));
     const QString dur = ghost ? QString() : fmt::duration(int(h.seconds));
     QFontMetricsF fm(f);
@@ -702,7 +702,7 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         const Pomodoro& pm = m_pomos[pl.index];
         if (isGhost(pm)) {
             QToolTip::showText(e->globalPosition().toPoint(),
-                               QStringLiteral("Meta: falta un pomodoro de %1\nClick para ver la meta del día")
+                               QStringLiteral("Objetivo: falta un pomodoro de %1\nClick para ver el objetivo del día")
                                    .arg(fmt::duration(pm.plannedSec)), this);
             setCursor(Qt::PointingHandCursor);
             return;

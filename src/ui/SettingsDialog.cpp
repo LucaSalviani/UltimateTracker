@@ -204,7 +204,7 @@ QWidget* SettingsDialog::pageAppearance()
 
     m_groupByActivity = new QCheckBox(QStringLiteral("Agrupar los cuadraditos por actividad"), w);
     m_groupByActivity->setChecked(m_db->setting("group_by_activity", 1).toBool());
-    m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir la meta o llegar a un hito"), w);
+    m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir el objetivo o llegar a un hito"), w);
     m_celebrations->setChecked(m_db->setting("celebrations", 1).toBool());
 
     auto* form = new QFormLayout;

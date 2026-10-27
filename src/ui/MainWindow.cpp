@@ -452,7 +452,7 @@ QWidget* MainWindow::buildTitleBar()
     connect(m_btnZoomIn, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMax(0, int(m_grid->zoom()) - 1))); });
     connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMin(2, int(m_grid->zoom()) + 1))); });
 
-    auto* goalBtn = iconButton(bar, icons::Id::Goal, QStringLiteral("Meta del día (G)"));
+    auto* goalBtn = iconButton(bar, icons::Id::Goal, QStringLiteral("Objetivo del día (G)"));
     connect(goalBtn, &QToolButton::clicked, this, [this] {
         if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
         else openGoalPanel(m_grid->zoom() == GridWidget::Zoom::Day ? m_grid->anchor() : m_today);
@@ -552,13 +552,17 @@ QWidget* MainWindow::buildDateBand()
     m_dateLabel = new QLabel(m_band);
     m_dateLabel->setProperty("role", "date");
 
-    m_titleEdit = new QLineEdit(m_band);
-    m_titleEdit->setPlaceholderText(QStringLiteral("Tarea del día (opcional)"));
-    m_titleEdit->setProperty("role", "dayTitle");
-    m_titleEdit->setFocusPolicy(Qt::ClickFocus);
-    connect(m_titleEdit, &QLineEdit::editingFinished, this, [this] {
-        m_db->setDayTitle(m_grid->anchor(), m_titleEdit->text());
-        m_titleEdit->clearFocus();
+    // M14: a la izquierda, el objetivo del día (o "Trabajo de hoy"). Click → panel del objetivo.
+    m_objectiveBtn = new QPushButton(m_band);
+    m_objectiveBtn->setObjectName("BandObjective");
+    m_objectiveBtn->setIcon(icons::get(icons::Id::Goal, icons::Ink::Dim));
+    m_objectiveBtn->setIconSize(QSize(15, 15));
+    m_objectiveBtn->setCursor(Qt::PointingHandCursor);
+    m_objectiveBtn->setFocusPolicy(Qt::NoFocus);
+    m_objectiveBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_objectiveBtn->setToolTip(QStringLiteral("Objetivo del día (G)"));
+    connect(m_objectiveBtn, &QPushButton::clicked, this, [this] {
+        if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel(); else openGoalPanel(m_grid->anchor());
     });
 
     m_btnToday = textButton(m_band, QStringLiteral("Hoy"), "chip");
@@ -568,7 +572,7 @@ QWidget* MainWindow::buildDateBand()
     auto* lay = new QHBoxLayout(m_band);
     lay->setContentsMargins(6, 0, 4, 0);
     lay->setSpacing(4);
-    lay->addWidget(m_titleEdit, 1);
+    lay->addWidget(m_objectiveBtn, 1);
     lay->addStretch(0);
     lay->addWidget(m_btnToday);
     lay->addSpacing(4);
@@ -931,11 +935,8 @@ void MainWindow::refreshBand()
         break;
     }
     const bool day = m_grid->zoom() == GridWidget::Zoom::Day;
-    m_titleEdit->setVisible(day);
-    if (day) {
-        QSignalBlocker b(m_titleEdit);
-        m_titleEdit->setText(m_db->dayTitle(a));
-    }
+    m_objectiveBtn->setVisible(day);
+    updateObjectiveBand();
     m_btnToday->setVisible(!showingToday);
 }
 
@@ -1119,7 +1120,7 @@ void MainWindow::onStateChanged(SessionController::State s)
 
 void MainWindow::togglePlay()
 {
-    if (m_titleEdit->hasFocus() || m_overlay != Overlay::None) return;
+    if (m_overlay != Overlay::None) return;
     using S = SessionController::State;
     switch (m_session->state()) {
     case S::Idle:
@@ -1547,7 +1548,7 @@ void MainWindow::openGoalPanel(const QDate& day)
             if (d == m_today) m_db->setSetting("goal_done/" + fmt::dayKey(d), QString());
             reloadGrid();
             openGoalPanel(d);   // recarga el panel con lo guardado
-            toast(weekdays ? QStringLiteral("Meta guardada (se repite)") : QStringLiteral("Meta guardada"));
+            toast(weekdays ? QStringLiteral("Objetivo guardado (se repite)") : QStringLiteral("Objetivo guardado"));
         });
         connect(m_goalPanel, &GoalPanel::removeDayRequested, this, [this](const QDate& d) {
             goals::removeDay(*m_db, d);
@@ -1631,6 +1632,37 @@ void MainWindow::refreshGoals()
         }
         m_goalPanel->setProgress({n, sec});
     }
+    updateObjectiveBand();
+}
+
+// "Objetivo: Parcial de SO · 2/6" / "Objetivo: 4h · 1h10 de 4h" / "Trabajo de hoy"
+void MainWindow::updateObjectiveBand()
+{
+    if (!m_objectiveBtn || !m_grid) return;
+    const QDate d = m_grid->anchor();
+    const auto r = goals::resolve(m_db->goals(), d);
+    const auto parsed = r ? goals::parse(r->spec, m_db->setting("work_min", 25).toInt()) : goals::Parsed{};
+    const QString title = m_db->dayTitle(d);
+    QString text;
+    if (parsed.ok) {
+        int n = 0;
+        qint64 sec = 0;
+        for (const Pomodoro& p : m_db->pomodorosBetween(d, d)) { ++n; sec += p.studiedSec; }
+        const QString what = title.isEmpty() ? goals::describe(r->spec) : title;
+        const bool done = sec >= qint64(parsed.totalMin) * 60;
+        text = QStringLiteral("Objetivo: %1  ·  %2").arg(what,
+                   done ? QStringLiteral("✓ cumplido")
+                        : QStringLiteral("%1/%2").arg(qMin(n, int(parsed.blocks.size()))).arg(parsed.blocks.size()));
+    } else if (!title.isEmpty()) {
+        text = QStringLiteral("Objetivo: %1").arg(title);
+    } else {
+        text = d == m_today ? QStringLiteral("Trabajo de hoy") : QStringLiteral("Trabajo del día");
+    }
+    m_objectiveBtn->setProperty("empty", !parsed.ok && title.isEmpty());
+    m_objectiveBtn->style()->unpolish(m_objectiveBtn);
+    m_objectiveBtn->style()->polish(m_objectiveBtn);
+    m_objectiveBtn->setText(QFontMetrics(m_objectiveBtn->font()).elidedText(text, Qt::ElideRight,
+                                                                               qMax(80, m_objectiveBtn->width() - 30)));
 }
 
 // Festejo una sola vez por día, cuando lo estudiado llega a la meta.
@@ -1647,8 +1679,8 @@ void MainWindow::checkGoalReached()
         if (p.status != PomoStatus::Running && p.status != PomoStatus::Parked) sec += p.studiedSec;
     if (sec < qint64(parsed.totalMin) * 60) return;
     m_db->setSetting(key, QDateTime::currentDateTime().toString(Qt::ISODate));
-    toast(QStringLiteral("🎯 ¡Meta del día cumplida! %1").arg(fmt::duration(int(sec))));
-    celebrate(int(Celebration::Kind::Goal), QStringLiteral("Meta del día"), QStringLiteral("¡Cumplida!"),
+    toast(QStringLiteral("🎯 ¡Objetivo del día cumplido! %1").arg(fmt::duration(int(sec))));
+    celebrate(int(Celebration::Kind::Goal), QStringLiteral("Objetivo del día"), QStringLiteral("¡Cumplido!"),
               QStringLiteral("%1 estudiadas hoy").arg(fmt::duration(int(sec))));
 }
 
@@ -1658,7 +1690,7 @@ void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)
     const auto r = goals::resolve(m_db->goals(), day);
     const bool has = r && !r->spec.isEmpty();
     menu.addAction(icons::get(icons::Id::Goal),
-                   has ? QStringLiteral("Meta: %1…").arg(goals::describe(r->spec)) : QStringLiteral("Poner meta…"),
+                   has ? QStringLiteral("Objetivo: %1…").arg(goals::describe(r->spec)) : QStringLiteral("Poner objetivo…"),
                    this, [this, day] { openGoalPanel(day); });
     if (m_grid->zoom() != GridWidget::Zoom::Day)
         menu.addAction(QStringLiteral("Ver día"), this, [this, day] {
