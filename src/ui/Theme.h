@@ -38,6 +38,9 @@ void migrateSetting(QString* color, QString* mode, const QString& oldKey);
 const Palette& current();
 // Aplica el tema: recalcula los colores, la paleta de Qt y la hoja de estilos.
 void apply(const QString& key);
+// M22: acentos fuertes (se aplica en el próximo apply).
+void setStrongAccents(bool on);
+bool strongAccents();
 
 QColor mix(const QColor& a, const QColor& b, qreal t);
 

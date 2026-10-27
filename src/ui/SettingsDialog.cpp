@@ -91,6 +91,7 @@ void SettingsDialog::loadTileStyle(Database* db)
 
 QString SettingsDialog::themeKey(Database* db)
 {
+    theme::setStrongAccents(db->setting("accent_strong", 0).toBool());   // M22
     QString c, m;
     currentTheme(db, &c, &m);
     return theme::keyFor(c, m);
@@ -247,6 +248,13 @@ QWidget* SettingsDialog::pageAppearance()
         modeRow->addWidget(b);
     }
     modeRow->addStretch();
+    m_strong = new QCheckBox(QStringLiteral("Acentos fuertes (colores más potentes)"), w);
+    m_strong->setChecked(m_db->setting("accent_strong", 0).toBool());
+    m_originalStrong = m_strong->isChecked();
+    connect(m_strong, &QCheckBox::toggled, this, [this](bool on) {
+        theme::setStrongAccents(on);
+        theme::apply(theme::keyFor(m_themeColor, m_themeMode));
+    });
     auto refreshSwatches = [this] {
         for (QAbstractButton* b : m_themes->buttons()) {
             const QString key = theme::keyFor(b->property("color").toString(), m_themeMode);
@@ -307,6 +315,7 @@ QWidget* SettingsDialog::pageAppearance()
     lay->addWidget(note(QStringLiteral("Tema de colores"), w));
     lay->addLayout(modeRow);
     lay->addLayout(grid);
+    lay->addWidget(m_strong);
     lay->addSpacing(8);
     lay->addLayout(form);
     lay->addWidget(note(QStringLiteral("El botón de tamaño de la barra cicla entre:"), w));
@@ -431,6 +440,7 @@ void SettingsDialog::accept()
     m_db->setSetting("timer_step_small", m_stepSmall->value());
     m_db->setSetting("timer_step_big", m_stepBig->value());
 
+    m_db->setSetting("accent_strong", m_strong->isChecked() ? 1 : 0);
     m_db->setSetting("theme_color", m_themeColor);
     m_db->setSetting("theme_mode", m_themeMode);
     m_db->setSetting("window_size", m_size->currentData().toString());
@@ -471,6 +481,7 @@ void SettingsDialog::accept()
 
 void SettingsDialog::reject()
 {
+    theme::setStrongAccents(m_originalStrong);
     theme::apply(m_originalTheme);   // deshace la vista previa
     tiles::style() = m_originalTiles;
     QDialog::reject();

@@ -62,6 +62,8 @@ private:
     QButtonGroup* m_themes;
     QButtonGroup* m_modes;
     QString       m_themeColor, m_themeMode;
+    QCheckBox*    m_strong;             // M22
+    bool          m_originalStrong = false;
     QComboBox*    m_size;
     QCheckBox*    m_resizable;
     QCheckBox*    m_groupByActivity;   // M8

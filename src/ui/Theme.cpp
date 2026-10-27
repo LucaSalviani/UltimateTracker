@@ -99,10 +99,34 @@ const Palette& current()
     return palettes().first();
 }
 
+namespace {
+bool g_strong = false;
+// M22: acentos fuertes (más saturados y potentes) para cada color, oscuro y claro.
+QColor strongAccent(const QString& key)
+{
+    static const QHash<QString, QColor> map = {
+        {"dark", {0xff, 0x2b, 0x1c}},  {"light", {0xec, 0x1c, 0x12}},
+        {"ultra", {0xff, 0x1f, 0x1f}}, {"ultra-light", {0xff, 0x1a, 0x12}},
+        {"pink", {0xff, 0x2d, 0x87}},  {"pink-light", {0xf0, 0x12, 0x7a}},
+        {"red", {0xff, 0x1a, 0x1a}},   {"red-light", {0xe6, 0x17, 0x0f}},
+        {"blue", {0x1a, 0x6d, 0xff}},  {"blue-light", {0x00, 0x57, 0xff}},
+        {"gold", {0xff, 0xae, 0x00}},  {"gold-light", {0xe5, 0x9a, 0x00}},
+    };
+    return map.value(key);
+}
+} // namespace
+
+void setStrongAccents(bool on) { g_strong = on; }
+bool strongAccents() { return g_strong; }
+
 void apply(const QString& key)
 {
     g_current = key;
-    const Palette& P = current();
+    Palette P = current();
+    if (g_strong && strongAccent(key).isValid()) {
+        P.accent = P.squareFinal = strongAccent(key);
+        P.breakAccent = P.light ? QColor(0x00, 0xa8, 0x80) : QColor(0x00, 0xd4, 0xa0);
+    }
     const QColor B = P.bg, I = P.ink;
     auto m = [&](qreal t) { return mix(B, I, t); };
 
