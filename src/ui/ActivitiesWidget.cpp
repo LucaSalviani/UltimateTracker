@@ -10,6 +10,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QInputDialog>
+#include <QPainter>
+#include <QColorDialog>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -113,11 +115,23 @@ void ActivitiesWidget::refresh(qint64 selectId)
     const FolderTree tree(m_db->folders());
     const auto totals = tree.rollUp(m_db->studyByFolder());
     const auto prior = m_db->priorByFolder();
+    const auto colors = colorsFor(m_db, tree);
 
     std::function<void(QTreeWidgetItem*, qint64)> add = [&](QTreeWidgetItem* parentItem, qint64 parentId) {
         for (qint64 id : tree.children(parentId)) {
             auto* item = parentItem ? new QTreeWidgetItem(parentItem) : new QTreeWidgetItem(m_tree);
             item->setText(0, tree.find(id)->name);
+            if (colors.contains(id)) {   // puntito del color de la actividad
+                QPixmap dot(12, 12);
+                dot.fill(Qt::transparent);
+                QPainter g(&dot);
+                g.setRenderHint(QPainter::Antialiasing);
+                g.setPen(Qt::NoPen);
+                g.setBrush(colors.value(id));
+                g.drawEllipse(QRectF(2, 2, 8, 8));
+                g.end();
+                item->setIcon(0, QIcon(dot));
+            }
             item->setText(1, fmt::hours(totals.value(id)));
             item->setForeground(1, theme::textDim);
             item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
@@ -233,6 +247,73 @@ void ActivitiesWidget::editPriorHours(QTreeWidgetItem* item)
     emit activitiesChanged();
 }
 
+// ---------------------------------------------------------------------------
+// M25: colores de las actividades
+// ---------------------------------------------------------------------------
+const QVector<QColor>& ActivitiesWidget::autoColors()
+{
+    static const QVector<QColor> c = {
+        {0x6f, 0x9b, 0xd1}, {0xd1, 0x8f, 0x6f}, {0x8f, 0xc2, 0x8a}, {0xc7, 0x9b, 0xd6},
+        {0xd6, 0xc0, 0x6f}, {0x6f, 0xc2, 0xbd}, {0xd1, 0x6f, 0x8f}, {0xa8, 0xa8, 0xa8}};
+    return c;
+}
+
+QHash<qint64, QColor> ActivitiesWidget::colorsFor(Database* db, const FolderTree& tree)
+{
+    QHash<qint64, QColor> out;
+    if (!db->setting("activity_colors", 1).toBool()) return out;   // apagados en Ajustes
+    const auto chosen = db->folderColors();
+    int i = 0;
+    for (const Folder& f : tree.all()) {
+        const QColor c(chosen.value(f.id));
+        out.insert(f.id, c.isValid() ? c : autoColors()[i % autoColors().size()]);
+        ++i;
+    }
+    return out;
+}
+
+void ActivitiesWidget::fillColorMenu(QMenu* menu, qint64 id)
+{
+    auto swatch = [](const QColor& c) {
+        QPixmap pm(14, 14);
+        pm.fill(Qt::transparent);
+        QPainter g(&pm);
+        g.setRenderHint(QPainter::Antialiasing);
+        g.setPen(Qt::NoPen);
+        g.setBrush(c);
+        g.drawEllipse(QRectF(1, 1, 12, 12));
+        return QIcon(pm);
+    };
+    const QString cur = m_db->folderColors().value(id);
+    QAction* autoAct = menu->addAction(QStringLiteral("Automático"), this, [this, id] {
+        m_db->setFolderColor(id, QString());
+        refresh(id);
+        emit activitiesChanged();
+    });
+    autoAct->setCheckable(true);
+    autoAct->setChecked(cur.isEmpty());
+    menu->addSeparator();
+    const QVector<QColor> more = {{0xe0, 0x48, 0x3f}, {0xff, 0x8a, 0x00}, {0x2f, 0x6f, 0xe8}, {0x22, 0xa0, 0x6b}};
+    for (const QColor& c : autoColors() + more) {
+        QAction* a = menu->addAction(swatch(c), c.name(), this, [this, id, c] {
+            m_db->setFolderColor(id, c.name());
+            refresh(id);
+            emit activitiesChanged();
+        });
+        a->setCheckable(true);
+        a->setChecked(cur.compare(c.name(), Qt::CaseInsensitive) == 0);
+    }
+    menu->addSeparator();
+    menu->addAction(QStringLiteral("Elegir otro…"), this, [this, id, cur] {
+        const QColor c = QColorDialog::getColor(QColor(cur.isEmpty() ? "#6f9bd1" : cur), this,
+                                                QStringLiteral("Color de la actividad"));
+        if (!c.isValid()) return;
+        m_db->setFolderColor(id, c.name());
+        refresh(id);
+        emit activitiesChanged();
+    });
+}
+
 void ActivitiesWidget::showContextMenu(const QPoint& pos)
 {
     QTreeWidgetItem* item = m_tree->itemAt(pos);
@@ -242,6 +323,8 @@ void ActivitiesWidget::showContextMenu(const QPoint& pos)
         menu.addAction(QStringLiteral("Agregar subactividad"), this, [this, item] { addChild(item); });
         menu.addAction(QStringLiteral("Renombrar"), this, [this, item] { m_tree->editItem(item, 0); });
         menu.addAction(QStringLiteral("Horas previas…"), this, [this, item] { editPriorHours(item); });
+        auto* colorMenu = menu.addMenu(QStringLiteral("Color"));
+        fillColorMenu(colorMenu, item->data(0, kIdRole).toLongLong());
         menu.addSeparator();
         menu.addAction(QStringLiteral("Eliminar…"), this, [this, item] { deleteItem(item); });
     } else {

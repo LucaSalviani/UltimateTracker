@@ -295,6 +295,8 @@ QWidget* SettingsDialog::pageAppearance()
     m_groupStyle->addItem(QStringLiteral("Por actividad, con títulos"));
     m_groupStyle->addItem(QStringLiteral("Por actividad, en línea y recuadrados"));
     m_groupStyle->setCurrentIndex(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt());
+    m_activityColors = new QCheckBox(QStringLiteral("Colores por actividad (se eligen en Actividades → click derecho → Color)"), w);
+    m_activityColors->setChecked(m_db->setting("activity_colors", 1).toBool());
     m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir el objetivo o llegar a un hito"), w);
     m_celebrations->setChecked(m_db->setting("celebrations", 1).toBool());
 
@@ -331,6 +333,7 @@ QWidget* SettingsDialog::pageAppearance()
     lay->addLayout(sizeRow);
     lay->addWidget(m_sizeButton);
     lay->addWidget(m_resizable);
+    lay->addWidget(m_activityColors);
     lay->addWidget(m_celebrations);
     lay->addWidget(note(QStringLiteral("Cambiar el tamaño vuelve todas las vistas a su tamaño original."), w));
     lay->addStretch();
@@ -492,6 +495,7 @@ void SettingsDialog::accept()
     }
     m_db->setSetting("group_style", m_groupStyle->currentIndex());
     m_db->setSetting("celebrations", m_celebrations->isChecked() ? 1 : 0);
+    m_db->setSetting("activity_colors", m_activityColors->isChecked() ? 1 : 0);
 
     m_db->setSetting("tile_shape", m_tileShape->currentIndex());
     m_db->setSetting("tile_mark", m_tileMark->currentIndex());

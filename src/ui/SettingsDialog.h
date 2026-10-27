@@ -74,6 +74,7 @@ private:
     QCheckBox*    m_sizeButton;
     QComboBox*    m_sizeDefault;
     QCheckBox*    m_celebrations;      // M8
+    QCheckBox*    m_activityColors;    // M25
 
     // Cuadraditos (M18)
     QComboBox* m_tileShape;

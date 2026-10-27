@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 5;
+constexpr int kSchemaVersion = 6;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -125,6 +125,7 @@ bool Database::migrate()
     if (version < 2) addColumnIfMissing("pomodoros", "linked", "INTEGER NOT NULL DEFAULT 0");  // encadenados
     if (version < 3) addColumnIfMissing("pomodoros", "note", "TEXT NOT NULL DEFAULT ''");      // M6: nota
     if (version < 5) addColumnIfMissing("folders", "prior_sec", "INTEGER NOT NULL DEFAULT 0"); // M11: horas previas
+    if (version < 6) addColumnIfMissing("folders", "color", "TEXT NOT NULL DEFAULT ''");       // M25: color elegido
     if (version < kSchemaVersion) exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
     return true;
 }
@@ -399,6 +400,24 @@ QHash<qint64, qint64> Database::studyByFolder(const QDate& from, const QDate& to
         for (auto it = prior.cbegin(); it != prior.cend(); ++it) out[it.key()] += it.value();
     }
     return out;
+}
+
+QHash<qint64, QString> Database::folderColors() const
+{
+    QHash<qint64, QString> out;
+    QSqlQuery q(m_db);
+    q.exec("SELECT id, color FROM folders WHERE color <> ''");
+    while (q.next()) out.insert(q.value(0).toLongLong(), q.value(1).toString());
+    return out;
+}
+
+void Database::setFolderColor(qint64 id, const QString& color)
+{
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE folders SET color = ? WHERE id = ?");
+    q.addBindValue(color.isNull() ? QStringLiteral("") : color);
+    q.addBindValue(id);
+    q.exec();
 }
 
 QHash<qint64, qint64> Database::priorByFolder() const

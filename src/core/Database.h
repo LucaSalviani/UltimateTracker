@@ -35,6 +35,9 @@ public:
     // M11: horas que ya tenías antes de usar la app (se suman al histórico).
     QHash<qint64, qint64> priorByFolder() const;
     void   setFolderPriorSeconds(qint64 id, qint64 seconds);
+    // M25: color elegido para la actividad ("#rrggbb"; vacío = automático).
+    QHash<qint64, QString> folderColors() const;
+    void   setFolderColor(qint64 id, const QString& color);
 
     // ---- Días ------------------------------------------------------------
     QString dayTitle(const QDate& day) const;

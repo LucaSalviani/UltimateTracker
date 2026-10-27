@@ -520,6 +520,7 @@ QWidget* MainWindow::buildTitleBar()
         applySizePreset();
         m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
         applySystemSettings();
+        reloadFolders();   // M25: colores por actividad prendidos/apagados
         applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
         if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
         if (!m_session->inProgress()) {
@@ -1010,18 +1011,10 @@ void MainWindow::reloadFolders()
     for (const Folder& f : m_tree.all()) paths.insert(f.id, m_tree.path(f.id));
     if (m_grid) {
         m_grid->setFolderPaths(paths);
-        // M8: cada actividad con un color tenue (estable: sigue el orden del árbol).
-        static const QColor kActivityColors[] = {
-            {0x6f, 0x9b, 0xd1}, {0xd1, 0x8f, 0x6f}, {0x8f, 0xc2, 0x8a}, {0xc7, 0x9b, 0xd6},
-            {0xd6, 0xc0, 0x6f}, {0x6f, 0xc2, 0xbd}, {0xd1, 0x6f, 0x8f}, {0xa8, 0xa8, 0xa8}};
+        // M25: color elegido por vos, o uno automático; o ninguno si están apagados.
         QHash<qint64, QString> names;
-        QHash<qint64, QColor> colors;
-        int i = 0;
-        for (const Folder& f : m_tree.all()) {
-            names.insert(f.id, f.name);
-            colors.insert(f.id, kActivityColors[i++ % 8]);
-        }
-        m_grid->setFolderLooks(names, colors);
+        for (const Folder& f : m_tree.all()) names.insert(f.id, f.name);
+        m_grid->setFolderLooks(names, ActivitiesWidget::colorsFor(m_db, m_tree));
     }
     if (m_session->folderId() && !m_tree.contains(m_session->folderId()))
         m_session->setFolderId(m_tree.children(0).isEmpty() ? 0 : m_tree.children(0).first());

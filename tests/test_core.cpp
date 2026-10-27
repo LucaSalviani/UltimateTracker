@@ -544,6 +544,19 @@ private slots:
         QCOMPARE(f.full, 4);
         QCOMPARE(f.partial, 0.0);
     }
+
+    // M25: color elegido por actividad
+    void folderColorPersists()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 f = db.addFolder(0, "Piano");
+        QVERIFY(db.folderColors().isEmpty());
+        db.setFolderColor(f, "#ff8a00");
+        QCOMPARE(db.folderColors().value(f), QString("#ff8a00"));
+        db.setFolderColor(f, QString());
+        QVERIFY(!db.folderColors().contains(f));
+    }
 };
 
 QTEST_GUILESS_MAIN(CoreTest)

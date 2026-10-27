@@ -16,6 +16,9 @@ class ActivitiesWidget : public QWidget {
 public:
     ActivitiesWidget(Database* db, QWidget* parent = nullptr);
     void refresh(qint64 selectId = 0);
+    // M25: color de cada actividad: el elegido o uno automático (vacío si están apagados).
+    static QHash<qint64, QColor> colorsFor(Database* db, const class FolderTree& tree);
+    static const QVector<QColor>& autoColors();
 
 signals:
     void backRequested();
@@ -28,6 +31,7 @@ private:
     void persistStructure();
     void showContextMenu(const QPoint& pos);
     void editPriorHours(class QTreeWidgetItem* item);   // M11
+    void fillColorMenu(class QMenu* menu, qint64 id);   // M25
     void onItemChanged(QTreeWidgetItem* item, int column);
 
     Database*     m_db;
