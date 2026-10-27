@@ -92,6 +92,18 @@ void draw(QPainter& p, Id id, const QColor& c)
         p.drawLine(QPointF(5, 12), QPointF(15, 12));
         p.drawPolyline(QPolygonF({{11, 8}, {15, 12}, {11, 16}}));
         break;
+    case Id::FullScreen:      // cuatro esquinas hacia afuera
+        p.drawPolyline(QPolygonF({{5, 9.5}, {5, 5}, {9.5, 5}}));
+        p.drawPolyline(QPolygonF({{14.5, 5}, {19, 5}, {19, 9.5}}));
+        p.drawPolyline(QPolygonF({{19, 14.5}, {19, 19}, {14.5, 19}}));
+        p.drawPolyline(QPolygonF({{9.5, 19}, {5, 19}, {5, 14.5}}));
+        break;
+    case Id::ExitFullScreen:  // cuatro esquinas hacia adentro
+        p.drawPolyline(QPolygonF({{5, 9.5}, {9.5, 9.5}, {9.5, 5}}));
+        p.drawPolyline(QPolygonF({{14.5, 5}, {14.5, 9.5}, {19, 9.5}}));
+        p.drawPolyline(QPolygonF({{19, 14.5}, {14.5, 14.5}, {14.5, 19}}));
+        p.drawPolyline(QPolygonF({{9.5, 19}, {9.5, 14.5}, {5, 14.5}}));
+        break;
     case Id::Minimize:
         p.drawLine(QPointF(6.5, 12.5), QPointF(17.5, 12.5));
         break;

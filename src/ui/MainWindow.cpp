@@ -158,14 +158,25 @@ enum Page { PageGrid = 0, PageStats = 1, PageActivities = 2 };
 
 constexpr int kResizeMargin = 6;   // píxeles del borde que sirven para redimensionar
 
+// Tamaño elegido en Ajustes: chica = los tamaños de siempre, mediana +15 %, grande +35 %.
+double g_sizeScale = 1.15;
+
+double scaleFor(const QString& preset)
+{
+    if (preset == QLatin1String("small")) return 1.0;
+    if (preset == QLatin1String("large")) return 1.35;
+    return 1.15;
+}
+
 QSize defaultSize(const QString& key)
 {
     // Día: del tamaño de la calculadora pero apaisada.
-    if (key == "week")       return {1180, 640};
-    if (key == "month")      return {1340, 900};
-    if (key == "stats")      return {1034, 704};
-    if (key == "activities") return {594, 560};
-    return {700, 400};
+    QSize s(700, 400);
+    if (key == "week")       s = {1180, 640};
+    if (key == "month")      s = {1340, 900};
+    if (key == "stats")      s = {1034, 704};
+    if (key == "activities") s = {594, 560};
+    return s * g_sizeScale;
 }
 } // namespace
 
@@ -314,6 +325,12 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(midnight, &QTimer::timeout, this, &MainWindow::checkDayRollover);
     midnight->start();
 
+    // ---- Pantalla completa: F11 alterna, Esc sale
+    auto* f11 = new QShortcut(QKeySequence(Qt::Key_F11), this);
+    connect(f11, &QShortcut::activated, this, &MainWindow::toggleFullScreen);
+    auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(esc, &QShortcut::activated, this, [this] { if (isFullScreen()) toggleFullScreen(); });
+
     // ---- Estado inicial: siempre abre en el día de hoy
     resize(viewSize("day"));
     const QPoint savedPos = m_db->setting("window_pos").toPoint();
@@ -387,6 +404,7 @@ QWidget* MainWindow::buildTitleBar()
         if (!m_resizable) setEdgeCursor({});
         m_stats->setJokersPerWeek(m_jokers);
         m_deck->setAdjustOptions(deckAdjustFrom(m_db));
+        applySizePreset();
         if (!m_session->inProgress()) {
             m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
             m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -398,6 +416,9 @@ QWidget* MainWindow::buildTitleBar()
     connect(menuBtn, &QToolButton::clicked, this, [menuBtn, menu] {
         menu->popup(menuBtn->mapToGlobal(QPoint(0, menuBtn->height())));
     });
+
+    m_btnFull = iconButton(bar, icons::Id::FullScreen, QStringLiteral("Pantalla completa (F11 · Esc para salir)"));
+    connect(m_btnFull, &QToolButton::clicked, this, &MainWindow::toggleFullScreen);
 
     m_btnPin = iconButton(bar, icons::Id::Pin, QStringLiteral("Siempre visible (por encima de las demás ventanas)"));
     m_btnPin->setCheckable(true);
@@ -427,6 +448,7 @@ QWidget* MainWindow::buildTitleBar()
     lay->addWidget(stats);
     lay->addWidget(menuBtn);
     lay->addSpacing(6);
+    lay->addWidget(m_btnFull);
     lay->addWidget(m_btnPin);
     lay->addWidget(dock);
     lay->addWidget(minimize);
@@ -484,7 +506,8 @@ QWidget* MainWindow::buildDateBand()
 QWidget* MainWindow::buildDeck()
 {
     m_deck = new TimerDeck(this);
-    m_deck->setFixedWidth(282);
+    g_sizeScale = scaleFor(m_db->setting("window_size", "medium").toString());
+    updateDeckWidth();
 
     m_folderMenu = new FolderMenu(this);
     connect(m_folderMenu, &FolderMenu::folderChosen, this, &MainWindow::chooseFolder);
@@ -579,6 +602,7 @@ void MainWindow::resetViewSize(bool allViews)
 // guarda dónde estaba la ventana; al achicar vuelve exactamente a ese lugar.
 void MainWindow::resizeAnimated(const QSize& wanted, int newLevel)
 {
+    if (isFullScreen()) return;   // en pantalla completa las vistas usan toda la pantalla
     QScreen* scr = screen() ? screen() : QGuiApplication::primaryScreen();
     const QRect avail = scr->availableGeometry();
     const QSize size = wanted.boundedTo(avail.size() - QSize(16, 16));
@@ -674,7 +698,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* ev)
     auto* w = qobject_cast<QWidget*>(obj);
     if (!w || w->window() != this) return QWidget::eventFilter(obj, ev);
 
-    if (!m_resizable || m_docked || isMinimized() || m_dragging) {
+    if (!m_resizable || m_docked || isMinimized() || m_dragging || isFullScreen()) {
         setEdgeCursor({});
         return QWidget::eventFilter(obj, ev);
     }
@@ -699,8 +723,46 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* ev)
 void MainWindow::resizeEvent(QResizeEvent* e)
 {
     QWidget::resizeEvent(e);
+    if (isFullScreen()) { updateDeckWidth(); return; }
     // Tamaño que dejaste a mano: se recuerda para siempre para esta vista.
     if (m_userResizing) m_saveSizeTimer.start();
+}
+
+// ---- Pantalla completa -------------------------------------------------------
+void MainWindow::toggleFullScreen()
+{
+    if (m_docked) undock();
+    if (m_anim) m_anim->stop();
+    if (isFullScreen()) {
+        showNormal();
+        m_btnFull->setIcon(icons::get(icons::Id::FullScreen));
+        m_btnFull->setToolTip(QStringLiteral("Pantalla completa (F11 · Esc para salir)"));
+        updateDeckWidth();
+        resize(viewSize(viewKey()));
+    } else {
+        showFullScreen();
+        m_btnFull->setIcon(icons::get(icons::Id::ExitFullScreen));
+        m_btnFull->setToolTip(QStringLiteral("Salir de pantalla completa (Esc)"));
+    }
+}
+
+// El reproductor crece con la ventana: un poco con el tamaño elegido y bastante
+// en pantalla completa, donde los dígitos se ven desde lejos.
+void MainWindow::updateDeckWidth()
+{
+    if (!m_deck) return;
+    int w = int(282 * (1.0 + (g_sizeScale - 1.0) * 0.6));
+    if (isFullScreen()) w = qBound(320, int(width() * 0.30), 560);
+    m_deck->setFixedWidth(w);
+}
+
+void MainWindow::applySizePreset()
+{
+    const double s = scaleFor(m_db->setting("window_size", "medium").toString());
+    if (qFuzzyCompare(s, g_sizeScale)) return;
+    g_sizeScale = s;
+    updateDeckWidth();
+    resetViewSize(true);   // todas las vistas vuelven al tamaño original del nuevo preset
 }
 
 // ===========================================================================
@@ -1104,7 +1166,7 @@ void MainWindow::maybeShowDaySummary()
 // ===========================================================================
 void MainWindow::mousePressEvent(QMouseEvent* e)
 {
-    if (e->button() == Qt::LeftButton) {
+    if (e->button() == Qt::LeftButton && !isFullScreen()) {
         m_dragging = true;
         m_dragOffset = e->globalPosition().toPoint() - frameGeometry().topLeft();
     }
@@ -1142,6 +1204,7 @@ void MainWindow::wheelEvent(QWheelEvent* e)
 
 void MainWindow::dockToNearestEdge()
 {
+    if (isFullScreen()) toggleFullScreen();
     QScreen* scr = screen() ? screen() : QGuiApplication::primaryScreen();
     const QRect s = scr->availableGeometry();
     const QRect g = frameGeometry();

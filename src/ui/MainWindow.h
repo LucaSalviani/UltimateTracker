@@ -79,6 +79,9 @@ private:
 
     // ---- ventana
     void togglePin(bool on);
+    void toggleFullScreen();
+    void applySizePreset();               // Ajustes › Apariencia › Tamaño (chica/mediana/grande)
+    void updateDeckWidth();
     void dockTo(EdgeTab::Edge edge);
     void dockToNearestEdge();
     void undock();
@@ -114,6 +117,7 @@ private:
     QToolButton* m_btnZoomIn = nullptr;
     QToolButton* m_btnProportional = nullptr;
     QToolButton* m_btnPin = nullptr;
+    QToolButton* m_btnFull = nullptr;
 
     // Banda de fecha
     QWidget*     m_band = nullptr;
