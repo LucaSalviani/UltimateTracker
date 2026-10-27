@@ -91,7 +91,7 @@ QPainterPath roundedPolygon(const QVector<QPointF>& pts, double radius)
 void drawLabel(QPainter& p, const QRectF& r, const Tile& t, const QColor& color, bool faint, const QColor& halo = {})
 {
     const double s = qMin(r.width(), r.height());
-    if (s < 15) return;
+    if (s < 12) return;
     const bool card = style().shape == Shape::Card;
     const bool caption = !t.caption.isEmpty() && style().caption && s >= 34;   // M29: solo si está elegido
     if (t.number > 0 && s >= 30 && style().numberPos == 0) {
