@@ -113,9 +113,10 @@ void GridWidget::setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QStr
     rebuild();
 }
 
-void GridWidget::setGoalBlocks(const QHash<QDate, QVector<int>>& blocks)
+void GridWidget::setGoalBlocks(const QHash<QDate, QVector<int>>& blocks, const QHash<QDate, double>& firstPartial)
 {
     m_goalBlocks = blocks;
+    m_goalPartial = firstPartial;
     rebuild();
 }
 
@@ -132,7 +133,9 @@ void GridWidget::rebuild()
             Pomodoro g;
             g.id = -(it.key().toJulianDay() * 100 + k + 1);   // estable entre recargas
             g.day = it.key();
-            g.plannedSec = g.studiedSec = it.value()[k] * 60;
+            g.plannedSec = it.value()[k] * 60;
+            // M21: el primero que falta puede estar a medias (por tiempo acumulado).
+            g.studiedSec = k == 0 ? int(g.plannedSec * m_goalPartial.value(it.key(), 0.0)) : 0;
             g.status = PomoStatus::Completed;
             m_byDay[g.day].append(int(m_pomos.size()));
             m_pomos.append(g);
@@ -302,6 +305,7 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
     if (isGhost(pomo)) {
         t.state = tiles::State::Ghost;
         t.label = fmt::duration(pomo.plannedSec);
+        t.progress = pomo.plannedSec > 0 ? double(pomo.studiedSec) / pomo.plannedSec : 0;
         tiles::paint(p, r, t, m_clock.elapsed());
         return;
     }
@@ -611,8 +615,10 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         const Pomodoro& pm = m_pomos[pl.index];
         if (isGhost(pm)) {
             QToolTip::showText(e->globalPosition().toPoint(),
-                               QStringLiteral("Objetivo: falta un pomodoro de %1\nClick para ver el objetivo del día")
-                                   .arg(fmt::duration(pm.plannedSec)), this);
+                               (pm.studiedSec > 0 ? QStringLiteral("Objetivo: bloque de %1 · llevás %2\nClick para ver el objetivo del día")
+                                                     .arg(fmt::duration(pm.plannedSec), fmt::duration(pm.studiedSec))
+                                                  : QStringLiteral("Objetivo: falta un bloque de %1\nClick para ver el objetivo del día")
+                                                     .arg(fmt::duration(pm.plannedSec))), this);
             setCursor(Qt::PointingHandCursor);
             return;
         }

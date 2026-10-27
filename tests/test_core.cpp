@@ -529,6 +529,21 @@ private slots:
         QCOMPARE(db.studyByFolder().value(f), qint64(120 * 3600 + 1500));
         QCOMPARE(db.studyByFolder(p.day, p.day).value(f), qint64(1500));   // un período: solo lo registrado
     }
+
+    // M21: el objetivo se llena por tiempo, no por cantidad de pomodoros
+    void goalFillsByTime()
+    {
+        const QVector<int> b{40, 40, 40, 40};
+        auto f = goals::fillBlocks(b, 6 * 60);           // dos de 3 minutos
+        QCOMPARE(f.full, 0);
+        QVERIFY(qAbs(f.partial - 0.15) < 1e-9);
+        f = goals::fillBlocks(b, 100 * 60);
+        QCOMPARE(f.full, 2);
+        QVERIFY(qAbs(f.partial - 0.5) < 1e-9);
+        f = goals::fillBlocks(b, 200 * 60);
+        QCOMPARE(f.full, 4);
+        QCOMPARE(f.partial, 0.0);
+    }
 };
 
 QTEST_GUILESS_MAIN(CoreTest)

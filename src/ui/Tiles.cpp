@@ -328,6 +328,16 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
         fill.setAlphaF(0.025);
         p.setBrush(fill);
         p.drawPath(path);
+        if (t.progress > 0) {   // M21: bloque del objetivo empezado (por tiempo acumulado)
+            p.save();
+            p.setClipPath(path);
+            QColor pf = theme::textFaint;
+            pf.setAlphaF(0.30);
+            p.setPen(Qt::NoPen);
+            p.setBrush(pf);
+            p.drawRect(QRectF(r.left(), r.top(), r.width() * qMin(1.0, t.progress), r.height()));
+            p.restore();
+        }
         drawLabel(p, r, t, theme::textFaint, true);
         p.restore();
         return;

@@ -96,6 +96,19 @@ QString describe(const QString& spec)
     return s;
 }
 
+BlockFill fillBlocks(const QVector<int>& blocksMin, qint64 studiedSec)
+{
+    BlockFill f;
+    qint64 left = studiedSec;
+    for (int m : blocksMin) {
+        const qint64 need = qint64(m) * 60;
+        if (left >= need) { ++f.full; left -= need; continue; }
+        f.partial = need > 0 ? double(left) / need : 0;
+        break;
+    }
+    return f;
+}
+
 bool appliesOn(const GoalRule& r, const QDate& d)
 {
     if (!d.isValid() || !r.start.isValid()) return false;

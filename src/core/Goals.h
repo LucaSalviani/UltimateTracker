@@ -44,6 +44,14 @@ QString normalizeCombo(const QString& text);
 // "3×30 + 2×25" / "4h" para mostrar.
 QString describe(const QString& spec);
 
+// M21: cuánto del objetivo está hecho, por TIEMPO acumulado: los minutos
+// estudiados van llenando los bloques en orden; el que queda a medias, en parte.
+struct BlockFill {
+    int    full = 0;       // bloques completos
+    double partial = 0;    // 0..1 del siguiente
+};
+BlockFill fillBlocks(const QVector<int>& blocksMin, qint64 studiedSec);
+
 bool appliesOn(const GoalRule& r, const QDate& d);
 // La regla que manda ese día (una puntual le gana a una que se repite; entre
 // iguales, la más nueva). nullopt = no hay regla.

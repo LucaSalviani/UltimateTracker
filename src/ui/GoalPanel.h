@@ -81,7 +81,7 @@ class GoalPreview : public QWidget {
     Q_OBJECT
 public:
     explicit GoalPreview(QWidget* parent = nullptr);
-    void setBlocks(const QVector<int>& blocks, int done);
+    void setBlocks(const QVector<int>& blocks, int done, double partial = 0);
     QSize sizeHint() const override;
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth(int w) const override;
@@ -93,6 +93,7 @@ protected:
 private:
     QVector<int> m_blocks;
     int          m_done = 0;
+    double       m_partial = 0;
 };
 
 // M17: filas "[−] 3 [+]  ×  [−] 30m [+]" para armar el objetivo por pomodoros.

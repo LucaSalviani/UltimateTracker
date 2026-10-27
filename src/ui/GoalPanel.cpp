@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QResizeEvent>
@@ -240,6 +241,8 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
     m_pomoMin = pomodoroMin;
     m_date->setText(isToday ? QStringLiteral("Hoy · %1").arg(fmt::shortDate(day)) : fmt::shortDate(day));
     m_dayTitle->setText(dayTitle);
+    m_dayTitle->setPlaceholderText(isToday ? QStringLiteral("¿Qué querés lograr hoy?")
+                                           : QStringLiteral("¿Qué querés lograr este día?"));
 
     const bool has = rule && !rule->spec.isEmpty();
     m_recurring = rule && rule->weekdays != 0;
@@ -334,10 +337,13 @@ void GoalPanel::refreshPreview()
         m_status->setText(m_offDay ? QStringLiteral("Este día está marcado sin objetivo.") : QString());
         return;
     }
-    m_preview->setBlocks(p.blocks, m_progress.done);
+    const auto fill = goals::fillBlocks(p.blocks, m_progress.studiedSec);   // M21: por tiempo
+    m_preview->setBlocks(p.blocks, fill.full, fill.partial);
     m_summary->setText(p.timeMode
-        ? QStringLiteral("≈ %1 pomodoros de %2").arg(p.blocks.size()).arg(fmt::duration(m_pomoMin * 60))
-        : QStringLiteral("%1 pomodoros · %2").arg(p.blocks.size()).arg(fmt::duration(p.totalMin * 60)));
+        ? QStringLiteral("≈ %1 %2 de %3").arg(p.blocks.size()).arg(p.blocks.size() == 1 ? "pomodoro" : "pomodoros")
+              .arg(fmt::duration(m_pomoMin * 60))
+        : QStringLiteral("%1 %2 · %3").arg(p.blocks.size()).arg(p.blocks.size() == 1 ? "pomodoro" : "pomodoros")
+              .arg(fmt::duration(p.totalMin * 60)));
 
     const qint64 target = qint64(p.totalMin) * 60;
     const int pct = target > 0 ? int(qMin<qint64>(100, m_progress.studiedSec * 100 / target)) : 0;
@@ -356,10 +362,11 @@ GoalPreview::GoalPreview(QWidget* parent)
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 }
 
-void GoalPreview::setBlocks(const QVector<int>& blocks, int done)
+void GoalPreview::setBlocks(const QVector<int>& blocks, int done, double partial)
 {
     m_blocks = blocks;
     m_done = done;
+    m_partial = partial;
     setFixedHeight(heightForWidth(width() > 60 ? width() : 260));
     update();
 }
@@ -400,6 +407,18 @@ void GoalPreview::paintEvent(QPaintEvent*)
             p.setBrush(Qt::NoBrush);
         }
         p.drawRoundedRect(r, 3.5, 3.5);
+        if (i == m_done && m_partial > 0) {   // el que va a medias
+            p.save();
+            QPainterPath clip;
+            clip.addRoundedRect(r, 3.5, 3.5);
+            p.setClipPath(clip);
+            QColor pf = theme::textFaint;
+            pf.setAlphaF(0.4);
+            p.setPen(Qt::NoPen);
+            p.setBrush(pf);
+            p.drawRect(QRectF(r.left(), r.top(), r.width() * m_partial, r.height()));
+            p.restore();
+        }
         QFont f = theme::uiFont(7, QFont::DemiBold);
         f.setPixelSize(9);
         p.setFont(f);
@@ -463,7 +482,13 @@ ComboRows::ComboRows(QWidget* parent)
 void ComboRows::setSpec(const QString& spec, int defaultMin)
 {
     m_defaultMin = defaultMin;
-    for (const Row& r : m_rows) r.w->deleteLater();
+    // M21: sacarlas del layout YA (deleteLater sola dejaba la fila vieja a la vista
+    // hasta la próxima vuelta: se veían dos filas y los minutos "no cambiaban").
+    for (const Row& r : m_rows) {
+        m_list->removeWidget(r.w);
+        r.w->hide();
+        r.w->deleteLater();
+    }
     m_rows.clear();
     for (const QString& part : spec.split('+', Qt::SkipEmptyParts)) {
         const QStringList nx = part.split('x');
@@ -558,6 +583,8 @@ void ComboRows::removeRow(QWidget* w)
 {
     for (int i = 0; i < m_rows.size(); ++i)
         if (m_rows[i].w == w) { m_rows.removeAt(i); break; }
+    m_list->removeWidget(w);
+    w->hide();
     w->deleteLater();
 }
 

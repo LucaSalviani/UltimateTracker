@@ -37,7 +37,7 @@ public:
     void setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QString>& titles);
     // M7: minutos de los cuadraditos de la meta que todavía faltan en cada día;
     // se pintan "fantasma" después de los reales.
-    void setGoalBlocks(const QHash<QDate, QVector<int>>& blocks);
+    void setGoalBlocks(const QHash<QDate, QVector<int>>& blocks, const QHash<QDate, double>& firstPartial = {});
     void setLive(const std::optional<Pomodoro>& running, double progress);
     void setFolderPaths(const QHash<qint64, QString>& paths) { m_paths = paths; }
     // M8: nombre corto y color de cada actividad, y si se agrupan los cuadraditos.
@@ -98,6 +98,7 @@ private:
 
     QVector<Pomodoro>            m_real;        // lo que viene de la base
     QHash<QDate, QVector<int>>   m_goalBlocks;
+    QHash<QDate, double>         m_goalPartial;   // M21: cuánto lleva el primer fantasma
     QVector<Pomodoro>            m_pomos;       // reales + fantasmas (id < 0)
     QHash<QDate, QVector<int>>   m_byDay;
     QHash<QDate, QString>        m_titles;

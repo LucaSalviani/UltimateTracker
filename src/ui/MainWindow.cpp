@@ -1787,15 +1787,20 @@ void MainWindow::refreshGoals()
         studied[p.day] += p.studiedSec;
     }
     QHash<QDate, QVector<int>> remaining;
+    QHash<QDate, double> partial;
     for (QDate d = from; d <= to; d = d.addDays(1)) {
         const auto r = goals::resolve(rules, d);
         if (!r) continue;
         const auto parsed = goals::parse(r->spec, pomoMin);
         if (!parsed.ok) continue;
-        const int n = done.value(d);
-        if (n < parsed.blocks.size()) remaining.insert(d, parsed.blocks.mid(n));
+        // M21: por tiempo acumulado (dos de 3m no llenan dos bloques de 40m).
+        const auto fill = goals::fillBlocks(parsed.blocks, studied.value(d));
+        if (fill.full < parsed.blocks.size()) {
+            remaining.insert(d, parsed.blocks.mid(fill.full));
+            partial.insert(d, fill.partial);
+        }
     }
-    m_grid->setGoalBlocks(remaining);
+    m_grid->setGoalBlocks(remaining, partial);
     if (m_goalPanel && m_goalPanel->isVisible()) {
         const QDate d = m_goalPanel->day();
         int n = done.value(d);
@@ -1809,37 +1814,19 @@ void MainWindow::refreshGoals()
     updateObjectiveBand();
 }
 
-// "Objetivo: Parcial de SO · 2/6" / "Objetivo: 4h · 1h10 de 4h" / "Trabajo de hoy"
+// M21: la barra muestra solo lo que escribiste en "¿Qué querés lograr hoy?" (o nada).
 void MainWindow::updateObjectiveBand()
 {
     if (!m_objectiveBtn || !m_grid) return;
-    const QDate d = m_grid->anchor();
-    const auto r = goals::resolve(m_db->goals(), d);
-    const auto parsed = r ? goals::parse(r->spec, m_db->setting("work_min", 25).toInt()) : goals::Parsed{};
-    const QString title = m_db->dayTitle(d);
-    QString text;
-    if (parsed.ok) {
-        int n = 0;
-        qint64 sec = 0;
-        for (const Pomodoro& p : m_db->pomodorosBetween(d, d)) { ++n; sec += p.studiedSec; }
-        const QString what = title.isEmpty() ? goals::describe(r->spec) : title;
-        const bool done = sec >= qint64(parsed.totalMin) * 60;
-        text = QStringLiteral("Objetivo: %1  ·  %2").arg(what,
-                   done ? QStringLiteral("✓ cumplido")
-                        : QStringLiteral("%1/%2").arg(qMin(n, int(parsed.blocks.size()))).arg(parsed.blocks.size()));
-    } else if (!title.isEmpty()) {
-        text = QStringLiteral("Objetivo: %1").arg(title);
-    } else {
-        text = d == m_today ? QStringLiteral("Trabajo de hoy") : QStringLiteral("Trabajo del día");
-    }
-    m_objectiveBtn->setProperty("empty", !parsed.ok && title.isEmpty());
+    const QString title = m_db->dayTitle(m_grid->anchor());
+    m_objectiveBtn->setProperty("empty", title.isEmpty());
+    m_objectiveBtn->setIcon(title.isEmpty() ? QIcon() : icons::get(icons::Id::Goal, icons::Ink::Dim));
     m_objectiveBtn->style()->unpolish(m_objectiveBtn);
     m_objectiveBtn->style()->polish(m_objectiveBtn);
-    m_objectiveBtn->setText(QFontMetrics(m_objectiveBtn->font()).elidedText(text, Qt::ElideRight,
-                                                                               qMax(80, m_objectiveBtn->width() - 30)));
+    m_objectiveBtn->setText(QFontMetrics(m_objectiveBtn->font())
+                                .elidedText(title, Qt::ElideRight, qMax(80, m_objectiveBtn->width() - 30)));
 }
 
-// Festejo una sola vez por día, cuando lo estudiado llega a la meta.
 void MainWindow::checkGoalReached()
 {
     const QString key = "goal_done/" + fmt::dayKey(m_today);
@@ -1868,9 +1855,11 @@ void MainWindow::preloadFromGoal()
     if (!r) return;
     const auto parsed = goals::parse(r->spec, m_db->setting("work_min", 25).toInt());
     if (!parsed.ok || parsed.timeMode) return;   // por tiempo: queda la duración que uses
-    const int done = int(m_db->pomodorosBetween(m_today, m_today).size());
-    if (done >= parsed.blocks.size()) return;
-    m_session->setWorkSec(parsed.blocks[done] * 60);
+    qint64 studied = 0;
+    for (const Pomodoro& p : m_db->pomodorosBetween(m_today, m_today)) studied += p.studiedSec;
+    const auto fill = goals::fillBlocks(parsed.blocks, studied);
+    if (fill.full >= parsed.blocks.size()) return;
+    m_session->setWorkSec(parsed.blocks[fill.full] * 60);
     refreshDeck();
 }
 
