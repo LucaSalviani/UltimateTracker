@@ -2,6 +2,7 @@
 #include "core/FolderTree.h"
 #include "core/DayClock.h"
 #include "core/Format.h"
+#include "ui/ActivitiesWidget.h"
 #include "ui/Icons.h"
 #include "ui/Theme.h"
 
@@ -21,6 +22,15 @@
 // ===========================================================================
 // Lienzo: todo lo que se dibuja en la página de estadísticas
 // ===========================================================================
+// M35: color de las estadísticas. En el tema gris (sin acentos fuertes) queda
+// monocromo, como siempre; en los temas de color usa el acento del tema.
+static QColor statsInk()
+{
+    const QString k = theme::current().key;
+    if ((k == QLatin1String("dark") || k == QLatin1String("light")) && !theme::strongAccents()) return theme::text;
+    return theme::pomoAccent;
+}
+
 struct StatsData {
     StatsWidget::Period period = StatsWidget::Period::Week;
     QDate from, to, today;
@@ -32,8 +42,10 @@ struct StatsData {
     QSet<qint64> filterSet;
     stats::Streak streak;
     int jokers = 2;
-    struct Row { QString name; int depth = 0; qint64 period = 0; qint64 total = 0; };
+    struct Row { QString name; int depth = 0; qint64 period = 0; qint64 total = 0; qint64 id = 0; };
     QVector<Row> rows;
+    QHash<qint64, QColor> colors;   // M35: color de cada actividad (vacío si están apagados)
+    QColor colorOf(qint64 id) const { return colors.value(id, statsInk()); }
 };
 
 class StatsCanvas : public QWidget {
@@ -163,7 +175,7 @@ private:
                   i.kind == IntervalKind::Break ? theme::timelineBreak : theme::squareFinal.darker(140));
         for (const Pomodoro& pm : data.pomos) {
             if (data.filter && !data.filter->contains(pm.folderId)) continue;
-            block(pm.startedAt, qMax(pm.endedAt, pm.startedAt + pm.studiedSec), theme::squareFill);
+            block(pm.startedAt, qMax(pm.endedAt, pm.startedAt + pm.studiedSec), data.colorOf(pm.folderId));
         }
 
         p.setFont(theme::uiFont(8));
@@ -175,7 +187,7 @@ private:
         }
         // Leyenda
         const QPair<QString, QColor> legend[3] = {
-            {QStringLiteral("estudio"), theme::squareFill},
+            {data.colors.isEmpty() ? QStringLiteral("estudio") : QStringLiteral("estudio (color de la actividad)"), data.colors.isEmpty() ? statsInk() : theme::textDim},
             {QStringLiteral("recreo"), theme::timelineBreak},
             {QStringLiteral("indebido"), theme::squareFinal.darker(140)},
         };
@@ -214,7 +226,8 @@ private:
             const double h = (chartH - labelRoom) * double(v) / maxV;
             const QRectF r(L + i * slot + (slot - bw) / 2, y + chartH - h, bw, h);
             p.setPen(Qt::NoPen);
-            p.setBrush(d == data.today ? theme::text : theme::squareFill);
+            // M35: barras en el color del tema; hoy, a pleno
+            p.setBrush(d == data.today ? statsInk() : theme::mix(theme::surface, statsInk(), 0.55));
             if (v > 0) p.drawRoundedRect(r, 2, 2);
 
             p.setFont(theme::uiFont(8));
@@ -246,14 +259,17 @@ private:
         for (int r = 0; r < 7; ++r)
             p.drawText(QRectF(L, y + r * step, 24, cell), Qt::AlignLeft | Qt::AlignVCenter, QString::fromUtf8(rows[r]));
 
+        // M35: escala del color del tema (de la superficie al acento)
         auto shade = [](qint64 sec) {
             const double h = sec / 3600.0;
+            const QColor ink = statsInk();
+            auto at = [&](double t) { return theme::mix(theme::surface, ink, t); };
             if (sec <= 0) return theme::surface;
-            if (h < 1)    return theme::heat[0];
-            if (h < 2.5)  return theme::heat[1];
-            if (h < 4.5)  return theme::heat[2];
-            if (h < 7)    return theme::heat[3];
-            return theme::heat[4];
+            if (h < 1)    return at(0.22);
+            if (h < 2.5)  return at(0.42);
+            if (h < 4.5)  return at(0.62);
+            if (h < 7)    return at(0.82);
+            return at(1.0);
         };
 
         int lastMonth = -1;
@@ -299,7 +315,13 @@ private:
             const QRectF r(L, y, W, kRowH);
             p.setFont(theme::uiFont(9.5, row.depth == 0 ? QFont::DemiBold : QFont::Normal));
             p.setPen(row.depth == 0 ? theme::text : theme::textDim);
-            const double indent = row.depth * 16;
+            const double indent = row.depth * 16 + (data.colors.isEmpty() ? 0 : 14);
+            if (!data.colors.isEmpty() && row.id) {   // M35: puntito de color
+                p.setPen(Qt::NoPen);
+                p.setBrush(data.colorOf(row.id));
+                p.drawEllipse(QRectF(L + row.depth * 16 + 1, y + kRowH / 2 - 4, 8, 8));
+                p.setPen(row.depth == 0 ? theme::text : theme::textDim);
+            }
             p.drawText(QRectF(L + indent, y, cPeriod - 70 - L - indent, kRowH), Qt::AlignLeft | Qt::AlignVCenter,
                        QFontMetrics(p.font()).elidedText(row.name, Qt::ElideRight, int(cPeriod - 70 - L - indent)));
             p.setFont(theme::uiFont(9.5));
@@ -314,7 +336,7 @@ private:
             p.setPen(Qt::NoPen);
             p.setBrush(theme::surface);
             p.drawRoundedRect(QRectF(bx, y + kRowH / 2 - 3, bw, 6), 3, 3);
-            p.setBrush(theme::squareFill);
+            p.setBrush(row.id ? data.colorOf(row.id) : theme::squareFill);
             p.drawRoundedRect(QRectF(bx, y + kRowH / 2 - 3, qMax(frac > 0 ? 3.0 : 0.0, bw * frac), 6), 3, 3);
 
             const qint64 h = row.total / 3600;
@@ -496,18 +518,19 @@ void StatsWidget::refresh()
         d.pomos = m_db->pomodorosBetween(d.from, d.to);
         d.intervals = m_db->intervalsBetween(d.from, d.to);
     }
+    d.colors = ActivitiesWidget::colorsFor(m_db, tree);
     d.streak = stats::streak(m_db->studiedDays(), d.today, m_jokers);
 
     const auto periodTotals = tree.rollUp(m_db->studyByFolder(d.from, d.to));
     const auto allTotals = tree.rollUp(m_db->studyByFolder());
     std::function<void(qint64, int)> addRows = [&](qint64 parent, int depth) {
         for (qint64 id : tree.children(parent)) {
-            d.rows.append({tree.find(id)->name, depth, periodTotals.value(id), allTotals.value(id)});
+            d.rows.append({tree.find(id)->name, depth, periodTotals.value(id), allTotals.value(id), id});
             addRows(id, depth + 1);
         }
     };
     if (filterId) {
-        d.rows.append({tree.find(filterId)->name, 0, periodTotals.value(filterId), allTotals.value(filterId)});
+        d.rows.append({tree.find(filterId)->name, 0, periodTotals.value(filterId), allTotals.value(filterId), filterId});
         addRows(filterId, 1);
     } else {
         addRows(0, 0);

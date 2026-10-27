@@ -1095,7 +1095,7 @@ void MainWindow::rebuildFolderMenu()
     const auto parked = m_session->parkedSeconds();
     for (auto it = parked.cbegin(); it != parked.cend(); ++it)
         badges.insert(it.key(), QStringLiteral("⏸ %1").arg(fmt::duration(it.value())));
-    m_folderMenu->rebuild(m_tree, m_session->folderId(), badges);
+    m_folderMenu->rebuild(m_tree, m_session->folderId(), badges, ActivitiesWidget::colorsFor(m_db, m_tree));
 }
 
 // Pomodoros ya terminados hoy dentro de lo que se está mostrando (actividad o día).
