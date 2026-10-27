@@ -1498,6 +1498,14 @@ void MainWindow::runDailyBackup()
     sysint::dailyBackup(*m_db, qApp->property("dataDir").toString(), m_db->setting("backup_dir").toString());
 }
 
+void MainWindow::openFromGreeting()
+{
+    show();
+    raise();
+    activateWindow();
+    QTimer::singleShot(80, this, [this] { openGoalPanel(m_today); });
+}
+
 void MainWindow::togglePin(bool on)
 {
     win::setTopmost(this, on);

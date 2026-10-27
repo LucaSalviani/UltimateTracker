@@ -36,6 +36,9 @@ public:
     MainWindow(Database* db, QWidget* parent = nullptr);
     ~MainWindow() override;
     void bringToFront();
+    // M10: después del saludo: abrir con el panel de la meta, o salir.
+    void openFromGreeting();
+    void quitApp();
 
 protected:
     void mousePressEvent(QMouseEvent*) override;
@@ -105,7 +108,6 @@ private:
 
     void toast(const QString& text);
     void toastAction(const QString& text, const QString& action, std::function<void()> fn);
-    void quitApp();
 
     // ---- jornada
     void onStateChanged(SessionController::State s);

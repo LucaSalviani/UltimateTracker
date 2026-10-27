@@ -1,5 +1,6 @@
 #include "core/Database.h"
 #include "core/DayClock.h"
+#include "ui/Greeting.h"
 #include "ui/MainWindow.h"
 #include "ui/Theme.h"
 
@@ -82,6 +83,16 @@ int main(int argc, char* argv[])
             w.bringToFront();
         }
     });
-    w.show();
+    // M10: al iniciar con Windows (o con --greeting), una vez por día, saludo primero.
+    const QStringList args = QCoreApplication::arguments();
+    const bool forceGreeting = args.contains(QStringLiteral("--greeting"));
+    if (forceGreeting || (args.contains(QStringLiteral("--autostart")) && Greeting::shouldShow(db))) {
+        auto* g = new Greeting(&db, w.geometry());
+        QObject::connect(g, &Greeting::accepted, &w, &MainWindow::openFromGreeting);
+        QObject::connect(g, &Greeting::declined, &w, &MainWindow::quitApp);
+        g->show();
+    } else {
+        w.show();
+    }
     return app.exec();
 }

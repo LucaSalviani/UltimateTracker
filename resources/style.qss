@@ -329,3 +329,12 @@ QPushButton#GoalSave { background: @t1; color: @bg; border: none; border-radius:
 QPushButton#GoalSave:hover { background: @t0; }
 QPushButton#GoalRemove { background: transparent; color: @t3; border: 1px solid @s5; border-radius: 8px; padding: 7px 12px; }
 QPushButton#GoalRemove:hover { color: @t1; border-color: @s8; }
+
+/* ---- Saludo al iniciar (M10) ---- */
+QLabel#GreetTitle { font-size: 15pt; font-weight: 600; color: @t1; }
+QLabel#GreetPhrase { font-size: 10.5pt; color: @t3; font-style: italic; }
+QLabel#GreetFacts { font-size: 9pt; color: @t2; }
+QPushButton#GreetGo { background: @acc; color: #ffffff; border: none; border-radius: 9px; padding: 9px 20px; font-weight: 600; font-size: 10.5pt; }
+QPushButton#GreetGo:hover { background: @accHi; }
+QPushButton#GreetLater { background: transparent; color: @t3; border: 1px solid @s5; border-radius: 9px; padding: 9px 16px; }
+QPushButton#GreetLater:hover { color: @t1; border-color: @s8; }
