@@ -7,6 +7,8 @@ Sounds::Sounds(QObject* parent)
 {
     m_chime.setSource(QUrl(QStringLiteral("qrc:/sounds/chime.wav")));
     m_chime.setVolume(0.8f);
+    m_achievement.setSource(QUrl(QStringLiteral("qrc:/sounds/achievement.wav")));
+    m_achievement.setVolume(0.75f);
 
     m_alarm.setSource(QUrl(QStringLiteral("qrc:/sounds/alarm.wav")));
     m_alarm.setLoopCount(QSoundEffect::Infinite);
@@ -23,6 +25,11 @@ Sounds::Sounds(QObject* parent)
 void Sounds::playChime()
 {
     m_chime.play();
+}
+
+void Sounds::playAchievement()
+{
+    m_achievement.play();
 }
 
 void Sounds::startAlarm()

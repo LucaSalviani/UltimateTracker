@@ -97,6 +97,9 @@ private:
     void checkGoalReached();
     void showDayMenu(const QDate& day, const QPoint& globalPos);
 
+    // ---- festejos (M8): si en el mismo momento pasan varias cosas, gana la más importante
+    void celebrate(int kind, const QString& kicker, const QString& title, const QString& subtitle);
+
     void toast(const QString& text);
     void toastAction(const QString& text, const QString& action, std::function<void()> fn);
     void quitApp();
@@ -132,6 +135,8 @@ private:
     QToolButton* m_btnFull = nullptr;
     qint64       m_noteTarget = 0;
     class GoalPanel* m_goalPanel = nullptr;
+    class Celebration* m_celebration = nullptr;
+    struct PendingCelebration { int kind = -1; QString kicker, title, subtitle; } m_pendingCelebration;
     QWidget*     m_titleBar = nullptr;
     QPointer<QPropertyAnimation> m_goalAnim;        // pomodoro al que va la nota del reproductor
 

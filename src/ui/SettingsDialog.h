@@ -53,6 +53,8 @@ private:
     QButtonGroup* m_themes;
     QComboBox*    m_size;
     QCheckBox*    m_resizable;
+    QCheckBox*    m_groupByActivity;   // M8
+    QCheckBox*    m_celebrations;      // M8
 
     // Sistema
     QCheckBox* m_autostart;

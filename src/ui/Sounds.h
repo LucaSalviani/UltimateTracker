@@ -12,12 +12,14 @@ public:
     explicit Sounds(QObject* parent = nullptr);
 
     void playChime();
+    void playAchievement();   // M8: logro (meta, hito)
     void startAlarm();
     void stopAlarm();
     bool alarmActive() const { return m_alarm.isPlaying() || m_ramp.isActive(); }
 
 private:
     QSoundEffect m_chime;
+    QSoundEffect m_achievement;
     QSoundEffect m_alarm;
     QTimer       m_ramp;
 };

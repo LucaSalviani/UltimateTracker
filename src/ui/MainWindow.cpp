@@ -5,6 +5,7 @@
 #include "ui/ActivitiesWidget.h"
 #include "ui/FolderMenu.h"
 #include "ui/GoalPanel.h"
+#include "ui/Celebration.h"
 #include "core/Goals.h"
 #include "ui/LiveStats.h"
 #include "ui/TimerDeck.h"
@@ -215,6 +216,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     auto* gridPage = new QWidget(this);
     m_grid = new GridWidget(gridPage);
     m_grid->setProportional(m_db->setting("proportional", 0).toBool());
+    m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
     m_toast = new QLabel(gridPage);
     m_toast->setProperty("role", "toast");
     m_toast->setAlignment(Qt::AlignCenter);
@@ -317,9 +319,17 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         reloadGrid();
     });
     connect(m_session, &SessionController::studyRecorded, this, &MainWindow::onStudyRecorded);
-    connect(m_session, &SessionController::pomodoroCompleted, this, [this] {
+    connect(m_session, &SessionController::pomodoroCompleted, this, [this](qint64 id) {
         m_sounds->playChime();
         bringToFront();
+        // M8: animación de logro
+        const auto p = m_db->pomodoro(id);
+        if (!p) return;
+        const qint64 total = m_tree.rollUp(m_db->studyByFolder()).value(p->folderId);
+        celebrate(int(Celebration::Kind::Pomodoro),
+                  QStringLiteral("Pomodoro %1 completo").arg(m_todayPomos.size() + 1, 2, 10, QChar('0')),
+                  fmt::duration(qMax(p->studiedSec, p->plannedSec)),
+                  QStringLiteral("%1 · %2 en total").arg(m_tree.path(p->folderId), fmt::duration(int(total))));
     });
     connect(m_session, &SessionController::breakFinished, this, [this] {
         m_sounds->startAlarm();
@@ -449,6 +459,7 @@ QWidget* MainWindow::buildTitleBar()
         m_stats->setJokersPerWeek(m_jokers);
         m_deck->setAdjustOptions(deckAdjustFrom(m_db));
         applySizePreset();
+        m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
         if (!m_session->inProgress()) {
             m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
             m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -922,7 +933,21 @@ void MainWindow::reloadFolders()
     m_tree = FolderTree(m_db->folders());
     QHash<qint64, QString> paths;
     for (const Folder& f : m_tree.all()) paths.insert(f.id, m_tree.path(f.id));
-    if (m_grid) m_grid->setFolderPaths(paths);
+    if (m_grid) {
+        m_grid->setFolderPaths(paths);
+        // M8: cada actividad con un color tenue (estable: sigue el orden del árbol).
+        static const QColor kActivityColors[] = {
+            {0x6f, 0x9b, 0xd1}, {0xd1, 0x8f, 0x6f}, {0x8f, 0xc2, 0x8a}, {0xc7, 0x9b, 0xd6},
+            {0xd6, 0xc0, 0x6f}, {0x6f, 0xc2, 0xbd}, {0xd1, 0x6f, 0x8f}, {0xa8, 0xa8, 0xa8}};
+        QHash<qint64, QString> names;
+        QHash<qint64, QColor> colors;
+        int i = 0;
+        for (const Folder& f : m_tree.all()) {
+            names.insert(f.id, f.name);
+            colors.insert(f.id, kActivityColors[i++ % 8]);
+        }
+        m_grid->setFolderLooks(names, colors);
+    }
     if (m_session->folderId() && !m_tree.contains(m_session->folderId()))
         m_session->setFolderId(m_tree.children(0).isEmpty() ? 0 : m_tree.children(0).first());
     if (m_folderMenu) rebuildFolderMenu();
@@ -1092,6 +1117,8 @@ void MainWindow::onStudyRecorded(qint64 folderId, qint64 seconds)
                 ? QStringLiteral("%1: ¡llegaste a %2 %3!").arg(name).arg(h).arg(h == 1 ? "hora" : "horas")
                 : QStringLiteral("%1: ¡%2 horas! (de 10.000)").arg(name).arg(h);
             toast(msg);
+            celebrate(int(Celebration::Kind::Milestone), QStringLiteral("Hito alcanzado"),
+                      QStringLiteral("%1 horas").arg(h), name);
             if (m_tray) m_tray->showMessage(QStringLiteral("UltimateTracker"), msg, QSystemTrayIcon::Information, 5000);
         }
     }
@@ -1551,8 +1578,9 @@ void MainWindow::checkGoalReached()
         if (p.status != PomoStatus::Running && p.status != PomoStatus::Parked) sec += p.studiedSec;
     if (sec < qint64(parsed.totalMin) * 60) return;
     m_db->setSetting(key, QDateTime::currentDateTime().toString(Qt::ISODate));
-    m_sounds->playChime();
     toast(QStringLiteral("🎯 ¡Meta del día cumplida! %1").arg(fmt::duration(int(sec))));
+    celebrate(int(Celebration::Kind::Goal), QStringLiteral("Meta del día"), QStringLiteral("¡Cumplida!"),
+              QStringLiteral("%1 estudiadas hoy").arg(fmt::duration(int(sec))));
 }
 
 void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)
@@ -1569,6 +1597,24 @@ void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)
             setZoom(GridWidget::Zoom::Day);
         });
     menu.exec(globalPos);
+}
+
+void MainWindow::celebrate(int kind, const QString& kicker, const QString& title, const QString& subtitle)
+{
+    if (!m_db->setting("celebrations", 1).toBool()) {
+        if (kind != int(Celebration::Kind::Pomodoro)) m_sounds->playAchievement();
+        return;
+    }
+    const bool scheduled = m_pendingCelebration.kind >= 0;
+    if (kind > m_pendingCelebration.kind) m_pendingCelebration = {kind, kicker, title, subtitle};
+    if (scheduled) return;
+    QTimer::singleShot(60, this, [this] {
+        const PendingCelebration c = m_pendingCelebration;
+        m_pendingCelebration = {};
+        if (!m_celebration) m_celebration = new Celebration(this);
+        if (c.kind != int(Celebration::Kind::Pomodoro)) m_sounds->playAchievement();
+        m_celebration->play(Celebration::Kind(c.kind), c.kicker, c.title, c.subtitle);
+    });
 }
 
 void MainWindow::toast(const QString& text)

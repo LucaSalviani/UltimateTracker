@@ -38,6 +38,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/TimerDeck.h         src/ui/TimerDeck.cpp
     src/ui/LiveStats.h         src/ui/LiveStats.cpp
     src/ui/GoalPanel.h         src/ui/GoalPanel.cpp
+    src/ui/Celebration.h       src/ui/Celebration.cpp
     src/ui/SettingsDialog.h    src/ui/SettingsDialog.cpp
     src/ui/StatsWidget.h       src/ui/StatsWidget.cpp
     src/ui/MainWindow.h        src/ui/MainWindow.cpp
@@ -49,6 +50,7 @@ qt_add_resources(UltimateTracker "assets"
         resources/style.qss
         resources/sounds/chime.wav
         resources/sounds/alarm.wav
+        resources/sounds/achievement.wav
 )
 target_link_libraries(UltimateTracker PRIVATE constancia_core Qt6::Widgets Qt6::Multimedia Qt6::Network)
 if(WIN32)

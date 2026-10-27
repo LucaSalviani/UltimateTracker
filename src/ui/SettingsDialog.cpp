@@ -202,6 +202,11 @@ QWidget* SettingsDialog::pageAppearance()
     m_resizable = new QCheckBox(QStringLiteral("Permitir cambiar el tamaño de la ventana desde los bordes"), w);
     m_resizable->setChecked(m_db->setting("resizable", 1).toBool());
 
+    m_groupByActivity = new QCheckBox(QStringLiteral("Agrupar los cuadraditos por actividad"), w);
+    m_groupByActivity->setChecked(m_db->setting("group_by_activity", 1).toBool());
+    m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir la meta o llegar a un hito"), w);
+    m_celebrations->setChecked(m_db->setting("celebrations", 1).toBool());
+
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Tamaño de la ventana"), m_size);
 
@@ -212,6 +217,8 @@ QWidget* SettingsDialog::pageAppearance()
     lay->addSpacing(8);
     lay->addLayout(form);
     lay->addWidget(m_resizable);
+    lay->addWidget(m_groupByActivity);
+    lay->addWidget(m_celebrations);
     lay->addWidget(note(QStringLiteral("Cambiar el tamaño vuelve todas las vistas a su tamaño original."), w));
     lay->addStretch();
     return w;
@@ -276,6 +283,8 @@ void SettingsDialog::accept()
         m_db->setSetting("theme", b->property("themeKey").toString());
     m_db->setSetting("window_size", m_size->currentData().toString());
     m_db->setSetting("resizable", m_resizable->isChecked() ? 1 : 0);
+    m_db->setSetting("group_by_activity", m_groupByActivity->isChecked() ? 1 : 0);
+    m_db->setSetting("celebrations", m_celebrations->isChecked() ? 1 : 0);
 
     m_db->setSetting("autostart", m_autostart->isChecked() ? 1 : 0);
     m_db->setSetting("greeting", m_greeting->isChecked() ? 1 : 0);
