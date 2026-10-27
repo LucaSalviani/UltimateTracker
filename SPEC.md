@@ -31,7 +31,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
   - **Rueda del mouse** sobre el tiempo (sensibilidad configurable).
   - **Click en el tiempo** para escribir los minutos (`45`, `90` o `1:30`; Enter confirma, Esc cancela).
   - Botones **−1 −5 · +5 +1** (los de afuera y los de adentro con paso configurable). Sin ellos queda el − / + clásico (de a 5 arriba de 10, de a 1 abajo).
-- Al terminar el pomodoro aparece **"¿En qué trabajaste?"** (opcional). La nota se ve en el tooltip del cuadradito y se edita con click derecho.
+- La nota de un pomodoro se agrega con click derecho y se ve en el tooltip.
 - Adentro está todo lo que avanza, cambia o mueve el tiempo: actividad, duración (− / +), play/pausa, terminar pomodoro, iniciar/saltear recreo, terminar recreo, silenciar.
 - La actividad se puede cambiar en cualquier momento:
   - En el primer minuto del pomodoro: se corrige la actividad (fue un error).
@@ -73,16 +73,22 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Al cambiar de vista los cuadraditos entran en cascada con un rebote; uno nuevo "salta" solo.
 - **Fantasmas de la meta**: los pomodoros que faltan para la meta del día se ven punteados después de los reales (también en semana y mes). Click en uno abre la meta.
 - En semana y mes, el día bajo el mouse se ilumina con "ver día ›" y cursor de mano.
-- Toggle **proporcional**: el área de cada cuadradito pasa a ser proporcional a sus minutos.
+- **Tamaño**: el botón de la barra cicla entre todos iguales, proporcional solo a lo ancho (alto fijo, largo ∝ minutos) y proporcional completo (área ∝ minutos). En Ajustes se pueden desactivar variantes o fijar una y esconder el botón.
+- **Estilo** (*Ajustes › Cuadraditos*, con muestra en vivo):
+  - Forma: Clásico, Inclinado (romboide apoyado sobre su base), Tarjeta (vertical, actividad arriba y tiempo abajo), Biselado (esquinas cortadas).
+  - Marca de hecho: ninguna, diagonal cortada (no tapa el tiempo), mira (arcos y marcas con el centro libre), sello (círculo con tilde).
+  - Llenado del que corre: barra, líquido con olas, segmentos tipo batería, reloj.
+  - Al completarse: rebote, sellado, destello, volteo (después del festejo grande).
 - Vistas tipo Google Calendar:
   - **Día** (al abrir siempre muestra hoy): ventana horizontal chica. Banda gris con la tarea del día (opcional) a la izquierda y la fecha a la derecha (por defecto `26/10/26`; en Ajustes se puede poner escrita).
   - **Semana** (lunes a domingo): la ventana se agranda.
   - **Mes**: la ventana se agranda más. Siempre se ven los cuadraditos.
 
-## Meta del día
-- Botón de la diana (o **G**): panel que sale desde la derecha. Click derecho en un día de la semana o el mes → "Poner meta…" para planearla.
+## Objetivo del día
+- La barra de arriba muestra el objetivo ("Objetivo: Parcial de SO · 2/6") o "Trabajo de hoy" si no hay; click ahí, el botón de la diana o **G** abren el panel que sale desde la derecha. Click derecho en un día de la semana o el mes → "Poner meta…" para planearla.
 - La tarea del día (texto) también se edita ahí.
-- **Por tiempo** (ej. 4 h → se pasa a pomodoros con la duración que estés usando, redondeando para arriba) o **por pomodoros** (`3x30 + 2x25 + 2x60`).
+- **Por tiempo** (ej. 4 h → se pasa a pomodoros con la duración que estés usando, redondeando para arriba) o **por pomodoros**: filas "[−] 3 [+] × [−] 30m [+]" con "+ Agregar" (scrollea si hay muchas), o escrito como `3x30 + 2x25` (se elige en Ajustes › General).
+- Por pomodoros, el reproductor viene precargado con la duración del próximo bloque del objetivo.
 - **Repetir** como en Google Calendar: solo ese día, todos los días, de lunes a viernes o días elegidos. Cambiar una meta que se repite corta la anterior el día antes (el pasado no cambia). Quitar: "solo este día" o "desde este día en adelante".
 - Progreso en el panel; al cumplirla, festejo con sonido (una vez por día).
 
@@ -109,12 +115,14 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Cuando termina un timer, la ventana sale sola y suena. Si estás en pantalla completa (juego, presentación, video) no se mete adelante: avisa en la bandeja (se puede apagar).
 - **Tamaño**: chica / mediana (por defecto, +15 %) / grande (+35 %) en *Ajustes › Apariencia*.
 - **Pantalla completa**: botón de la barra o **F11**; **Esc** sale.
-- **Temas de color**: Oscuro (por defecto), Día, Ultra oscuro, Rosa, Rojo, Azul y Mostaza, con vista previa en vivo.
+- **Temas de color**: color (Gris por defecto, Ultra, Rosa, Rojo, Azul, Mostaza) + modo Oscuro / Claro / Seguir a Windows, con vista previa en vivo. Los claros, estilo MKBHD.
+- **Mini reproductor flotante** (M): ventanita siempre visible con pomodoro, actividad, tiempo, play/pausa, terminar y saltear recreo.
 
 ## Sistema
 - **Iniciar con Windows** (entrada en `HKCU\…\Run` con `--autostart`).
 - **Saludo**: al iniciar con Windows, una vez por día: "Buen día, ¿estás listo para ser productivo?" con una frase, la racha, lo de ayer y la meta. "A trabajar" se expande hasta la ventana y abre la meta del día; "Por ahora no" cierra el programa. Para verlo a mano: `UltimateTracker.exe --greeting`.
 - **Atajo global Ctrl + Alt + P**: pausar / seguir desde cualquier lado.
+- **Modo desarrollador**: trabaja sobre una copia de la base; botón 🧪 para completar ya, acelerar el tiempo y ver festejos, sonidos y saludo.
 - **Copia de seguridad diaria**: `%APPDATA%\UltimateTracker\backups` (o la carpeta que elijas), se guardan las últimas 7.
 
 ## Fuera de la v1

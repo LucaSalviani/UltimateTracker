@@ -47,12 +47,13 @@ C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\UltimateTracker\Ultim
 |---|---|
 | Arrancar / pausar / seguir | Botón grande del reproductor o **Espacio** |
 | Elegir actividad y duración | Arriba del reproductor; la duración con los botones −1 −5 +5 +1, la rueda del mouse sobre el tiempo o click en el tiempo para escribirla |
-| Meta del día | Botón de la diana o **G**; para otro día, click derecho sobre el día en la semana o el mes |
+| Objetivo del día | Click en la barra de arriba, botón de la diana o **G**; para otro día, click derecho sobre el día en la semana o el mes |
+| Mini reproductor flotante | **M** o ⋯ → Mini reproductor (doble click en él abre la app) |
+| Tamaño de los cuadraditos | Botón de la barra: cicla entre iguales, solo ancho y proporcional completo |
 | Pantalla completa | Botón de la barra o **F11** (Esc sale) |
 | Pausar / seguir desde cualquier lado | **Ctrl + Alt + P** |
 | Vista día → semana → mes | Botones de la barra superior, **Ctrl + rueda** o **Ctrl −** / **Ctrl +** |
 | Ir a un día | Click sobre el día en la vista semana o mes |
-| Cuadraditos proporcionales al tiempo | Botón de los dos cuadrados en la barra superior |
 | Esconder en un borde | Botón ⇥, o arrastrar la ventana y soltar con el mouse contra cualquier borde. Se vuelve a abrir con un click en la pestañita. |
 | Siempre visible | Botón del pin |
 | Actividades y ajustes | Botón ⋯ |
@@ -130,3 +131,16 @@ Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert
 | `bfc5ff2` | M9 · backup, inicio con Windows, atajo global, no molestar |
 | `842eff6` | M10 · saludo al iniciar |
 | `96d1f8f` | M11 · horas previas |
+| `1927114` | M12 · arreglos: editor del cronómetro y pantalla completa |
+| `921e05e` | M13 · sin "¿En qué trabajaste?" |
+| `a2f5a94` | M14 · "Objetivo" y la barra de arriba |
+| `dcada70` | M15 · modo claro para cada color |
+| `f90ba49` | M16 · tamaños de cuadraditos cíclicos |
+| `1a28944` | M17 · objetivo con botones y precarga del próximo pomodoro |
+| `388d9e4` | M18 · estilo de cuadraditos (formas, marcas, llenado, completado) |
+| `1a8b3ee` | M19 · mini reproductor flotante |
+| `1795836` | M20 · modo desarrollador |
+
+## Modo desarrollador
+
+*Ajustes → Sistema → Modo desarrollador* y reiniciar. La app abre una **copia** de tu base (`ultimatetracker-pruebas.db`, se rehace en cada arranque) y aparece el botón 🧪: completar ya, acelerar el tiempo (×10, ×60, ×300), ver los festejos, la animación de completado, los sonidos y el saludo. Tus datos reales no se tocan. Para salir: 🧪 → Salir del modo desarrollador.
