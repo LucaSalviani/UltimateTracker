@@ -15,7 +15,7 @@
 #include <QPalette>
 #include <QStandardPaths>
 #include <QStyleFactory>
-#include <QThread>
+#include <QLockFile>
 
 namespace {
 // La app antes se llamaba "Constancia": si existen sus datos y todavía no hay
@@ -40,24 +40,27 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("UltimateTracker"));
     QApplication::setApplicationDisplayName(QStringLiteral("UltimateTracker"));
-    QApplication::setApplicationVersion(QStringLiteral("0.4.0"));
+    QApplication::setApplicationVersion(QStringLiteral("0.7.0"));
     // Vive en la bandeja: cerrar la ventana con algo en marcha no cierra la app.
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
+    // Datos en %APPDATA%\UltimateTracker (o ULTIMATETRACKER_DATA_DIR para pruebas).
+    QString dataDir = qEnvironmentVariable("ULTIMATETRACKER_DATA_DIR");
+    if (dataDir.isEmpty()) dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dataDir);
+
+    // M28: candado de instancia. En un reinicio pedido por la app (modo
+    // desarrollador) se espera a que la anterior termine del todo antes de seguir.
+    QLockFile instanceLock(QDir(dataDir).filePath(QStringLiteral("instance.lock")));
+    instanceLock.setStaleLockTime(0);
+    const bool restarted = QCoreApplication::arguments().contains(QStringLiteral("--restarted"));
+    const bool gotLock = instanceLock.tryLock(restarted ? 15000 : 0);
+    if (restarted && !gotLock) return 0;
+
     // Una sola instancia: si ya está abierta, la traemos al frente.
     const QString serverName = QStringLiteral("ultimatetracker-") + qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER"));
-    if (QCoreApplication::arguments().contains(QStringLiteral("--restarted"))) {
-        // M20: reinicio pedido por la app: esperar a que la instancia anterior cierre.
-        for (int i = 0; i < 40; ++i) {
-            QLocalSocket probe;
-            probe.connectToServer(serverName);
-            if (!probe.waitForConnected(100)) break;
-            probe.abort();
-            QThread::msleep(100);
-        }
-    }
-    {
+    if (!restarted) {
         QLocalSocket probe;
         probe.connectToServer(serverName);
         if (probe.waitForConnected(300)) {
@@ -69,11 +72,8 @@ int main(int argc, char* argv[])
     QLocalServer::removeServer(serverName);
     QLocalServer server;
     server.listen(serverName);
+    app.setProperty("instanceServer", QVariant::fromValue<QObject*>(&server));
 
-    // Datos en %APPDATA%\UltimateTracker (o ULTIMATETRACKER_DATA_DIR para pruebas).
-    QString dataDir = qEnvironmentVariable("ULTIMATETRACKER_DATA_DIR");
-    if (dataDir.isEmpty()) dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir().mkpath(dataDir);
     const QString dbPath = QDir(dataDir).filePath(QStringLiteral("ultimatetracker.db"));
     migrateOldData(dataDir, dbPath);
     app.setProperty("dataDir", dataDir);   // para las copias de seguridad (M9)

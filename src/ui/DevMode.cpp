@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFile>
 #include <QProcess>
+#include <QLocalServer>
+#include <QVariant>
 
 namespace devmode {
 
@@ -35,9 +37,12 @@ void setActive(bool on) { g_active = on; }
 
 QString prepareSandbox(const QString& realDbPath, const QString& dataDir)
 {
-    const QString sandbox = QDir(dataDir).filePath(QStringLiteral("ultimatetracker-pruebas.db"));
+    QString sandbox = QDir(dataDir).filePath(QStringLiteral("ultimatetracker-pruebas.db"));
     for (const QString& suffix : {QString(), QStringLiteral("-wal"), QStringLiteral("-shm")})
         QFile::remove(sandbox + suffix);
+    // Si la copia vieja sigue tomada, se usa otro nombre (nunca se cae a la base real).
+    if (QFile::exists(sandbox))
+        sandbox = QDir(dataDir).filePath(QStringLiteral("ultimatetracker-pruebas-%1.db").arg(QDateTime::currentSecsSinceEpoch()));
     // Copia consistente de la real (incluye lo que esté en el WAL).
     Database real;
     if (!real.open(realDbPath) || !real.backupTo(sandbox)) return {};
@@ -74,6 +79,8 @@ void restartApp()
 {
     // La nueva instancia espera a que esta termine (si no, el "una sola
     // instancia" la cerraría al ver esta todavía abierta).
+    // Se suelta el "una sola instancia" ya; la nueva espera el candado de instancia.
+    if (auto* server = qobject_cast<QLocalServer*>(qApp->property("instanceServer").value<QObject*>())) server->close();
     QProcess::startDetached(QCoreApplication::applicationFilePath(), {QStringLiteral("--restarted")});
 }
 

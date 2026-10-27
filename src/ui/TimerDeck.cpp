@@ -43,6 +43,19 @@ QFont deckFont(qreal px, int weight = QFont::DemiBold)
     return f;
 }
 
+// M28: el visor sigue al tema: oscuro en los temas oscuros, claro en los claros.
+struct Visor { QColor bgTop, bgBottom, edge, label, idle, track, reelEdge, reelBody, reelSpoke, reelHub, times, ledOff; };
+Visor visor()
+{
+    if (!theme::current().light)
+        return {{0x14, 0x14, 0x14}, {0x0c, 0x0c, 0x0c}, {0x2c, 0x2c, 0x2c}, {0x9a, 0x9a, 0x9a}, {0xd8, 0xd8, 0xd8},
+                {0x2e, 0x2e, 0x2e}, {0x4a, 0x4a, 0x4a}, {0x12, 0x12, 0x12}, {0x6a, 0x6a, 0x6a}, {0x2a, 0x2a, 0x2a},
+                {0x8a, 0x8a, 0x8a}, {0x55, 0x55, 0x55}};
+    auto m = [](qreal t) { return theme::mix(theme::bg, theme::text, t); };
+    return {m(0.015).lighter(103), m(0.05), m(0.16), m(0.55), m(0.88), m(0.12), m(0.30), m(0.03), m(0.45), m(0.18),
+            m(0.55), m(0.30)};
+}
+
 void repolish(QWidget* w)
 {
     w->style()->unpolish(w);
@@ -463,16 +476,17 @@ void DeckDisplay::paintReel(QPainter& p, const QPointF& c, qreal r, bool spinnin
 {
     p.save();
     p.translate(c);
-    p.setPen(QPen(QColor(0x4a, 0x4a, 0x4a), 1.4));
-    p.setBrush(QColor(0x12, 0x12, 0x12));
+    const Visor V = visor();
+    p.setPen(QPen(V.reelEdge, 1.4));
+    p.setBrush(V.reelBody);
     p.drawEllipse(QPointF(0, 0), r, r);
     p.rotate(spinning ? m_phase * 140.0 : 0.0);
-    p.setPen(QPen(QColor(0x6a, 0x6a, 0x6a), 1.6, Qt::SolidLine, Qt::RoundCap));
+    p.setPen(QPen(V.reelSpoke, 1.6, Qt::SolidLine, Qt::RoundCap));
     for (int i = 0; i < 3; ++i) {
         p.drawLine(QPointF(0, r * 0.28), QPointF(0, r * 0.78));
         p.rotate(120);
     }
-    p.setBrush(QColor(0x2a, 0x2a, 0x2a));
+    p.setBrush(V.reelHub);
     p.setPen(Qt::NoPen);
     p.drawEllipse(QPointF(0, 0), r * 0.22, r * 0.22);
     p.restore();
@@ -489,9 +503,10 @@ void DeckDisplay::paintEvent(QPaintEvent*)
 
     // Pantalla: negro profundo con un brillo sutil arriba, como un visor de casetera.
     QLinearGradient bg(R.topLeft(), R.bottomLeft());
-    bg.setColorAt(0, QColor(0x14, 0x14, 0x14));
-    bg.setColorAt(1, QColor(0x0c, 0x0c, 0x0c));
-    p.setPen(QPen(QColor(0x2c, 0x2c, 0x2c), 1));
+    const Visor V = visor();
+    bg.setColorAt(0, V.bgTop);
+    bg.setColorAt(1, V.bgBottom);
+    p.setPen(QPen(V.edge, 1));
     p.setBrush(bg);
     p.drawRoundedRect(R, 10, 10);
 
@@ -531,14 +546,14 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     QFont hf = deckFont(qBound(10.0, H * 0.075, 14.0));
     hf.setLetterSpacing(QFont::AbsoluteSpacing, 1.6);
     p.setFont(hf);
-    p.setPen(QColor(0x9a, 0x9a, 0x9a));
+    p.setPen(V.label);
     p.drawText(QRectF(ledC.x() + 12, R.top() + pad - 2, W, 18), Qt::AlignLeft | Qt::AlignVCenter, label);
 
     // Indicador a la derecha: ▶ / ❚❚ / ■ en chiquito, como en las caseteras.
     {
         const QRectF ind(R.right() - pad - 12, R.top() + pad, 12, 12);
         p.setPen(Qt::NoPen);
-        p.setBrush(ledLit ? accent : QColor(0x55, 0x55, 0x55));
+        p.setBrush(ledLit ? accent : V.ledOff);
         if (mode == Mode::Running || mode == Mode::Break) {
             QPainterPath tri;
             tri.moveTo(ind.left() + 2, ind.top());
@@ -569,7 +584,7 @@ void DeckDisplay::paintEvent(QPaintEvent*)
         const qreal total = s * 0.9 + s * 0.35 + tw;
         qreal x = center.center().x() - total / 2;
         const qreal y = center.center().y() - s / 2;
-        QColor c(0xe8, 0xe8, 0xe8);   // el visor es siempre oscuro
+        QColor c = V.idle;
         if (!blinkOn) c.setAlphaF(0.55);
         p.setPen(Qt::NoPen);
         p.setBrush(c);
@@ -597,9 +612,10 @@ void DeckDisplay::paintEvent(QPaintEvent*)
         p.setPen(gc);
         p.drawText(center, Qt::AlignCenter, ghost);
 
+        // En claro, el acento tal cual (más potente); en oscuro, un poco más luminoso.
         QColor dc = (mode == Mode::Ready || mode == Mode::BreakReady)
-                        ? QColor(0xd8, 0xd8, 0xd8)
-                        : accent.lighter(135);
+                        ? V.idle
+                        : (theme::current().light ? accent : accent.lighter(135));
         if (mode == Mode::BreakOver && !blinkOn) dc.setAlphaF(0.25);
         p.setPen(dc);
         p.drawText(center, Qt::AlignCenter, digits);
@@ -623,18 +639,18 @@ void DeckDisplay::paintEvent(QPaintEvent*)
 
     const QRectF track(bx0, by - 6, bx1 - bx0, 4);
     p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0x2e, 0x2e, 0x2e));
+    p.setBrush(V.track);
     p.drawRoundedRect(track, 2, 2);
     if (frac > 0) {
         p.setBrush(accent);
         p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * frac, track.height()), 2, 2);
-        p.setBrush(QColor(0xe8, 0xe8, 0xe8));
+        p.setBrush(V.idle);
         p.drawEllipse(QPointF(track.left() + track.width() * frac, track.center().y()), 4.5, 4.5);
     }
     // Tiempos como en Spotify: transcurrido a la izquierda, total a la derecha
     QFont tf = deckFont(11, QFont::Medium);
     p.setFont(tf);
-    p.setPen(QColor(0x8a, 0x8a, 0x8a));
+    p.setPen(V.times);
     const int elapsed = (mode == Mode::Ready || mode == Mode::BreakReady) ? 0 : int(total - m_model.remainingSec);
     const int totalShown = (mode == Mode::Ready || mode == Mode::BreakReady) ? m_model.durationMin * 60 : int(total);
     p.drawText(QRectF(bx0, by, 80, 14), Qt::AlignLeft | Qt::AlignVCenter, fmt::clock(qMax(0, elapsed)));

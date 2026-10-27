@@ -29,6 +29,9 @@ public:
     void accept() override;
     void reject() override;
 
+protected:
+    void keyPressEvent(QKeyEvent* e) override;
+
 signals:
     void tileSizePreview(int percent);   // M23: vista previa del tamaño base
 

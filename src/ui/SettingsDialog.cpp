@@ -14,6 +14,7 @@
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -128,6 +129,9 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Guardar"));
+    buttons->button(QDialogButtonBox::Ok)->setAutoDefault(false);
+    buttons->button(QDialogButtonBox::Ok)->setDefault(false);
+    buttons->button(QDialogButtonBox::Cancel)->setAutoDefault(false);
     buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Cancelar"));
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -517,13 +521,19 @@ void SettingsDialog::accept()
     const QString dataDir = qApp->property("dataDir").toString();
     if (m_devMode->isChecked() != devmode::enabledFlag(dataDir)) {
         devmode::setEnabledFlag(dataDir, m_devMode->isChecked());
-        m_restartRequested = QMessageBox::question(
-            this, QStringLiteral("Modo desarrollador"),
-            m_devMode->isChecked() ? QStringLiteral("Para entrar al modo de pruebas hay que reiniciar la app. ¿Reiniciar ahora?")
-                                   : QStringLiteral("Para volver a tus datos reales hay que reiniciar la app. ¿Reiniciar ahora?"),
-            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes;
+        m_restartRequested = true;   // M28: se reinicia de una
     }
     QDialog::accept();
+}
+
+// M28: Enter no cierra Ajustes (se usa para confirmar un número en un campo).
+void SettingsDialog::keyPressEvent(QKeyEvent* e)
+{
+    if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+        if (QWidget* f = focusWidget()) f->clearFocus();
+        return;
+    }
+    QDialog::keyPressEvent(e);
 }
 
 void SettingsDialog::reject()
