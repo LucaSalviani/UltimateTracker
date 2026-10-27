@@ -165,6 +165,11 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     buttons->button(QDialogButtonBox::Ok)->setDefault(false);
     buttons->button(QDialogButtonBox::Cancel)->setAutoDefault(false);
     buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Cancelar"));
+    // M38: vuelve la sección que estás viendo a los valores por defecto (se guarda con Guardar).
+    auto* reset = buttons->addButton(QStringLiteral("Restablecer esta sección"), QDialogButtonBox::ResetRole);
+    reset->setAutoDefault(false);
+    reset->setToolTip(QStringLiteral("Pone los valores por defecto en esta sección. No se guarda hasta que toques Guardar."));
+    connect(reset, &QPushButton::clicked, this, [this] { resetSection(m_pages->currentIndex()); });
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
@@ -685,4 +690,77 @@ void SettingsDialog::reject()
     emit groupPreview(m_originalGroup);
     emit tileSizePreview(m_originalTileSize);
     QDialog::reject();
+}
+
+// M38: los valores por defecto son los mismos que usa la app cuando no hay nada
+// guardado (o sea, los tuyos de M33). El modo de pruebas no se toca.
+void SettingsDialog::resetSection(int page)
+{
+    auto pick = [](QComboBox* c, int i) { c->setCurrentIndex(i); };
+    switch (page) {
+    case 0:   // General
+        m_work->setValue(25);
+        m_break->setValue(10);
+        m_jokers->setValue(2);
+        pick(m_dateFormat, 0);
+        m_dayStart->setValue(4);
+        pick(m_goalInput, 0);
+        break;
+    case 1:   // Cronómetro
+        m_wheel->setChecked(true);
+        m_wheelStep->setValue(1);
+        m_type->setChecked(true);
+        m_extraButtons->setChecked(false);
+        m_stepSmall->setValue(1);
+        m_stepBig->setValue(5);
+        break;
+    case 2: { // Apariencia: gris oscuro, sin acentos fuertes
+        m_strong->setChecked(false);
+        for (QAbstractButton* b : m_modes->buttons())
+            if (b->property("mode") == "dark") b->click();
+        for (QAbstractButton* b : m_themes->buttons())
+            if (b->property("color") == "gray") b->click();
+        pick(m_visorStyle, 0);
+        pick(m_size, qMax(0, m_size->findData("medium")));
+        m_resizable->setChecked(true);
+        break;
+    }
+    case 3:   // Cuadraditos
+        pick(m_tileShape, 0);
+        pick(m_tilePalette, 0);
+        pick(m_tileBorder, 0);
+        pick(m_tileMark, 2);
+        pick(m_tileFill, 0);
+        pick(m_tileComplete, 2);
+        pick(m_tileHighlight, 1);
+        pick(m_tileNumberPos, 1);
+        m_tilePrefix->setChecked(true);
+        m_tileInverted->setChecked(true);
+        m_tileStripe->setChecked(false);
+        m_tileCaption->setChecked(false);
+        m_tileSize->setValue(100);
+        for (QCheckBox* c : m_sizeModes) c->setChecked(true);
+        m_sizeButton->setChecked(true);
+        pick(m_sizeDefault, 0);
+        pick(m_groupStyle, 1);
+        m_activityColors->setChecked(true);
+        break;
+    case 4:   // Festejos y sonidos
+        m_celebrations->setChecked(true);
+        for (QComboBox* c : m_celebrationStyles) pick(c, 0);
+        pick(m_soundChime, 0);
+        pick(m_soundAchievement, 0);
+        pick(m_soundAlarm, 0);
+        m_soundVolume->setValue(100);
+        break;
+    case 5:   // Sistema
+        m_autostart->setChecked(true);
+        m_greeting->setChecked(true);
+        m_hotkey->setChecked(true);
+        m_quietFullscreen->setChecked(true);
+        m_backup->setChecked(true);
+        m_backupDir->clear();
+        break;
+    default: break;
+    }
 }

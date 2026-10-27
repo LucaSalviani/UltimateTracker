@@ -45,6 +45,7 @@ private:
     QWidget* pageTiles();   // M18
     QWidget* pageCelebrations();   // M32
     QWidget* pageSystem();
+    void resetSection(int page);   // M38: valores por defecto de la sección visible
 
     Database* m_db;
     QString   m_originalTheme;
