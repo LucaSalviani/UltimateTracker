@@ -75,6 +75,9 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - **Fantasmas de la meta**: los pomodoros que faltan para la meta del día se ven punteados después de los reales (también en semana y mes). Click en uno abre la meta.
 - En semana y mes, el día bajo el mouse se ilumina con "ver día ›" y cursor de mano.
 - **Tamaño**: el botón de la barra cicla entre todos iguales, proporcional solo a lo ancho (alto fijo, largo ∝ minutos) y proporcional completo (área ∝ minutos). En Ajustes se pueden desactivar variantes o fijar una y esconder el botón.
+- **Resaltar** (*Ajustes › Cuadraditos*): por defecto, el que está corriendo se llena con el color del pomodoro; el rojo del último del día queda como opción.
+- **Número**: adentro arriba al centro, afuera arriba (como en los bocetos) u oculto; con "Nº" opcional. Los números de los cuadraditos usan la fuente del cronómetro.
+- **Proporcional completo**: todas las piezas se encastran como un rompecabezas lo más cuadrado posible, cada actividad junta y con su contorno.
 - **Estilo** (*Ajustes › Cuadraditos*, con muestra en vivo):
   - Forma: Clásico, Inclinado (romboide apoyado sobre su base, esquinas suaves), Tarjeta (vertical), Biselado (dos esquinas cortadas suaves). El número va arriba al centro.
   - Marca de hecho: ninguna, diagonal (finita, del color del número, sin tapar el tiempo), cruz delicada, tilde redondo, tilde cuadrado.
@@ -97,7 +100,13 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Progreso en el panel; al cumplirla, festejo con sonido (una vez por día).
 
 ## Festejos
-- Al terminar un pomodoro, cumplir la meta o llegar a un hito: animación de 2–3 s (anillo tipo visor de cámara que se dibuja, emblema que entra con rebote, tilde, destello). Dorado para los hitos. Click la cierra. Se puede apagar en Ajustes.
+- Al terminar un pomodoro, cumplir el objetivo o llegar a un hito. Estilos (*Ajustes › Apariencia › Festejo*):
+  - Visor: anillo tipo visor de cámara, emblema con rebote (dorado para hitos). Click lo cierra.
+  - Minimalistas, que no tapan ni bloquean: Línea (trazo fino arriba + texto chico), Borde (el contorno de la ventana se dibuja una vez), Tilde (círculo chico con tilde), Cifra ("+25m" grande y finito que sube y se va).
+- Se pueden apagar del todo.
+
+## Sonidos
+- *Ajustes › Cronómetro › Sonidos*, con ▶ para escuchar: fin de pomodoro (Arpegio, Suave, Campana, Madera, Digital, ninguno), logro (Obturador y arpegio, Acorde suave, ninguno), alarma del recreo (Despertador, Marimba, Campanitas) y volumen general. Los genera `tools/make_sounds.py`.
 
 ## Estadísticas
 - Por día, semana, mes y año, filtrables por actividad, con los cuatro contadores.

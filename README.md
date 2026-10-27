@@ -146,6 +146,11 @@ Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert
 | `dee394e` | M23 · cuadraditos v2 (tamaño base, invertidos, paletas, borde, marcas nuevas…) |
 | `39b30e8` | M24 · agrupado en línea recuadrado y tetris en proporcional completo |
 | `43cc66c` | M25 · colores por actividad elegibles |
+| `621d381` | M26 · festejos minimalistas (Línea, Borde, Tilde, Cifra) |
+| `dd61ec3` | M27 · sonidos alternativos y volumen |
+| `5e8157c` | M28 · reinicio del modo desarrollador, Enter en Ajustes, visor claro |
+| `f0cc8cf` | M29 · ajustes de cuadraditos, número afuera, resaltar el que corre |
+| `056cca6` | M30 · proporcional completo como rompecabezas |
 
 ## Modo desarrollador
 
