@@ -2,6 +2,7 @@
 #include "core/FolderTree.h"
 #include "core/DayClock.h"
 #include "core/Format.h"
+#include "core/Export.h"
 #include "ui/ActivitiesWidget.h"
 #include "ui/Fade.h"
 #include "ui/Icons.h"
@@ -10,6 +11,11 @@
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDateTime>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QMenu>
+#include <QStandardPaths>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
@@ -443,6 +449,18 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     top->addSpacing(10);
     top->addWidget(m_folder);
 
+    // M39: exportar a CSV (lo que estás viendo, o todo)
+    auto* exp = new QToolButton(this);
+    exp->setIcon(icons::get(icons::Id::Export));
+    exp->setToolTip(QStringLiteral("Exportar a CSV (Excel, Sheets)"));
+    exp->setPopupMode(QToolButton::InstantPopup);
+    auto* expMenu = new QMenu(exp);
+    expMenu->addAction(QStringLiteral("Lo que estoy viendo (período y actividad)…"), this, [this] { exportCsv(false); });
+    expMenu->addAction(QStringLiteral("Todo el historial…"), this, [this] { exportCsv(true); });
+    exp->setMenu(expMenu);
+    top->addSpacing(4);
+    top->addWidget(exp);
+
     m_canvas = new StatsCanvas(this);
     auto* scroll = new QScrollArea(this);
     scroll->setWidget(m_canvas);
@@ -510,6 +528,45 @@ void StatsWidget::step(int dir)
 {
     fade::cross(m_canvas, 150);
     shift(dir);
+}
+
+void StatsWidget::exportCsv(bool everything)
+{
+    const FolderTree tree(m_db->folders());
+    const QDate today = dayclock::logicalDate(QDateTime::currentDateTime());
+    QDate from = periodStart(), to = qMin(periodEnd(), today);
+    QSet<qint64> filter;
+    const qint64 filterId = m_folder->currentData().toLongLong();
+    if (everything) {
+        from = QDate(2000, 1, 1);
+        to = today;
+    } else if (filterId) {
+        filter = tree.subtree(filterId);
+    }
+    QString name;
+    if (everything) name = QStringLiteral("historial");
+    else switch (m_period) {
+        case Period::Day:   name = from.toString(Qt::ISODate); break;
+        case Period::Week:  name = QStringLiteral("semana %1").arg(from.toString(Qt::ISODate)); break;
+        case Period::Month: name = from.toString(QStringLiteral("yyyy-MM")); break;
+        case Period::Year:  name = from.toString(QStringLiteral("yyyy")); break;
+    }
+    if (!everything && filterId && tree.find(filterId)) name += QStringLiteral(" ") + tree.find(filterId)->name;
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Exportar a CSV"),
+                                                      dir + QStringLiteral("/UltimateTracker %1.csv").arg(name),
+                                                      QStringLiteral("CSV (*.csv)"));
+    if (path.isEmpty()) return;
+    const QString csv = csvexport::build(m_db->pomodorosBetween(from, to), m_db->intervalsBetween(from, to), tree,
+                                         filter.isEmpty() ? nullptr : &filter, filter.isEmpty());
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        emit message(QStringLiteral("No pude guardar el archivo"));
+        return;
+    }
+    f.write(csv.toUtf8());
+    f.close();
+    emit message(QStringLiteral("Exportado: %1").arg(QFileInfo(path).fileName()));
 }
 
 void StatsWidget::rebuildFolderCombo()

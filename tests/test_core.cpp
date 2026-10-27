@@ -1,6 +1,7 @@
 // Tests del núcleo con reloj simulado: no hace falta esperar 25 minutos reales.
 #include "core/Database.h"
 #include "core/Goals.h"
+#include "core/Export.h"
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
@@ -556,6 +557,28 @@ private slots:
         QCOMPARE(db.folderColors().value(f), QString("#ff8a00"));
         db.setFolderColor(f, QString());
         QVERIFY(!db.folderColors().contains(f));
+    }
+
+    // M39: CSV
+    void csvExport()
+    {
+        QVector<Folder> fs{{1, 0, "Facultad", 0}, {2, 1, "Física; II", 0}};
+        const FolderTree tree(fs);
+        Pomodoro p;
+        p.id = 1; p.folderId = 2; p.day = QDate(2026, 10, 27);
+        p.startedAt = QDateTime(p.day, QTime(10, 0)).toSecsSinceEpoch();
+        p.studiedSec = 25 * 60; p.plannedSec = 25 * 60; p.endedAt = p.startedAt + 1500;
+        p.status = PomoStatus::Completed; p.note = "dijo \"hola\"";
+        Interval b; b.kind = IntervalKind::Break; b.day = p.day; b.startedAt = p.endedAt; b.seconds = 300;
+        Interval pend; pend.kind = IntervalKind::Pending; pend.day = p.day; pend.startedAt = p.endedAt + 300; pend.seconds = 60;
+        const QString csv = csvexport::build({p}, {pend, b}, tree);
+        const QStringList lines = csv.split("\r\n", Qt::SkipEmptyParts);
+        QCOMPARE(lines.size(), 3);   // encabezado + pomodoro + recreo (el pendiente no)
+        QVERIFY(lines[0].startsWith(QChar(0xFEFF)));
+        QCOMPARE(lines[1], QString("2026-10-27;10:00;10:25;pomodoro;\"Facultad / Física; II\";25,0;25,0;completo;\"dijo \"\"hola\"\"\""));
+        QVERIFY(lines[2].startsWith("2026-10-27;10:25;10:30;recreo;;5,0"));
+        const QSet<qint64> other{1};
+        QCOMPARE(csvexport::build({p}, {}, tree, &other, false).split("\r\n", Qt::SkipEmptyParts).size(), 1);
     }
 };
 

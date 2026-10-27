@@ -22,10 +22,12 @@ public:
     void setJokersPerWeek(int n) { m_jokers = n; }
     void refresh();            // recarga datos (carpetas incluidas)
     void resetToToday();
-    void step(int dir);   // M37: ← → desde el teclado (con fundido)
+    void step(int dir);
+    void exportCsv(bool everything);   // M39
 
 signals:
     void backRequested();
+    void message(const QString& text);   // M39: aviso abajo (toast)
 
 private:
     void shift(int dir);

@@ -69,6 +69,22 @@ void draw(QPainter& p, Id id, const QColor& c)
         p.drawLine(QPointF(14, 18), QPointF(14, 11));
         p.drawLine(QPointF(18, 18), QPointF(18, 6));
         break;
+    case Id::Export: {   // flecha hacia una bandeja
+        p.setBrush(Qt::NoBrush);
+        p.drawLine(QPointF(12, 4.5), QPointF(12, 14));
+        QPainterPath head;
+        head.moveTo(8, 10.5);
+        head.lineTo(12, 14.5);
+        head.lineTo(16, 10.5);
+        p.drawPath(head);
+        QPainterPath tray;
+        tray.moveTo(5, 14.5);
+        tray.lineTo(5, 19);
+        tray.lineTo(19, 19);
+        tray.lineTo(19, 14.5);
+        p.drawPath(tray);
+        break;
+    }
     case Id::Menu:
         p.setBrush(c);
         p.setPen(Qt::NoPen);

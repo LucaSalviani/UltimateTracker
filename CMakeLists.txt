@@ -18,6 +18,7 @@ add_library(constancia_core STATIC
     src/core/FolderTree.h      src/core/FolderTree.cpp
     src/core/Database.h        src/core/Database.cpp
     src/core/Stats.h           src/core/Stats.cpp
+    src/core/Export.h          src/core/Export.cpp
     src/core/SessionController.h src/core/SessionController.cpp
 )
 target_include_directories(constancia_core PUBLIC src)

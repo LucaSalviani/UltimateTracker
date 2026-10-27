@@ -10,6 +10,7 @@ enum class Id {
     Play, Pause, Stop, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
     Proportional, Stats, Menu, Pin, Dock, Minimize, Close, Folder, Back, AppLogo,
     Skip, Mute, FullScreen, ExitFullScreen, Goal,
+    Export,   // M39
 };
 
 // Color que sigue al tema (se resuelve cada vez que se dibuja).

@@ -292,6 +292,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_stats = new StatsWidget(m_db, this);
     m_stats->setJokersPerWeek(m_jokers);
     connect(m_stats, &StatsWidget::backRequested, this, [this] { showOverlay(Overlay::None); });
+    connect(m_stats, &StatsWidget::message, this, &MainWindow::toast);
 
     m_activities = new ActivitiesWidget(m_db, this);
     connect(m_activities, &ActivitiesWidget::backRequested, this, [this] { showOverlay(Overlay::None); });
