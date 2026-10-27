@@ -69,15 +69,18 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
   - **Terminado:** negro (como tachar la hoja), con el tiempo que duró.
   - **Último del día:** **rojo**. Para hoy es provisorio: se pinta rojo mientras no haya nada en marcha.
 - Click derecho sobre un cuadradito → **Mover a actividad**, **Nota**, **Corregir duración** (solo terminados) o **Borrar pomodoro**. Uno terminado se borra al toque con **Deshacer** en el aviso; el que está en marcha o en pausa pide confirmación.
-- **Agrupados por actividad** (se puede apagar en *Ajustes › Apariencia*): en el día y la semana cada actividad arranca en su renglón con un título (● nombre · tiempo); en el mes quedan contiguos. Cada cuadradito tiene abajo una rayita del color de su actividad.
+- **Agrupar** (*Ajustes › Apariencia*): sin agrupar; por actividad con títulos (cada una en su renglón); o en línea, cada actividad recuadrada con una línea fina de su color. En proporcional completo siempre va en un bloque tipo tetris con el contorno de cada actividad.
+- **Colores por actividad**: automáticos, elegidos a mano (Actividades → Color) o apagados.
 - Al cambiar de vista los cuadraditos entran en cascada con un rebote; uno nuevo "salta" solo.
 - **Fantasmas de la meta**: los pomodoros que faltan para la meta del día se ven punteados después de los reales (también en semana y mes). Click en uno abre la meta.
 - En semana y mes, el día bajo el mouse se ilumina con "ver día ›" y cursor de mano.
 - **Tamaño**: el botón de la barra cicla entre todos iguales, proporcional solo a lo ancho (alto fijo, largo ∝ minutos) y proporcional completo (área ∝ minutos). En Ajustes se pueden desactivar variantes o fijar una y esconder el botón.
 - **Estilo** (*Ajustes › Cuadraditos*, con muestra en vivo):
-  - Forma: Clásico, Inclinado (romboide apoyado sobre su base), Tarjeta (vertical, actividad arriba y tiempo abajo), Biselado (esquinas cortadas).
-  - Marca de hecho: ninguna, diagonal cortada (no tapa el tiempo), mira (arcos y marcas con el centro libre), sello (círculo con tilde).
-  - Llenado del que corre: barra, líquido con olas, segmentos tipo batería, reloj.
+  - Forma: Clásico, Inclinado (romboide apoyado sobre su base, esquinas suaves), Tarjeta (vertical), Biselado (dos esquinas cortadas suaves). El número va arriba al centro.
+  - Marca de hecho: ninguna, diagonal (finita, del color del número, sin tapar el tiempo), cruz delicada, tilde redondo, tilde cuadrado.
+  - Llenado del que corre: barra, líquido (avanza de izquierda a derecha con el frente ondulado), segmentos tipo batería, reloj.
+  - Invertidos (por defecto): fondo gris que se va llenando del color de terminado.
+  - Colores propios de los cuadraditos (del tema, naranja, rojo, azul, verde, papel), grosor de borde, tamaño base (60–170 %), rayita de la actividad y nombre de la actividad opcionales.
   - Al completarse: rebote, sellado, destello, volteo (después del festejo grande).
 - Vistas tipo Google Calendar:
   - **Día** (al abrir siempre muestra hoy): ventana horizontal chica. Banda gris con la tarea del día (opcional) a la izquierda y la fecha a la derecha (por defecto `26/10/26`; en Ajustes se puede poner escrita).
@@ -85,7 +88,8 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
   - **Mes**: la ventana se agranda más. Siempre se ven los cuadraditos.
 
 ## Objetivo del día
-- La barra de arriba muestra el objetivo ("Objetivo: Parcial de SO · 2/6") o "Trabajo de hoy" si no hay; click ahí, el botón de la diana o **G** abren el panel que sale desde la derecha. Click derecho en un día de la semana o el mes → "Poner meta…" para planearla.
+- La barra de arriba muestra solo lo que escribiste en "¿Qué querés lograr hoy?" (vacía si no escribiste nada); click ahí, el botón de la diana o **G** abren el panel que sale desde la derecha. Para otros días dice "¿Qué querés lograr este día?".
+- **El progreso es por tiempo acumulado**: los minutos estudiados ese día van llenando los bloques en orden; el bloque que va a medias se ve lleno en parte (dos pomodoros de 3m no completan dos bloques de 40m). Click derecho en un día de la semana o el mes → "Poner meta…" para planearla.
 - La tarea del día (texto) también se edita ahí.
 - **Por tiempo** (ej. 4 h → se pasa a pomodoros con la duración que estés usando, redondeando para arriba) o **por pomodoros**: filas "[−] 3 [+] × [−] 30m [+]" con "+ Agregar" (scrollea si hay muchas), o escrito como `3x30 + 2x25` (se elige en Ajustes › General).
 - Por pomodoros, el reproductor viene precargado con la duración del próximo bloque del objetivo.
@@ -115,7 +119,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Cuando termina un timer, la ventana sale sola y suena. Si estás en pantalla completa (juego, presentación, video) no se mete adelante: avisa en la bandeja (se puede apagar).
 - **Tamaño**: chica / mediana (por defecto, +15 %) / grande (+35 %) en *Ajustes › Apariencia*.
 - **Pantalla completa**: botón de la barra o **F11**; **Esc** sale.
-- **Temas de color**: color (Gris por defecto, Ultra, Rosa, Rojo, Azul, Mostaza) + modo Oscuro / Claro / Seguir a Windows, con vista previa en vivo. Los claros, estilo MKBHD.
+- **Temas de color**: color (Gris por defecto, Ultra, Rosa, Rojo, Azul, Mostaza) + modo Oscuro / Claro / Seguir a Windows, con vista previa en vivo. Los claros, estilo MKBHD. Opción de acentos fuertes.
 - **Mini reproductor flotante** (M): ventanita siempre visible con pomodoro, actividad, tiempo, play/pausa, terminar y saltear recreo.
 
 ## Sistema

@@ -59,6 +59,7 @@ C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\UltimateTracker\Ultim
 | Actividades y ajustes | Botón ⋯ |
 | Mover, anotar, corregir o borrar un pomodoro | Click derecho sobre el cuadradito (borrar se puede deshacer) |
 | Horas que ya tenías | Actividades → click derecho → Horas previas… |
+| Color de una actividad | Actividades → click derecho → Color (o Automático) |
 | Stats en vivo: actividad / todo el día | "ver todo el día ⇄" abajo de la grilla |
 | Volver al tamaño original | Click derecho en la barra de arriba |
 | Estadísticas | Botón de barras |
@@ -140,6 +141,11 @@ Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert
 | `388d9e4` | M18 · estilo de cuadraditos (formas, marcas, llenado, completado) |
 | `1a8b3ee` | M19 · mini reproductor flotante |
 | `1795836` | M20 · modo desarrollador |
+| `2b5a6d9` | M21 · objetivo por tiempo acumulado, filas, barra con tu texto |
+| `5ec3223` | M22 · acentos fuertes |
+| `dee394e` | M23 · cuadraditos v2 (tamaño base, invertidos, paletas, borde, marcas nuevas…) |
+| `39b30e8` | M24 · agrupado en línea recuadrado y tetris en proporcional completo |
+| `43cc66c` | M25 · colores por actividad elegibles |
 
 ## Modo desarrollador
 
