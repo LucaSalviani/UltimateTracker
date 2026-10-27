@@ -61,10 +61,10 @@ void LiveStats::paintEvent(QPaintEvent*)
 
     // Tres bloques: número grande + etiqueta
     struct Block { QString big; QString small; };
-    const qint64 mins = (m_data.seconds + 30) / 60;
+    // M32: un solo formato de tiempo ("1h40") y "pomodoros" con todas las letras.
     const Block blocks[3] = {
-        {QString::number(m_data.pomos), m_data.pomos == 1 ? QStringLiteral("pomo") : QStringLiteral("pomos")},
-        {QStringLiteral("%1").arg(mins), QStringLiteral("min  //  %1").arg(fmt::hours(m_data.seconds))},
+        {QString::number(m_data.pomos), m_data.pomos == 1 ? QStringLiteral("pomodoro") : QStringLiteral("pomodoros")},
+        {fmt::duration(m_data.seconds), QStringLiteral("estudiado")},
         m_data.activityScope
             ? Block{fmt::duration(m_data.activityTotalSec), QStringLiteral("en total")}
             : Block{QString::number(m_data.activities),
@@ -81,7 +81,7 @@ void LiveStats::paintEvent(QPaintEvent*)
         const qreal x = cell.left() + (i == 0 ? 0 : 12);
         QFont bf = condensed(26, QFont::Bold);
         p.setFont(bf);
-        p.setPen(i == 0 ? theme::pomoAccent.lighter(115) : theme::text);
+        p.setPen(i == 0 ? theme::pomoAccent : theme::text);
         const qreal bw = QFontMetricsF(bf).horizontalAdvance(blocks[i].big);
         p.drawText(QRectF(x, cell.top(), bw + 2, h), Qt::AlignLeft | Qt::AlignVCenter, blocks[i].big);
         QFont sf = condensed(11, QFont::Medium);

@@ -261,36 +261,50 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
         break;
     }
     case Fill::Segments: {
-        // Como una batería: 5 bloques que ocupan todo el cuadradito; el que se está
-        // llenando late. Colores de siempre (gris sobre oscuro), sin invertir (M29).
+        // M32 "contorno": los vacíos son solo un borde fino, los llenos sólidos y el
+        // que se está llenando se carga de abajo hacia arriba. Se lee de un vistazo
+        // cuánto falta, sin transparencias. En el inclinado, inclinados.
         const int n = 5;
-        const QColor segFill = t_accent ? accentFill() : cs.fill;
+        const QColor segFill = t_accent ? accentFill() : theme::mix(cs.fill, QColor(255, 255, 255), 0.15);
+        const QColor edge = theme::mix(cs.empty, segFill, parked ? 0.30 : 0.50);
         const double gap = qMax(1.5, r.width() * 0.035);
-        const double filled = pr * n;
-        // En el inclinado, los segmentos también van inclinados.
         const double skew = style().shape == Shape::Slant ? slantOffset(r) : 0.0;
         const double usable = r.width() - skew;
         const double swk = (usable - gap * (n + 1)) / n;
-        for (int i = 0; i < n; ++i) {
-            const QRectF seg(r.left() + gap + i * (swk + gap), r.top() + gap, swk, r.height() - 2 * gap);
-            QColor sc = segFill;
-            if (parked) sc = sc.darker(160);
-            if (i >= int(filled)) {
-                if (i == int(filled) && !parked) {
-                    const double frac = filled - int(filled);
-                    sc.setAlphaF(0.25 + 0.55 * frac + 0.15 * std::sin(now / 260.0));
-                } else {
-                    sc = theme::mix(cs.empty, segFill, 0.12);
-                }
-            }
-            p.setPen(Qt::NoPen);
-            p.setBrush(sc);
+        const double filled = pr * n;
+        auto segPath = [&](const QRectF& seg) {
+            QPainterPath sp;
             if (skew > 0) {
                 const double kk = skew * (seg.height() / r.height());
-                p.drawPolygon(QPolygonF({QPointF(seg.left() + kk, seg.top()), QPointF(seg.right() + kk, seg.top()),
+                sp.addPolygon(QPolygonF({QPointF(seg.left() + kk, seg.top()), QPointF(seg.right() + kk, seg.top()),
                                          QPointF(seg.right(), seg.bottom()), QPointF(seg.left(), seg.bottom())}));
+                sp.closeSubpath();
             } else {
-                p.drawRoundedRect(seg, 1.5, 1.5);
+                sp.addRoundedRect(seg, 1.5, 1.5);
+            }
+            return sp;
+        };
+        for (int i = 0; i < n; ++i) {
+            const QRectF seg(r.left() + gap + i * (swk + gap), r.top() + gap, swk, r.height() - 2 * gap);
+            const QPainterPath sp = segPath(seg.adjusted(0.5, 0.5, -0.5, -0.5));
+            QColor solid = parked ? segFill.darker(150) : segFill;
+            if (i < int(filled)) {
+                p.setPen(Qt::NoPen);
+                p.setBrush(solid);
+                p.drawPath(sp);
+                continue;
+            }
+            p.setPen(QPen(edge, 1));
+            p.setBrush(Qt::NoBrush);
+            p.drawPath(sp);
+            if (i == int(filled)) {
+                const double frac = filled - int(filled);
+                p.save();
+                p.setClipPath(sp);
+                p.setPen(Qt::NoPen);
+                p.setBrush(solid);
+                p.drawRect(QRectF(seg.left() - skew, seg.bottom() - seg.height() * frac, seg.width() + 2 * skew, seg.height() * frac));
+                p.restore();
             }
         }
         break;
@@ -354,7 +368,7 @@ QPainterPath shapePath(const QRectF& r)
 
 bool animatesWhileRunning()
 {
-    return style().fill == Fill::Liquid || style().fill == Fill::Segments;
+    return style().fill == Fill::Liquid;   // los segmentos ya no laten
 }
 
 void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)

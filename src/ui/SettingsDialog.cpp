@@ -44,6 +44,14 @@ QLabel* heading(const QString& text, QWidget* parent)
     return l;
 }
 
+// Título chico de grupo dentro de una página (en mayúsculas, como en el panel del objetivo).
+QLabel* subheading(const QString& text, QWidget* parent)
+{
+    auto* l = new QLabel(text.toUpper(), parent);
+    l->setProperty("role", "caption");
+    return l;
+}
+
 QSpinBox* spin(int min, int max, int value, const QString& suffix, QWidget* parent)
 {
     auto* s = new QSpinBox(parent);
@@ -126,8 +134,8 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     m_nav = new QListWidget(this);
     m_nav->setObjectName("SettingsNav");
     m_nav->setFixedWidth(150);
-    for (const QString& s : {QStringLiteral("General"), QStringLiteral("Cronómetro"),
-                             QStringLiteral("Apariencia"), QStringLiteral("Cuadraditos"), QStringLiteral("Sistema")})
+    for (const QString& s : {QStringLiteral("General"), QStringLiteral("Cronómetro"), QStringLiteral("Apariencia"),
+                             QStringLiteral("Cuadraditos"), QStringLiteral("Festejos y sonidos"), QStringLiteral("Sistema")})
         m_nav->addItem(s);
 
     m_pages = new QStackedWidget(this);
@@ -146,6 +154,7 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     m_pages->addWidget(wrap(pageTimer()));
     m_pages->addWidget(wrap(pageAppearance()));
     m_pages->addWidget(wrap(pageTiles()));
+    m_pages->addWidget(wrap(pageCelebrations()));
     m_pages->addWidget(wrap(pageSystem()));
     connect(m_nav, &QListWidget::currentRowChanged, m_pages, &QStackedWidget::setCurrentIndex);
     m_nav->setCurrentRow(0);
@@ -234,38 +243,6 @@ QWidget* SettingsDialog::pageTimer()
     lay->addWidget(note(QStringLiteral("Sin los botones de paso fino, el − / + de siempre va de a 5 minutos "
                                        "arriba de 10 y de a 1 por debajo."), w));
 
-    // M27: sonidos, con botón para escucharlos
-    lay->addSpacing(10);
-    lay->addWidget(heading(QStringLiteral("Sonidos"), w));
-    m_soundVolume = spin(0, 100, m_db->setting("sound_volume", 100).toInt(), QStringLiteral(" %"), w);
-    m_soundVolume->setSingleStep(10);
-    auto soundRow = [this, w](const QStringList& names, int current, int which) {
-        auto* combo = new QComboBox(w);
-        combo->addItems(names);
-        combo->setCurrentIndex(current);
-        auto* play = new QPushButton(QStringLiteral("▶"), w);
-        play->setFixedWidth(36);
-        play->setToolTip(QStringLiteral("Escuchar"));
-        connect(play, &QPushButton::clicked, this, [this, combo, which] {
-            emit soundPreview(which, combo->currentIndex(), m_soundVolume->value());
-        });
-        auto* row = new QHBoxLayout;
-        row->addWidget(combo, 1);
-        row->addWidget(play);
-        return std::make_pair(combo, row);
-    };
-    auto [chime, chimeRow] = soundRow(Sounds::chimeNames(), m_db->setting("sound_chime", 0).toInt(), 0);
-    auto [ach, achRow] = soundRow(Sounds::achievementNames(), m_db->setting("sound_achievement", 0).toInt(), 1);
-    auto [alarm, alarmRow] = soundRow(Sounds::alarmNames(), m_db->setting("sound_alarm", 0).toInt(), 2);
-    m_soundChime = chime;
-    m_soundAchievement = ach;
-    m_soundAlarm = alarm;
-    auto* sform = new QFormLayout;
-    sform->addRow(QStringLiteral("Fin de pomodoro"), chimeRow);
-    sform->addRow(QStringLiteral("Logro (objetivo, hito)"), achRow);
-    sform->addRow(QStringLiteral("Alarma del recreo"), alarmRow);
-    sform->addRow(QStringLiteral("Volumen"), m_soundVolume);
-    lay->addLayout(sform);
     lay->addStretch();
     return w;
 }
@@ -347,72 +324,94 @@ QWidget* SettingsDialog::pageAppearance()
     m_size->addItem(QStringLiteral("Mediana (por defecto)"), "medium");
     m_size->addItem(QStringLiteral("Grande"), "large");
     m_size->setCurrentIndex(qMax(0, m_size->findData(m_db->setting("window_size", "medium").toString())));
-    m_resizable = new QCheckBox(QStringLiteral("Permitir cambiar el tamaño de la ventana desde los bordes"), w);
+    m_resizable = new QCheckBox(QStringLiteral("Cambiar el tamaño desde los bordes"), w);
     m_resizable->setChecked(m_db->setting("resizable", 1).toBool());
+    m_visorStyle = new QComboBox(w);
+    m_visorStyle->addItem(QStringLiteral("Del color del acento"));
+    m_visorStyle->addItem(QStringLiteral("Oscuro siempre"));
+    m_visorStyle->addItem(QStringLiteral("Sigue al tema (claro u oscuro)"));
+    m_visorStyle->setCurrentIndex(m_db->setting("visor_style", 0).toInt());
 
-    m_groupStyle = new QComboBox(w);
-    m_groupStyle->addItem(QStringLiteral("Todos juntos, sin agrupar"));
-    m_groupStyle->addItem(QStringLiteral("Por actividad, con títulos"));
-    m_groupStyle->addItem(QStringLiteral("Por actividad, en línea y recuadrados"));
-    m_groupStyle->setCurrentIndex(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt());
-    // M31: un festejo para cada cosa
+    auto* form = new QFormLayout;
+    form->addRow(QStringLiteral("Visor del cronómetro"), m_visorStyle);
+    form->addRow(QStringLiteral("Tamaño de la ventana"), m_size);
+
+    // M32: Apariencia = tema, visor y ventana. Lo de los cuadraditos y los festejos
+    // tiene su propia sección.
+    auto* lay = new QVBoxLayout(w);
+    lay->addWidget(heading(QStringLiteral("Apariencia"), w));
+    lay->addWidget(subheading(QStringLiteral("Tema de colores"), w));
+    lay->addLayout(modeRow);
+    lay->addLayout(grid);
+    lay->addWidget(m_strong);
+    lay->addSpacing(8);
+    lay->addWidget(subheading(QStringLiteral("Cronómetro y ventana"), w));
+    lay->addLayout(form);
+    lay->addWidget(m_resizable);
+    lay->addWidget(note(QStringLiteral("Cambiar el tamaño de la ventana vuelve todas las vistas a su tamaño original."), w));
+    lay->addStretch();
+    return w;
+}
+
+// M32: festejos y sonidos, juntos.
+QWidget* SettingsDialog::pageCelebrations()
+{
+    auto* w = new QWidget(this);
+    m_celebrations = new QCheckBox(QStringLiteral("Festejar pomodoros, objetivos e hitos"), w);
+    m_celebrations->setChecked(m_db->setting("celebrations", 1).toBool());
     const int legacy = m_db->setting("celebration_style", 0).toInt();
     const char* keys[] = {"celebration_pomodoro", "celebration_goal", "celebration_milestone"};
     for (int i = 0; i < 3; ++i) {
         m_celebrationStyles[i] = new QComboBox(w);
         for (const QString& n : Celebration::styleNames()) m_celebrationStyles[i]->addItem(n);
         m_celebrationStyles[i]->setCurrentIndex(m_db->setting(keys[i], legacy).toInt());
+        connect(m_celebrations, &QCheckBox::toggled, m_celebrationStyles[i], &QWidget::setEnabled);
+        m_celebrationStyles[i]->setEnabled(m_celebrations->isChecked());
     }
-    m_activityColors = new QCheckBox(QStringLiteral("Colores por actividad (se eligen en Actividades → click derecho → Color)"), w);
-    m_activityColors->setChecked(m_db->setting("activity_colors", 1).toBool());
-    m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir el objetivo o llegar a un hito"), w);
-    m_celebrations->setChecked(m_db->setting("celebrations", 1).toBool());
-
-    // M16: tamaño de los cuadraditos
-    const int mask = m_db->setting("size_modes", 7).toInt();
-    const char* sizeNames[] = {"Todos iguales", "Proporcional solo a lo ancho", "Proporcional completo"};
-    auto* sizeRow = new QHBoxLayout;
-    for (int i = 0; i < 3; ++i) {
-        m_sizeModes[i] = new QCheckBox(QString::fromUtf8(sizeNames[i]), w);
-        m_sizeModes[i]->setChecked(mask & (1 << i));
-        sizeRow->addWidget(m_sizeModes[i]);
-    }
-    sizeRow->addStretch();
-    m_sizeButton = new QCheckBox(QStringLiteral("Mostrar el botón para alternar (si no, queda fijo el de por defecto)"), w);
-    m_sizeButton->setChecked(m_db->setting("size_button", 1).toBool());
-    m_sizeDefault = new QComboBox(w);
-    for (const char* n : sizeNames) m_sizeDefault->addItem(QString::fromUtf8(n));
-    m_sizeDefault->setCurrentIndex(m_db->setting("size_default", 0).toInt());
-
-    auto* form = new QFormLayout;
-    form->addRow(QStringLiteral("Tamaño de la ventana"), m_size);
-    form->addRow(QStringLiteral("Cuadraditos por defecto"), m_sizeDefault);
-    form->addRow(QStringLiteral("Agrupar"), m_groupStyle);
-    form->addRow(QStringLiteral("Festejo: pomodoro"), m_celebrationStyles[0]);
-    form->addRow(QStringLiteral("Festejo: objetivo"), m_celebrationStyles[1]);
-    form->addRow(QStringLiteral("Festejo: hito de horas"), m_celebrationStyles[2]);
-    m_visorStyle = new QComboBox(w);
-    m_visorStyle->addItem(QStringLiteral("Del color del acento"));
-    m_visorStyle->addItem(QStringLiteral("Oscuro siempre"));
-    m_visorStyle->addItem(QStringLiteral("Sigue al tema (claro u oscuro)"));
-    m_visorStyle->setCurrentIndex(m_db->setting("visor_style", 0).toInt());
-    form->insertRow(1, QStringLiteral("Visor del cronómetro"), m_visorStyle);
+    auto* cform = new QFormLayout;
+    cform->addRow(QStringLiteral("Pomodoro terminado"), m_celebrationStyles[0]);
+    cform->addRow(QStringLiteral("Objetivo cumplido"), m_celebrationStyles[1]);
+    cform->addRow(QStringLiteral("Hito de horas"), m_celebrationStyles[2]);
 
     auto* lay = new QVBoxLayout(w);
-    lay->addWidget(heading(QStringLiteral("Apariencia"), w));
-    lay->addWidget(note(QStringLiteral("Tema de colores"), w));
-    lay->addLayout(modeRow);
-    lay->addLayout(grid);
-    lay->addWidget(m_strong);
-    lay->addSpacing(8);
-    lay->addLayout(form);
-    lay->addWidget(note(QStringLiteral("El botón de tamaño de la barra cicla entre:"), w));
-    lay->addLayout(sizeRow);
-    lay->addWidget(m_sizeButton);
-    lay->addWidget(m_resizable);
-    lay->addWidget(m_activityColors);
+    lay->addWidget(heading(QStringLiteral("Festejos y sonidos"), w));
+    lay->addWidget(subheading(QStringLiteral("Festejos"), w));
     lay->addWidget(m_celebrations);
-    lay->addWidget(note(QStringLiteral("Cambiar el tamaño vuelve todas las vistas a su tamaño original."), w));
+    lay->addLayout(cform);
+    lay->addWidget(note(QStringLiteral("Visor tapa la ventana un par de segundos; Línea, Borde, Tilde y Cifra son "
+                                       "minimalistas y no bloquean nada. En modo desarrollador se prueban con 🧪."), w));
+    lay->addSpacing(8);
+    // M27: sonidos, con botón para escucharlos
+    lay->addWidget(subheading(QStringLiteral("Sonidos"), w));
+    m_soundVolume = spin(0, 100, m_db->setting("sound_volume", 100).toInt(), QStringLiteral(" %"), w);
+    m_soundVolume->setSingleStep(10);
+    auto soundRow = [this, w](const QStringList& names, int current, int which) {
+        auto* combo = new QComboBox(w);
+        combo->addItems(names);
+        combo->setCurrentIndex(current);
+        auto* play = new QPushButton(QStringLiteral("▶"), w);
+        play->setFixedWidth(36);
+        play->setToolTip(QStringLiteral("Escuchar"));
+        connect(play, &QPushButton::clicked, this, [this, combo, which] {
+            emit soundPreview(which, combo->currentIndex(), m_soundVolume->value());
+        });
+        auto* row = new QHBoxLayout;
+        row->addWidget(combo, 1);
+        row->addWidget(play);
+        return std::make_pair(combo, row);
+    };
+    auto [chime, chimeRow] = soundRow(Sounds::chimeNames(), m_db->setting("sound_chime", 0).toInt(), 0);
+    auto [ach, achRow] = soundRow(Sounds::achievementNames(), m_db->setting("sound_achievement", 0).toInt(), 1);
+    auto [alarm, alarmRow] = soundRow(Sounds::alarmNames(), m_db->setting("sound_alarm", 0).toInt(), 2);
+    m_soundChime = chime;
+    m_soundAchievement = ach;
+    m_soundAlarm = alarm;
+    auto* sform = new QFormLayout;
+    sform->addRow(QStringLiteral("Fin de pomodoro"), chimeRow);
+    sform->addRow(QStringLiteral("Logro (objetivo, hito)"), achRow);
+    sform->addRow(QStringLiteral("Alarma del recreo"), alarmRow);
+    sform->addRow(QStringLiteral("Volumen"), m_soundVolume);
+    lay->addLayout(sform);
     lay->addStretch();
     return w;
 }
@@ -440,7 +439,7 @@ QWidget* SettingsDialog::pageTiles()
     m_tilePrefix = new QCheckBox(QStringLiteral("Número con \"Nº\" (Nº3)"), w);
     m_tilePrefix->setChecked(st.numberPrefix);
     m_tileBorder = combo(tiles::borderNames(), st.border);
-    m_tileInverted = new QCheckBox(QStringLiteral("Invertidos: fondo gris que se va llenando del color de terminado"), w);
+    m_tileInverted = new QCheckBox(QStringLiteral("Invertidos: fondo claro que se llena oscuro"), w);
     m_tileInverted->setChecked(st.inverted);
     m_tileStripe = new QCheckBox(QStringLiteral("Rayita del color de la actividad abajo"), w);
     m_tileStripe->setChecked(st.stripe);
@@ -452,6 +451,26 @@ QWidget* SettingsDialog::pageTiles()
     m_tileSize->setSuffix(QStringLiteral(" %"));
     m_tileSize->setValue(m_db->setting("tile_size", 100).toInt());
     m_originalTileSize = m_tileSize->value();
+    // Tamaños (M16) y agrupado / colores (M24, M25): viven acá con el resto de los cuadraditos.
+    const int mask = m_db->setting("size_modes", 7).toInt();
+    const char* sizeNames[] = {"Todos iguales", "Proporcional solo a lo ancho", "Proporcional completo"};
+    auto* sizeRow = new QHBoxLayout;
+    for (int i = 0; i < 3; ++i) {
+        m_sizeModes[i] = new QCheckBox(QString::fromUtf8(sizeNames[i]), w);
+        m_sizeModes[i]->setChecked(mask & (1 << i));
+        sizeRow->addWidget(m_sizeModes[i]);
+    }
+    sizeRow->addStretch();
+    m_sizeButton = new QCheckBox(QStringLiteral("Mostrar el botón de la barra para alternar"), w);
+    m_sizeButton->setChecked(m_db->setting("size_button", 1).toBool());
+    m_sizeDefault = combo({QString::fromUtf8(sizeNames[0]), QString::fromUtf8(sizeNames[1]), QString::fromUtf8(sizeNames[2])},
+                          m_db->setting("size_default", 0).toInt());
+    m_groupStyle = combo({QStringLiteral("Todos juntos, sin agrupar"), QStringLiteral("Por actividad, con títulos"),
+                          QStringLiteral("Por actividad, en línea y recuadrados")},
+                         m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt());
+    m_activityColors = new QCheckBox(QStringLiteral("Colores por actividad"), w);
+    m_activityColors->setChecked(m_db->setting("activity_colors", 1).toBool());
+
     auto* preview = new TilePreview(w);
     auto live = [this, preview] {
         tiles::Style& cur = tiles::style();
@@ -481,27 +500,43 @@ QWidget* SettingsDialog::pageTiles()
 
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Forma"), m_tileShape);
+    form->addRow(QStringLiteral("Colores"), m_tilePalette);
+    form->addRow(QStringLiteral("Borde"), m_tileBorder);
     form->addRow(QStringLiteral("Marca de hecho"), m_tileMark);
     form->addRow(QStringLiteral("Llenado (el que corre)"), m_tileFill);
     form->addRow(QStringLiteral("Al completarse"), m_tileComplete);
-    form->addRow(QStringLiteral("Colores"), m_tilePalette);
-    form->addRow(QStringLiteral("Borde"), m_tileBorder);
-    form->addRow(QStringLiteral("Tamaño base"), m_tileSize);
-    form->addRow(QStringLiteral("Número"), m_tileNumberPos);
     form->addRow(QStringLiteral("Resaltar"), m_tileHighlight);
+    auto* nform = new QFormLayout;
+    nform->addRow(QStringLiteral("Número"), m_tileNumberPos);
+    auto* zform = new QFormLayout;
+    zform->addRow(QStringLiteral("Tamaño base"), m_tileSize);
+    zform->addRow(QStringLiteral("Por defecto"), m_sizeDefault);
+    auto* gform = new QFormLayout;
+    gform->addRow(QStringLiteral("Agrupar"), m_groupStyle);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Cuadraditos"), w));
     lay->addWidget(preview);
-    lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Estilo"), w));
     lay->addLayout(form);
     lay->addWidget(m_tileInverted);
     lay->addWidget(m_tileStripe);
-    lay->addWidget(m_tileCaption);
+    lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Número y actividad"), w));
+    lay->addLayout(nform);
     lay->addWidget(m_tilePrefix);
-    lay->addWidget(note(QStringLiteral("La muestra repite el ciclo: el tercero se llena y se completa. "
-                                       "Inclinado = romboide apoyado sobre su base; Tarjeta = vertical, con la actividad "
-                                       "arriba y el tiempo abajo; Biselado = esquinas cortadas."), w));
+    lay->addWidget(m_tileCaption);
+    lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Tamaño"), w));
+    lay->addLayout(zform);
+    lay->addWidget(note(QStringLiteral("El botón de la barra cicla entre:"), w));
+    lay->addLayout(sizeRow);
+    lay->addWidget(m_sizeButton);
+    lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Agrupado y colores"), w));
+    lay->addLayout(gform);
+    lay->addWidget(m_activityColors);
+    lay->addWidget(note(QStringLiteral("El color de cada actividad se elige en Actividades → click derecho → Color."), w));
     lay->addStretch();
     return w;
 }
@@ -513,9 +548,9 @@ QWidget* SettingsDialog::pageSystem()
     m_autostart->setChecked(m_db->setting("autostart", 0).toBool());
     m_greeting = new QCheckBox(QStringLiteral("Saludarme al iniciar con Windows (una vez por día)"), w);
     m_greeting->setChecked(m_db->setting("greeting", 1).toBool());
-    m_hotkey = new QCheckBox(QStringLiteral("Atajo global Ctrl + Alt + P para pausar / seguir desde cualquier lado"), w);
+    m_hotkey = new QCheckBox(QStringLiteral("Atajo global Ctrl + Alt + P (pausar / seguir)"), w);
     m_hotkey->setChecked(m_db->setting("hotkey", 1).toBool());
-    m_quietFullscreen = new QCheckBox(QStringLiteral("No saltar al frente si estás en pantalla completa (solo aviso y sonido)"), w);
+    m_quietFullscreen = new QCheckBox(QStringLiteral("No saltar al frente en pantalla completa (solo aviso)"), w);
     m_quietFullscreen->setChecked(m_db->setting("quiet_fullscreen", 1).toBool());
     m_backup = new QCheckBox(QStringLiteral("Copia de seguridad diaria (guarda las últimas 7)"), w);
     m_backup->setChecked(m_db->setting("backup", 1).toBool());
@@ -530,7 +565,7 @@ QWidget* SettingsDialog::pageSystem()
     dirRow->addWidget(m_backupDir, 1);
     dirRow->addWidget(pick);
 
-    m_devMode = new QCheckBox(QStringLiteral("Modo desarrollador: probar sobre una copia de tus datos (nada queda registrado)"), w);
+    m_devMode = new QCheckBox(QStringLiteral("Modo desarrollador (pruebas sobre una copia de tus datos)"), w);
     m_devMode->setChecked(devmode::enabledFlag(qApp->property("dataDir").toString()));
 
     auto* lay = new QVBoxLayout(w);
@@ -547,7 +582,7 @@ QWidget* SettingsDialog::pageSystem()
     lay->addSpacing(10);
     lay->addWidget(m_devMode);
     lay->addWidget(note(QStringLiteral("Con el modo desarrollador aparece el botón 🧪 en la barra (completar ya, "
-                                       "acelerar el tiempo, ver festejos…). Se aplica al reiniciar."), w));
+                                       "acelerar el tiempo, ver festejos…). Al guardar, la app se reinicia sola."), w));
     lay->addStretch();
     return w;
 }

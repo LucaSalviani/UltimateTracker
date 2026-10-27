@@ -30,8 +30,9 @@ QString hours(qint64 s)
     const qint64 totalMin = s / 60;
     const qint64 h = totalMin / 60;
     const qint64 m = totalMin % 60;
+    // M32: el mismo formato que en toda la app ("1h40"), sin redondear para arriba.
     if (h == 0) return QString("%1m").arg(m);
-    return QString("%1h %2m").arg(h).arg(m, 2, 10, QChar('0'));
+    return QString("%1h%2").arg(h).arg(m, 2, 10, QChar('0'));
 }
 
 QString clock(qint64 s)

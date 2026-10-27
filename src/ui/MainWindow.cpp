@@ -504,7 +504,7 @@ QWidget* MainWindow::buildTitleBar()
         showOverlay(m_overlay == Overlay::Stats ? Overlay::None : Overlay::Stats);
     });
 
-    auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: actividades, ajustes, salir"));
+    auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: actividades, ajustes, fijar, borde, pantalla completa, salir"));
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
     menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
@@ -552,6 +552,26 @@ QWidget* MainWindow::buildTitleBar()
     auto* dock = iconButton(bar, icons::Id::Dock,
                             QStringLiteral("Esconder en el borde (también: soltar la ventana contra un borde)"));
     connect(dock, &QToolButton::clicked, this, &MainWindow::dockToNearestEdge);
+
+    // M32: barra más liviana. Fijar, esconder en el borde y pantalla completa van al
+    // menú ⋯ (siguen F11 y el arrastre contra un borde). El botón de pantalla
+    // completa solo aparece mientras estás en ella, para salir.
+    m_btnPin->hide();
+    dock->hide();
+    m_btnFull->hide();
+    {
+        QAction* first = menu->actions().value(0);
+        auto* pinAct = new QAction(icons::get(icons::Id::Pin), QStringLiteral("Siempre visible"), menu);
+        pinAct->setCheckable(true);
+        connect(pinAct, &QAction::toggled, m_btnPin, &QToolButton::setChecked);
+        connect(m_btnPin, &QToolButton::toggled, pinAct, &QAction::setChecked);
+        auto* dockAct = new QAction(icons::get(icons::Id::Dock), QStringLiteral("Esconder en el borde"), menu);
+        connect(dockAct, &QAction::triggered, this, &MainWindow::dockToNearestEdge);
+        auto* fullAct = new QAction(icons::get(icons::Id::FullScreen), QStringLiteral("Pantalla completa (F11)"), menu);
+        connect(fullAct, &QAction::triggered, this, &MainWindow::toggleFullScreen);
+        menu->insertActions(first, {pinAct, dockAct, fullAct});
+        menu->insertSeparator(first);
+    }
 
     auto* minimize = iconButton(bar, icons::Id::Minimize, QStringLiteral("Minimizar"));
     connect(minimize, &QToolButton::clicked, this, &QWidget::showMinimized);
@@ -873,6 +893,7 @@ void MainWindow::toggleFullScreen()
         style()->unpolish(this);
         style()->polish(this);
         showNormal();
+        m_btnFull->hide();
         m_btnFull->setIcon(icons::get(icons::Id::FullScreen));
         m_btnFull->setToolTip(QStringLiteral("Pantalla completa (F11 · Esc para salir)"));
         updateDeckWidth();
@@ -884,6 +905,7 @@ void MainWindow::toggleFullScreen()
         style()->polish(this);
         win::setFullscreenChrome(this, true);
         showFullScreen();
+        m_btnFull->show();
         m_btnFull->setIcon(icons::get(icons::Id::ExitFullScreen));
         m_btnFull->setToolTip(QStringLiteral("Salir de pantalla completa (Esc)"));
     }
@@ -1917,8 +1939,9 @@ void MainWindow::toast(const QString& text)
 void MainWindow::toastAction(const QString& text, const QString& action, std::function<void()> fn)
 {
     m_toastAction = std::move(fn);
-    m_toast->setText(QStringLiteral("%1 &nbsp;·&nbsp; <a href=\"act\" style=\"color:%2; text-decoration:none; font-weight:600\">%3</a>")
-                         .arg(text.toHtmlEscaped(), theme::text.name(), action.toHtmlEscaped()));
+    // M32: sin color fijo en el enlace: toma el del tema (antes quedaba invisible al pasar a claro).
+    m_toast->setText(QStringLiteral("%1 &nbsp;·&nbsp; <a href=\"act\" style=\"text-decoration:none; font-weight:600\">%2</a>")
+                         .arg(text.toHtmlEscaped(), action.toHtmlEscaped()));
     m_toast->adjustSize();
     m_toast->show();
     m_toastTimer.start(8000);

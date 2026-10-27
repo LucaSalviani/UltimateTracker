@@ -41,6 +41,7 @@ private:
     QWidget* pageTimer();
     QWidget* pageAppearance();
     QWidget* pageTiles();   // M18
+    QWidget* pageCelebrations();   // M32
     QWidget* pageSystem();
 
     Database* m_db;
