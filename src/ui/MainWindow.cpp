@@ -240,7 +240,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     // Ajuste viejo "proportional" (sí/no) → modo de tamaño.
     if (m_db->setting("size_mode").toString().isEmpty())
         m_db->setSetting("size_mode", m_db->setting("proportional", 0).toBool() ? 2 : 0);
-    m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
+    m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
     m_grid->setBaseScale(m_db->setting("tile_size", 100).toInt() / 100.0);
     m_toast = new QLabel(gridPage);
     m_toast->setProperty("role", "toast");
@@ -518,7 +518,7 @@ QWidget* MainWindow::buildTitleBar()
         m_stats->setJokersPerWeek(m_jokers);
         m_deck->setAdjustOptions(deckAdjustFrom(m_db));
         applySizePreset();
-        m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
+        m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
         applySystemSettings();
         applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
         if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());

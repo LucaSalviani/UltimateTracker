@@ -290,8 +290,11 @@ QWidget* SettingsDialog::pageAppearance()
     m_resizable = new QCheckBox(QStringLiteral("Permitir cambiar el tamaño de la ventana desde los bordes"), w);
     m_resizable->setChecked(m_db->setting("resizable", 1).toBool());
 
-    m_groupByActivity = new QCheckBox(QStringLiteral("Agrupar los cuadraditos por actividad"), w);
-    m_groupByActivity->setChecked(m_db->setting("group_by_activity", 1).toBool());
+    m_groupStyle = new QComboBox(w);
+    m_groupStyle->addItem(QStringLiteral("Todos juntos, sin agrupar"));
+    m_groupStyle->addItem(QStringLiteral("Por actividad, con títulos"));
+    m_groupStyle->addItem(QStringLiteral("Por actividad, en línea y recuadrados"));
+    m_groupStyle->setCurrentIndex(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt());
     m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir el objetivo o llegar a un hito"), w);
     m_celebrations->setChecked(m_db->setting("celebrations", 1).toBool());
 
@@ -314,6 +317,7 @@ QWidget* SettingsDialog::pageAppearance()
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Tamaño de la ventana"), m_size);
     form->addRow(QStringLiteral("Cuadraditos por defecto"), m_sizeDefault);
+    form->addRow(QStringLiteral("Agrupar"), m_groupStyle);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Apariencia"), w));
@@ -327,7 +331,6 @@ QWidget* SettingsDialog::pageAppearance()
     lay->addLayout(sizeRow);
     lay->addWidget(m_sizeButton);
     lay->addWidget(m_resizable);
-    lay->addWidget(m_groupByActivity);
     lay->addWidget(m_celebrations);
     lay->addWidget(note(QStringLiteral("Cambiar el tamaño vuelve todas las vistas a su tamaño original."), w));
     lay->addStretch();
@@ -487,7 +490,7 @@ void SettingsDialog::accept()
         m_db->setSetting("size_default", m_sizeDefault->currentIndex());
         if (!(mask & (1 << m_db->setting("size_mode", 0).toInt()))) m_db->setSetting("size_mode", m_sizeDefault->currentIndex());
     }
-    m_db->setSetting("group_by_activity", m_groupByActivity->isChecked() ? 1 : 0);
+    m_db->setSetting("group_style", m_groupStyle->currentIndex());
     m_db->setSetting("celebrations", m_celebrations->isChecked() ? 1 : 0);
 
     m_db->setSetting("tile_shape", m_tileShape->currentIndex());

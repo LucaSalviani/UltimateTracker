@@ -205,7 +205,8 @@ qint64 GridWidget::studyOn(const QDate& d) const
 // del cuadradito es proporcional al tiempo. Con grupos, cada actividad arranca
 // en su renglón con su título arriba.
 GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QVector<int>>& groups,
-                                            double headerH, bool breakLines, double maxSide, double minSide) const
+                                            double headerH, bool breakLines, double maxSide, double minSide,
+                                            bool groupGaps) const
 {
     Layout out;
     int count = 0;
@@ -218,7 +219,8 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
     double maxW = 1.0, maxH = 1.0;
     for (const auto& g : groups)
         for (int idx : g) {
-            const double ratio = qMax(60, m_pomos[idx].representedSec()) / 1500.0;
+            const Pomodoro& pmx = m_pomos[idx];
+            const double ratio = qMax(60, isGhost(pmx) ? pmx.plannedSec : pmx.representedSec()) / 1500.0;
             double vw = 1.0, vh = 1.0 / tiles::aspect();   // la tarjeta es vertical
             if (m_sizeMode == SizeMode::Area) { vw = std::sqrt(ratio); vh = vw / tiles::aspect(); }
             else if (m_sizeMode == SizeMode::Width) vw = qBound(0.45, ratio, 4.0);
@@ -241,8 +243,11 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
             rowStart = lay ? int(lay->placed.size()) : 0;
         };
         bool firstGroup = true;
+        if (lay) lay->gap = gap;
         for (const auto& g : groups) {
             if (g.isEmpty()) continue;
+            // Recuadros en línea: un poco de aire entre actividades para que no se toquen los bordes.
+            if (!breakLines && groupGaps && !firstGroup && x > area.left()) x += gap * 1.2;
             if (breakLines && !firstGroup) {
                 closeRow();
                 y += rowH + gap + (headerH > 0 ? gap * 0.6 : 0);
@@ -342,7 +347,10 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
     const QVector<int> all = m_byDay.value(day);
     QVector<QVector<int>> groups;
     QVector<int> ghosts;
-    if (m_grouping) {
+    // Proporcional completo: siempre en un bloque tipo tetris, con recuadros (sin títulos).
+    GroupStyle gs = m_groupStyle;
+    if (m_sizeMode == SizeMode::Area && gs != GroupStyle::None) gs = GroupStyle::Boxes;
+    if (gs != GroupStyle::None) {
         QHash<qint64, int> slot;
         for (int idx : all) {
             const Pomodoro& pm = m_pomos[idx];
@@ -358,17 +366,44 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         groups.append(all);
     }
     // Con una sola actividad no hace falta título: los fantasmas siguen en el mismo flujo.
-    const bool titled = m_grouping && groups.size() >= 2;
+    const bool titled = gs == GroupStyle::Titles && groups.size() >= 2;
+    const bool boxed = gs == GroupStyle::Boxes && !groups.isEmpty();
+    const int realGroups = int(groups.size());
     if (!ghosts.isEmpty()) {
-        if (titled) groups.append(ghosts);
+        if (titled || boxed) groups.append(ghosts);
         else if (groups.isEmpty()) groups.append(ghosts);
         else groups.last() += ghosts;
     }
-    const Layout lay = layoutGroups(area, groups, titled ? headerH : 0, breakLines && titled, maxSide, minSide);
+    // Con recuadros se deja margen para el contorno (si no, queda cortado en el borde).
+    const Layout lay = boxed ? layoutGroups(area.adjusted(5, 5, -5, -5), groups, 0, false, maxSide, minSide, true)
+                             : layoutGroups(area, groups, titled ? headerH : 0, breakLines && titled, maxSide, minSide);
 
     p.save();
-    p.setClipRect(area.adjusted(-1, -1, 1, 1));
+    p.setClipRect(area.adjusted(-2, -2, 2, 2));
     for (const Header& h : lay.headers) paintHeader(p, h);
+    if (boxed) {
+        // Contorno que abraza los cuadraditos de cada actividad (se unen como en el tetris).
+        const double pad = lay.gap * 0.6;
+        QHash<qint64, QPainterPath> outline;
+        QHash<qint64, int> order;
+        for (const Placed& pl : lay.placed) {
+            const Pomodoro& pm = m_pomos[pl.index];
+            if (isGhost(pm)) continue;
+            // Rectángulos rectos que se solapan: la unión queda limpia, sin muescas.
+            QPainterPath r;
+            r.addRect(pl.rect.adjusted(-pad, -pad, pad, pad));
+            outline[pm.folderId] = outline.value(pm.folderId).united(r);
+            order.insert(pm.folderId, 0);
+        }
+        Q_UNUSED(realGroups);
+        for (auto it = outline.cbegin(); it != outline.cend(); ++it) {
+            QColor c = m_colors.value(it.key(), theme::textFaint);
+            c.setAlphaF(0.85);
+            p.setPen(QPen(c, 1.0, Qt::SolidLine, Qt::SquareCap, Qt::RoundJoin));
+            p.setBrush(Qt::NoBrush);
+            p.drawPath(it.value().simplified());
+        }
+    }
     // "Súper pomodoro": un puente une a los que se hicieron sin recreo.
     for (int k = 1; k < lay.placed.size(); ++k) {
         const QRectF& a = lay.placed[k - 1].rect;

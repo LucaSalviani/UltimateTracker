@@ -69,7 +69,7 @@ private:
     bool          m_originalStrong = false;
     QComboBox*    m_size;
     QCheckBox*    m_resizable;
-    QCheckBox*    m_groupByActivity;   // M8
+    QComboBox*    m_groupStyle;        // M8 → M24
     QCheckBox*    m_sizeModes[3];      // M16
     QCheckBox*    m_sizeButton;
     QComboBox*    m_sizeDefault;

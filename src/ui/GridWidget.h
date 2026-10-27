@@ -42,7 +42,9 @@ public:
     void setFolderPaths(const QHash<qint64, QString>& paths) { m_paths = paths; }
     // M8: nombre corto y color de cada actividad, y si se agrupan los cuadraditos.
     void setFolderLooks(const QHash<qint64, QString>& names, const QHash<qint64, QColor>& colors);
-    void setGrouping(bool on) { m_grouping = on; update(); }
+    // M24: sin agrupar / títulos por actividad / recuadros en línea (borde del color de la actividad).
+    enum class GroupStyle { None = 0, Titles = 1, Boxes = 2 };
+    void setGroupStyle(GroupStyle g) { m_groupStyle = g; update(); }
     // M18: arranca la animación de completado de ese cuadradito (con demora,
     // para que no quede tapada por el festejo grande).
     void markCompleted(qint64 id, int delayMs);
@@ -70,12 +72,12 @@ protected:
 private:
     struct Placed { QRectF rect; int index; };
     struct Header { QRectF rect; qint64 folderId; qint64 seconds; int ghosts; };
-    struct Layout { QVector<Placed> placed; QVector<Header> headers; };
+    struct Layout { QVector<Placed> placed; QVector<Header> headers; double gap = 4; };
 
     // Flujo de izquierda a derecha por grupos (cada grupo arranca en su renglón,
     // con un título arriba si headerH > 0). Busca el lado más grande que entra.
     Layout layoutGroups(const QRectF& area, const QVector<QVector<int>>& groups, double headerH,
-                        bool breakLines, double maxSide, double minSide) const;
+                        bool breakLines, double maxSide, double minSide, bool groupGaps = false) const;
     void paintSquares(QPainter& p, const QRectF& area, const QDate& day, double maxSide, double minSide,
                       double headerH, bool breakLines);
     void paintHeader(QPainter& p, const Header& h) const;
@@ -107,7 +109,7 @@ private:
     QHash<qint64, QString>       m_paths;
     QHash<qint64, QString>       m_names;       // nombre corto de cada actividad
     QHash<qint64, QColor>        m_colors;      // color de cada actividad
-    bool                         m_grouping = true;
+    GroupStyle                   m_groupStyle = GroupStyle::Titles;
     double                       m_baseScale = 1.0;
     // Animación de entrada
     QElapsedTimer m_clock;
