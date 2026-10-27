@@ -83,7 +83,8 @@ private:
     QComboBox*    m_sizeDefault;
     QCheckBox*    m_celebrations;      // M8
     QCheckBox*    m_activityColors;    // M25
-    QComboBox*    m_celebrationStyle;  // M26
+    QComboBox*    m_celebrationStyles[3];  // M26 → M31: pomodoro, objetivo, hito
+    QComboBox*    m_visorStyle;        // M31
 
     // Cuadraditos (M18)
     QComboBox* m_tileShape;

@@ -45,15 +45,28 @@ QFont deckFont(qreal px, int weight = QFont::DemiBold)
 
 // M28: el visor sigue al tema: oscuro en los temas oscuros, claro en los claros.
 struct Visor { QColor bgTop, bgBottom, edge, label, idle, track, reelEdge, reelBody, reelSpoke, reelHub, times, ledOff; };
+// 0 = del color del acento (por defecto) · 1 = oscuro siempre · 2 = sigue al tema
+int g_visorStyle = 0;
+
+bool accentVisor() { return g_visorStyle == 0; }
+
 Visor visor()
 {
-    if (!theme::current().light)
+    if (g_visorStyle == 1 || (g_visorStyle == 2 && !theme::current().light))
         return {{0x14, 0x14, 0x14}, {0x0c, 0x0c, 0x0c}, {0x2c, 0x2c, 0x2c}, {0x9a, 0x9a, 0x9a}, {0xd8, 0xd8, 0xd8},
                 {0x2e, 0x2e, 0x2e}, {0x4a, 0x4a, 0x4a}, {0x12, 0x12, 0x12}, {0x6a, 0x6a, 0x6a}, {0x2a, 0x2a, 0x2a},
                 {0x8a, 0x8a, 0x8a}, {0x55, 0x55, 0x55}};
     auto m = [](qreal t) { return theme::mix(theme::bg, theme::text, t); };
     return {m(0.015).lighter(103), m(0.05), m(0.16), m(0.55), m(0.88), m(0.12), m(0.30), m(0.03), m(0.45), m(0.18),
             m(0.55), m(0.30)};
+}
+
+// Colores del visor de acento para un modo (pomodoro o recreo).
+Visor accentVisorFor(const QColor& a)
+{
+    auto ink = [](qreal alpha) { QColor c(0x14, 0x14, 0x14); c.setAlphaF(alpha); return c; };
+    return {a.lighter(106), a.darker(106), a.darker(125), ink(0.70), ink(0.92), ink(0.20), ink(0.55),
+            a.darker(112), ink(0.60), ink(0.35), ink(0.65), ink(0.30)};
 }
 
 void repolish(QWidget* w)
@@ -66,6 +79,12 @@ void repolish(QWidget* w)
 // ===========================================================================
 // TimerDeck
 // ===========================================================================
+void TimerDeck::setVisorStyle(int style)
+{
+    g_visorStyle = qBound(0, style, 2);
+    m_display->update();
+}
+
 TimerDeck::TimerDeck(QWidget* parent)
     : QWidget(parent)
 {
@@ -476,7 +495,7 @@ void DeckDisplay::paintReel(QPainter& p, const QPointF& c, qreal r, bool spinnin
 {
     p.save();
     p.translate(c);
-    const Visor V = visor();
+    const Visor V = accentVisor() ? accentVisorFor(accentFor(m_model.mode)) : visor();
     p.setPen(QPen(V.reelEdge, 1.4));
     p.setBrush(V.reelBody);
     p.drawEllipse(QPointF(0, 0), r, r);
@@ -503,7 +522,8 @@ void DeckDisplay::paintEvent(QPaintEvent*)
 
     // Pantalla: negro profundo con un brillo sutil arriba, como un visor de casetera.
     QLinearGradient bg(R.topLeft(), R.bottomLeft());
-    const Visor V = visor();
+    const Visor V = accentVisor() ? accentVisorFor(accent) : visor();
+    const QColor ink = accentVisor() ? QColor(0x14, 0x14, 0x14) : accent;   // lo que en los otros va en acento
     bg.setColorAt(0, V.bgTop);
     bg.setColorAt(1, V.bgBottom);
     p.setPen(QPen(V.edge, 1));
@@ -526,8 +546,8 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     }
     const bool ledLit = mode == Mode::Running || mode == Mode::Break ||
                         ((mode == Mode::Paused || mode == Mode::BreakOver) && blinkOn);
-    QColor led = accent;
-    if (!ledLit) led = accent.darker(260);
+    QColor led = accentVisor() ? (ledLit ? QColor(0xff, 0xff, 0xff) : V.ledOff) : accent;
+    if (!ledLit && !accentVisor()) led = accent.darker(260);
     const QPointF ledC(R.left() + pad + 4, R.top() + pad + 6);
     if (ledLit) {
         QRadialGradient glow(ledC, 10);
@@ -553,7 +573,7 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     {
         const QRectF ind(R.right() - pad - 12, R.top() + pad, 12, 12);
         p.setPen(Qt::NoPen);
-        p.setBrush(ledLit ? accent : V.ledOff);
+        p.setBrush(ledLit ? ink : V.ledOff);
         if (mode == Mode::Running || mode == Mode::Break) {
             QPainterPath tri;
             tri.moveTo(ind.left() + 2, ind.top());
@@ -607,15 +627,15 @@ void DeckDisplay::paintEvent(QPaintEvent*)
         p.setFont(df);
         QString ghost = digits;
         for (QChar& ch : ghost) if (ch.isDigit()) ch = QChar('8');
-        QColor gc = accent;
-        gc.setAlphaF(0.07);
+        QColor gc = ink;
+        gc.setAlphaF(accentVisor() ? 0.06 : 0.07);
         p.setPen(gc);
         p.drawText(center, Qt::AlignCenter, ghost);
 
         // En claro, el acento tal cual (más potente); en oscuro, un poco más luminoso.
         QColor dc = (mode == Mode::Ready || mode == Mode::BreakReady)
                         ? V.idle
-                        : (theme::current().light ? accent : accent.lighter(135));
+                        : (accentVisor() ? ink : (theme::current().light ? accent : accent.lighter(135)));
         if (mode == Mode::BreakOver && !blinkOn) dc.setAlphaF(0.25);
         p.setPen(dc);
         p.drawText(center, Qt::AlignCenter, digits);
@@ -642,7 +662,7 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     p.setBrush(V.track);
     p.drawRoundedRect(track, 2, 2);
     if (frac > 0) {
-        p.setBrush(accent);
+        p.setBrush(ink);
         p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * frac, track.height()), 2, 2);
         p.setBrush(V.idle);
         p.drawEllipse(QPointF(track.left() + track.width() * frac, track.center().y()), 4.5, 4.5);

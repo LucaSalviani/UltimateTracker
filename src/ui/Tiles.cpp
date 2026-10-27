@@ -13,6 +13,9 @@ Style& style()
     return s;
 }
 
+// Cuánto se corre arriba el inclinado (lo usan la forma y los segmentos).
+double slantOffset(const QRectF& r) { return r.height() * 0.10; }
+
 QStringList shapeNames()    { return {"Clásico", "Inclinado", "Tarjeta", "Biselado"}; }
 QStringList markNames()     { return {"Sin marca", "Diagonal", "Cruz", "Tilde redondo", "Tilde cuadrado"}; }
 QStringList fillNames()     { return {"Barra", "Líquido", "Segmentos", "Reloj"}; }
@@ -61,6 +64,9 @@ Colors colors()
     if (style().palette != 0) c.fill = theme::mix(c.done, QColor(0x80, 0x80, 0x80), 0.35);
     return c;
 }
+// Resaltado del que corre: el color del pomodoro; con la paleta roja, negro (M31).
+QColor accentFill() { return style().palette == 2 ? QColor(0x14, 0x14, 0x14) : theme::pomoAccent; }
+
 double borderWidth() { return style().border == 0 ? 0.7 : style().border == 2 ? 2.2 : 1.0; }
 
 // Polígono con las esquinas redondeadas (para inclinado y biselado "amigables").
@@ -219,7 +225,7 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
     const Colors cs = colors();
     // Invertido (por defecto): fondo clarito que se llena oscuro, como si se cargara.
     QColor fillc = style().inverted ? cs.done : cs.fill;
-    if (t_accent) fillc = theme::pomoAccent;   // M29: el que está corriendo, con el color del pomodoro
+    if (t_accent) fillc = accentFill();   // M29: el que está corriendo, con el color del pomodoro
     if (parked) fillc = theme::mix(fillc, style().inverted ? cs.fill : cs.empty, 0.45);
     p.save();
     p.setClipPath(path);
@@ -258,12 +264,15 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
         // Como una batería: 5 bloques que ocupan todo el cuadradito; el que se está
         // llenando late. Colores de siempre (gris sobre oscuro), sin invertir (M29).
         const int n = 5;
-        const QColor segFill = t_accent ? theme::pomoAccent : cs.fill;
+        const QColor segFill = t_accent ? accentFill() : cs.fill;
         const double gap = qMax(1.5, r.width() * 0.035);
-        const double sw = (r.width() - gap * (n + 1)) / n;
         const double filled = pr * n;
+        // En el inclinado, los segmentos también van inclinados.
+        const double skew = style().shape == Shape::Slant ? slantOffset(r) : 0.0;
+        const double usable = r.width() - skew;
+        const double swk = (usable - gap * (n + 1)) / n;
         for (int i = 0; i < n; ++i) {
-            const QRectF seg(r.left() + gap + i * (sw + gap), r.top() + gap, sw, r.height() - 2 * gap);
+            const QRectF seg(r.left() + gap + i * (swk + gap), r.top() + gap, swk, r.height() - 2 * gap);
             QColor sc = segFill;
             if (parked) sc = sc.darker(160);
             if (i >= int(filled)) {
@@ -276,7 +285,13 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
             }
             p.setPen(Qt::NoPen);
             p.setBrush(sc);
-            p.drawRoundedRect(seg, 1.5, 1.5);
+            if (skew > 0) {
+                const double kk = skew * (seg.height() / r.height());
+                p.drawPolygon(QPolygonF({QPointF(seg.left() + kk, seg.top()), QPointF(seg.right() + kk, seg.top()),
+                                         QPointF(seg.right(), seg.bottom()), QPointF(seg.left(), seg.bottom())}));
+            } else {
+                p.drawRoundedRect(seg, 1.5, 1.5);
+            }
         }
         break;
     }
@@ -317,11 +332,11 @@ QPainterPath shapePath(const QRectF& r)
         path.addRoundedRect(r, qMax(1.0, s * 0.08), qMax(1.0, s * 0.08));
         break;
     case Shape::Slant: {
-        // Romboide apoyado sobre su base, apenas inclinado, con esquinas angulosas.
-        const double k = r.height() * 0.12;
-        path.addPolygon(QPolygonF({QPointF(r.left() + k, r.top()), QPointF(r.right(), r.top()),
-                                   QPointF(r.right() - k, r.bottom()), QPointF(r.left(), r.bottom())}));
-        path.closeSubpath();
+        // Romboide apoyado sobre su base, apenas inclinado y con esquinas suaves.
+        const double k = slantOffset(r);
+        path = roundedPolygon({QPointF(r.left() + k, r.top()), QPointF(r.right(), r.top()),
+                               QPointF(r.right() - k, r.bottom()), QPointF(r.left(), r.bottom())},
+                              s * 0.11);
         break;
     }
     case Shape::Bevel: {
@@ -447,10 +462,15 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
             p.drawRect(QRectF(o.x() + g * 0.62, o.y(), w, g));
         }
         // El texto contrasta con lo que tenga detrás (mitad llena, mitad vacía).
-        const QColor under = t.accent && !parked ? theme::pomoAccent
+        const QColor under = t.accent && !parked ? accentFill()
                            : (style().inverted && style().fill != Fill::Segments ? cs.done : cs.fill);
         textColor = parked ? theme::mix(onColor(under), under, 0.4) : onColor(under);
         runningHalo = under;
+        if (t.accent && !parked) {
+            // M31: sobre el resaltado, texto negro y sin halo (con la paleta roja, blanco sobre negro).
+            textColor = style().palette == 2 ? QColor(0xf2, 0xf2, 0xf2) : QColor(0x14, 0x14, 0x14);
+            runningHalo = QColor();
+        }
         break;
     }
     }

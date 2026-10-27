@@ -13,9 +13,11 @@ qreal stage(qreal ms, qreal a, qreal b) { return clamp01((ms - a) / (b - a)); }
 qreal ease(qreal t, QEasingCurve::Type type) { return QEasingCurve(type).valueForProgress(t); }
 } // namespace
 
-namespace { Celebration::Style g_style = Celebration::Style::Visor; }
-void Celebration::setStyle(Style s) { g_style = s; }
-Celebration::Style Celebration::style() { return g_style; }
+namespace { Celebration::Style g_styles[3] = {Celebration::Style::Visor, Celebration::Style::Visor, Celebration::Style::Visor}; }
+void Celebration::setStyle(Style s) { for (auto& x : g_styles) x = s; }
+void Celebration::setStyleFor(Kind k, Style s) { g_styles[int(k)] = s; }
+Celebration::Style Celebration::style() { return g_styles[0]; }
+Celebration::Style Celebration::styleFor(Kind k) { return g_styles[int(k)]; }
 QStringList Celebration::styleNames()
 {
     return {QStringLiteral("Visor (anillo y emblema)"), QStringLiteral("Línea"), QStringLiteral("Borde"),
@@ -42,9 +44,10 @@ void Celebration::play(Kind kind, const QString& kicker, const QString& title, c
     m_accent = kind == Kind::Milestone ? QColor(0xe2, 0xb0, 0x4a)                 // dorado
              : kind == Kind::Goal      ? theme::breakAccent
                                        : theme::pomoAccent;
-    m_duration = g_style == Style::Visor ? (kind == Kind::Pomodoro ? 2300 : 3000) : (kind == Kind::Pomodoro ? 1700 : 2300);
+    m_style = g_styles[int(kind)];   // M31: un festejo distinto para cada cosa
+    m_duration = m_style == Style::Visor ? (kind == Kind::Pomodoro ? 2300 : 3000) : (kind == Kind::Pomodoro ? 1700 : 2300);
     // Los minimalistas no bloquean: se puede seguir usando la app mientras pasan.
-    setAttribute(Qt::WA_TransparentForMouseEvents, g_style != Style::Visor);
+    setAttribute(Qt::WA_TransparentForMouseEvents, m_style != Style::Visor);
     setGeometry(parentWidget()->rect());
     raise();
     show();
@@ -68,7 +71,7 @@ void Celebration::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     const qreal ms = elapsed();
-    switch (g_style) {
+    switch (m_style) {
     case Style::Visor:  paintVisor(p, ms); break;
     case Style::Line:   paintLine(p, ms); break;
     case Style::Border: paintBorder(p, ms); break;

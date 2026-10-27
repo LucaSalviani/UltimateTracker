@@ -392,7 +392,10 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     midnight->setInterval(30 * 1000);
     connect(midnight, &QTimer::timeout, this, &MainWindow::checkDayRollover);
     // M15: "Seguir a Windows": si cambiás el modo de Windows, la app lo sigue.
+    // M31: solo en ese modo y nunca con Ajustes abierto (pisaba la vista previa: el tema
+    // elegido "se ponía y se salía").
     connect(midnight, &QTimer::timeout, this, [this] {
+        if (m_settingsOpen || m_db->setting("theme_mode").toString() != QLatin1String("system")) return;
         const QString key = SettingsDialog::themeKey(m_db);
         if (key != theme::current().key) {
             theme::apply(key);
@@ -519,6 +522,7 @@ QWidget* MainWindow::buildTitleBar()
         if (!m_resizable) setEdgeCursor({});
         m_stats->setJokersPerWeek(m_jokers);
         m_deck->setAdjustOptions(deckAdjustFrom(m_db));
+    m_deck->setVisorStyle(m_db->setting("visor_style", 0).toInt());
         applySizePreset();
         m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
         applySystemSettings();

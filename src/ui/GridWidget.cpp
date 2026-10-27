@@ -554,16 +554,15 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         if ((pm.status == PomoStatus::Running || (pm.id == m_liveId)) && tiles::animatesWhileRunning())
             m_animating = true;
         if (scale <= 0.01) { m_placed.append(pl); continue; }
-        // M29: número afuera, arriba a la izquierda (como en los bocetos: "Nº1").
+        // M29: número afuera, arriba (como en los bocetos: "Nº1").
         if (tiles::style().numberPos == 1 && !isGhost(pm) && m_number.value(pm.id) > 0 && pl.rect.width() >= 18) {
             const double nh = qBound(9.0, pl.rect.height() * 0.24, 15.0);
-            QFont nf = tiles::font(nh * 0.85, QFont::Bold);
-            nf.setItalic(true);
+            QFont nf = tiles::font(nh * 0.85, QFont::Bold);   // M31: centrado y en negrita, sin itálica
             p.setFont(nf);
             p.setOpacity(opacity);
             p.setPen(theme::textDim);
-            p.drawText(QRectF(pl.rect.left() + 1, pl.rect.top() - nh - 1, pl.rect.width() + 20, nh),
-                       Qt::AlignLeft | Qt::AlignBottom, tiles::numberText(m_number.value(pm.id)));
+            p.drawText(QRectF(pl.rect.left() - 10, pl.rect.top() - nh - 1, pl.rect.width() + 20, nh),
+                       Qt::AlignHCenter | Qt::AlignBottom, tiles::numberText(m_number.value(pm.id)));
             p.setOpacity(1.0);
         }
         if (scale != 1.0 || opacity != 1.0) {

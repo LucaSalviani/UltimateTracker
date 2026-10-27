@@ -147,6 +147,7 @@ private:
     class QVBoxLayout* m_rootLayout = nullptr;
     qint64       m_noteTarget = 0;
     qint64       m_lastCompletedId = 0;   // M18
+    bool         m_settingsOpen = false;  // M31
     class GoalPanel* m_goalPanel = nullptr;
     class Celebration* m_celebration = nullptr;
     class GlobalHotkey* m_hotkey = nullptr;   // M9

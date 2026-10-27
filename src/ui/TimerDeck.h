@@ -48,6 +48,8 @@ public:
     explicit TimerDeck(QWidget* parent = nullptr);
     void setModel(const Model& m);
     void setAdjustOptions(const AdjustOptions& o);
+    // M31: visor del color del acento (0), oscuro (1) o siguiendo al tema (2).
+    void setVisorStyle(int style);
     // Nota del pomodoro que acaba de terminar (se muestra en "¿recreo?").
     void setNoteEnabled(bool on);
     void clearNote(const QString& placeholderHint = {});
