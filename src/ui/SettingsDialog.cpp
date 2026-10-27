@@ -1,6 +1,8 @@
 #include "ui/SettingsDialog.h"
 #include "ui/Theme.h"
 #include "ui/Tiles.h"
+#include "ui/DevMode.h"
+#include <QMessageBox>
 #include <QApplication>
 
 #include <QButtonGroup>
@@ -390,6 +392,9 @@ QWidget* SettingsDialog::pageSystem()
     dirRow->addWidget(m_backupDir, 1);
     dirRow->addWidget(pick);
 
+    m_devMode = new QCheckBox(QStringLiteral("Modo desarrollador: probar sobre una copia de tus datos (nada queda registrado)"), w);
+    m_devMode->setChecked(devmode::enabledFlag(qApp->property("dataDir").toString()));
+
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Sistema"), w));
     lay->addWidget(m_autostart);
@@ -401,6 +406,10 @@ QWidget* SettingsDialog::pageSystem()
     lay->addLayout(dirRow);
     lay->addWidget(note(QStringLiteral("Tip: si elegís una carpeta de OneDrive o Google Drive, las copias también "
                                        "te salvan si se rompe el disco."), w));
+    lay->addSpacing(10);
+    lay->addWidget(m_devMode);
+    lay->addWidget(note(QStringLiteral("Con el modo desarrollador aparece el botón 🧪 en la barra (completar ya, "
+                                       "acelerar el tiempo, ver festejos…). Se aplica al reiniciar."), w));
     lay->addStretch();
     return w;
 }
@@ -447,6 +456,16 @@ void SettingsDialog::accept()
     m_db->setSetting("quiet_fullscreen", m_quietFullscreen->isChecked() ? 1 : 0);
     m_db->setSetting("backup", m_backup->isChecked() ? 1 : 0);
     m_db->setSetting("backup_dir", m_backupDir->text().trimmed());
+    // M20: el interruptor va en un archivo (no en la base) y pide reiniciar.
+    const QString dataDir = qApp->property("dataDir").toString();
+    if (m_devMode->isChecked() != devmode::enabledFlag(dataDir)) {
+        devmode::setEnabledFlag(dataDir, m_devMode->isChecked());
+        m_restartRequested = QMessageBox::question(
+            this, QStringLiteral("Modo desarrollador"),
+            m_devMode->isChecked() ? QStringLiteral("Para entrar al modo de pruebas hay que reiniciar la app. ¿Reiniciar ahora?")
+                                   : QStringLiteral("Para volver a tus datos reales hay que reiniciar la app. ¿Reiniciar ahora?"),
+            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes;
+    }
     QDialog::accept();
 }
 

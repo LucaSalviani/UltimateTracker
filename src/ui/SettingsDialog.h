@@ -25,6 +25,7 @@ public:
     static void currentTheme(Database* db, QString* color, QString* mode);
     static void loadTileStyle(Database* db);   // M18
 
+    bool restartRequested() const { return m_restartRequested; }   // M20
     void accept() override;
     void reject() override;
 
@@ -83,4 +84,6 @@ private:
     QCheckBox* m_quietFullscreen;
     QCheckBox* m_backup;
     QLineEdit* m_backupDir;
+    QCheckBox* m_devMode;            // M20
+    bool       m_restartRequested = false;
 };

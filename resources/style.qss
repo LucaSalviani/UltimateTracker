@@ -360,3 +360,7 @@ QToolButton#MiniAction { border: 1px solid #3a3a3a; border-radius: 14px; backgro
 QToolButton#MiniAction:hover { background: #2c2c2c; }
 QToolButton#MiniClose { border: none; border-radius: 9px; background: transparent; }
 QToolButton#MiniClose:hover { background: #2c2c2c; }
+
+/* Modo desarrollador (M20) */
+QToolButton#DevButton { background: transparent; border: 1px dashed @acc; border-radius: 6px; padding: 1px 5px; }
+QToolButton#DevButton:hover { background: @s4; }

@@ -6,6 +6,8 @@
 #include "ui/FolderMenu.h"
 #include "ui/GoalPanel.h"
 #include "ui/MiniPlayer.h"
+#include "ui/DevMode.h"
+#include "ui/Greeting.h"
 #include "ui/Celebration.h"
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
@@ -215,7 +217,8 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     setAttribute(Qt::WA_AlwaysShowToolTips);   // tooltips aunque la ventana no tenga foco
     setMinimumSize(380, 240);
 
-    m_session = new SessionController(m_db, {}, true, this);
+    // M20: en modo desarrollador el reloj se puede acelerar o adelantar.
+    m_session = new SessionController(m_db, devmode::active() ? devmode::clock() : SessionController::Clock{}, true, this);
     m_session->recoverAfterRestart();
     m_sounds = new Sounds(this);
     m_today = dayclock::today();
@@ -463,7 +466,9 @@ QWidget* MainWindow::buildTitleBar()
 
     auto* logo = new QLabel(bar);
     logo->setPixmap(icons::get(icons::Id::AppLogo).pixmap(16, 16));
-    auto* name = dimLabel(bar, QStringLiteral("UltimateTracker"));
+    auto* name = dimLabel(bar, devmode::active() ? QStringLiteral("UltimateTracker · PRUEBAS")
+                                                 : QStringLiteral("UltimateTracker"));
+    if (devmode::active()) name->setStyleSheet(QStringLiteral("color: %1; font-weight: 600;").arg(theme::pomoAccent.name()));
 
     // M16: el botón va ciclando entre los modos de tamaño habilitados en Ajustes.
     m_btnProportional = iconButton(bar, icons::Id::Proportional, QString());
@@ -555,6 +560,7 @@ QWidget* MainWindow::buildTitleBar()
     lay->addWidget(m_btnProportional);
     lay->addWidget(m_btnZoomIn);
     lay->addWidget(m_btnZoomOut);
+    if (QToolButton* dev = buildDevButton(bar)) lay->addWidget(dev);
     lay->addWidget(goalBtn);
     lay->addWidget(stats);
     lay->addWidget(menuBtn);
@@ -1586,6 +1592,82 @@ void MainWindow::toggleMini()
     m_db->setSetting("mini_open", 1);
 }
 
+// M20: menú de pruebas (solo en modo desarrollador). Todo pasa en la copia.
+QToolButton* MainWindow::buildDevButton(QWidget* bar)
+{
+    if (!devmode::active()) return nullptr;
+    auto* b = new QToolButton(bar);
+    b->setObjectName("DevButton");
+    b->setText(QStringLiteral("🧪"));
+    b->setToolTip(QStringLiteral("Modo desarrollador: herramientas de prueba (tus datos reales no se tocan)"));
+    b->setCursor(Qt::PointingHandCursor);
+    b->setFocusPolicy(Qt::NoFocus);
+    auto* menu = new QMenu(b);
+    menu->addAction(QStringLiteral("Completar pomodoro / recreo ya"), this, [this] {
+        devmode::jump(qint64(m_session->remainingSec()) * 1000 + 300);
+        m_session->tick();
+    });
+    menu->addAction(QStringLiteral("Arrancar y completar uno (5 s)"), this, [this] {
+        if (!m_session->inProgress()) m_session->start();
+        QTimer::singleShot(5000, this, [this] {
+            if (m_session->state() == SessionController::State::Running) {
+                devmode::jump(qint64(m_session->remainingSec()) * 1000 + 300);
+                m_session->tick();
+            }
+        });
+    });
+    auto* speed = menu->addMenu(QStringLiteral("Velocidad del tiempo"));
+    for (int x : {1, 10, 60, 300}) {
+        QAction* a = speed->addAction(QStringLiteral("×%1").arg(x), this, [x] { devmode::setSpeed(x); });
+        a->setCheckable(true);
+        a->setChecked(int(devmode::speed()) == x);
+        connect(speed, &QMenu::aboutToShow, a, [a, x] { a->setChecked(int(devmode::speed()) == x); });
+    }
+    menu->addSeparator();
+    menu->addAction(QStringLiteral("Festejo: pomodoro"), this, [this] {
+        celebrate(int(Celebration::Kind::Pomodoro), QStringLiteral("Pomodoro 08 completo"), QStringLiteral("25m"),
+                  QStringLiteral("Prueba · 41h20 en total"));
+    });
+    menu->addAction(QStringLiteral("Festejo: objetivo cumplido"), this, [this] {
+        celebrate(int(Celebration::Kind::Goal), QStringLiteral("Objetivo del día"), QStringLiteral("¡Cumplido!"),
+                  QStringLiteral("3h20 estudiadas hoy"));
+    });
+    menu->addAction(QStringLiteral("Festejo: hito de horas"), this, [this] {
+        celebrate(int(Celebration::Kind::Milestone), QStringLiteral("Hito alcanzado"), QStringLiteral("50 horas"),
+                  QStringLiteral("Prueba"));
+    });
+    menu->addAction(QStringLiteral("Animación de completado en el último cuadradito"), this, [this] {
+        const auto today = m_db->pomodorosBetween(m_today, m_today);
+        if (today.isEmpty()) { toast(QStringLiteral("Hoy no hay pomodoros para animar")); return; }
+        m_grid->markCompleted(today.last().id, 0);
+    });
+    menu->addAction(QStringLiteral("Sonidos: fin de pomodoro / logro / alarma 3 s"), this, [this] {
+        m_sounds->playChime();
+        QTimer::singleShot(1500, this, [this] { m_sounds->playAchievement(); });
+        QTimer::singleShot(3500, this, [this] {
+            m_sounds->startAlarm();
+            QTimer::singleShot(3000, this, [this] { m_sounds->stopAlarm(); });
+        });
+    });
+    menu->addAction(QStringLiteral("Ver el saludo de inicio"), this, [this] {
+        auto* g = new Greeting(m_db, geometry());
+        connect(g, &Greeting::accepted, this, &MainWindow::openFromGreeting);
+        g->show();
+    });
+    menu->addSeparator();
+    menu->addAction(QStringLiteral("Volver a copiar mis datos reales (reinicia)"), this, [this] {
+        devmode::restartApp();
+        quitApp();
+    });
+    menu->addAction(QStringLiteral("Salir del modo desarrollador (reinicia)"), this, [this] {
+        devmode::setEnabledFlag(qApp->property("dataDir").toString(), false);
+        devmode::restartApp();
+        quitApp();
+    });
+    connect(b, &QToolButton::clicked, this, [b, menu] { menu->popup(b->mapToGlobal(QPoint(0, b->height()))); });
+    return b;
+}
+
 void MainWindow::applySystemSettings()
 {
     sysint::setAutostart(m_db->setting("autostart", 0).toBool());
@@ -1600,7 +1682,7 @@ void MainWindow::applySystemSettings()
 
 void MainWindow::runDailyBackup()
 {
-    if (!m_db->setting("backup", 1).toBool()) return;
+    if (!m_db->setting("backup", 1).toBool() || devmode::active()) return;   // la copia de prueba no se respalda
     sysint::dailyBackup(*m_db, qApp->property("dataDir").toString(), m_db->setting("backup_dir").toString());
 }
 

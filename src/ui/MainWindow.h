@@ -107,6 +107,7 @@ private:
 
     void applySizeMode(GridWidget::SizeMode mode, bool announce);   // M16
     void toggleMini();   // M19
+    QToolButton* buildDevButton(QWidget* bar);   // M20
     void applySystemSettings();   // M9: atajo global, inicio con Windows
     void runDailyBackup();
 

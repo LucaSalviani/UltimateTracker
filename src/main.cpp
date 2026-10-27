@@ -1,5 +1,6 @@
 #include "core/Database.h"
 #include "core/DayClock.h"
+#include "ui/DevMode.h"
 #include "ui/Greeting.h"
 #include "ui/MainWindow.h"
 #include "ui/SettingsDialog.h"
@@ -14,6 +15,7 @@
 #include <QPalette>
 #include <QStandardPaths>
 #include <QStyleFactory>
+#include <QThread>
 
 namespace {
 // La app antes se llamaba "Constancia": si existen sus datos y todavía no hay
@@ -45,6 +47,16 @@ int main(int argc, char* argv[])
 
     // Una sola instancia: si ya está abierta, la traemos al frente.
     const QString serverName = QStringLiteral("ultimatetracker-") + qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER"));
+    if (QCoreApplication::arguments().contains(QStringLiteral("--restarted"))) {
+        // M20: reinicio pedido por la app: esperar a que la instancia anterior cierre.
+        for (int i = 0; i < 40; ++i) {
+            QLocalSocket probe;
+            probe.connectToServer(serverName);
+            if (!probe.waitForConnected(100)) break;
+            probe.abort();
+            QThread::msleep(100);
+        }
+    }
     {
         QLocalSocket probe;
         probe.connectToServer(serverName);
@@ -66,8 +78,18 @@ int main(int argc, char* argv[])
     migrateOldData(dataDir, dbPath);
     app.setProperty("dataDir", dataDir);   // para las copias de seguridad (M9)
 
+    // M20: en modo desarrollador se trabaja sobre una copia de la base.
+    QString openPath = dbPath;
+    if (devmode::enabledFlag(dataDir)) {
+        const QString sandbox = devmode::prepareSandbox(dbPath, dataDir);
+        if (!sandbox.isEmpty()) {
+            openPath = sandbox;
+            devmode::setActive(true);
+        }
+    }
+
     Database db;
-    if (!db.open(dbPath)) {
+    if (!db.open(openPath)) {
         QMessageBox::critical(nullptr, QStringLiteral("UltimateTracker"),
                               QStringLiteral("No pude abrir la base de datos:\n%1").arg(db.lastError()));
         return 1;
