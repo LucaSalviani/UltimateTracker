@@ -22,7 +22,9 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QPushButton>
+#include <QDoubleSpinBox>
 #include <QScrollArea>
+#include <cmath>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QToolButton>
@@ -135,7 +137,8 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     m_nav->setObjectName("SettingsNav");
     m_nav->setFixedWidth(150);
     for (const QString& s : {QStringLiteral("General"), QStringLiteral("Cronómetro"), QStringLiteral("Apariencia"),
-                             QStringLiteral("Cuadraditos"), QStringLiteral("Festejos y sonidos"), QStringLiteral("Sistema")})
+                             QStringLiteral("Cuadraditos"), QStringLiteral("Festejos y sonidos"), QStringLiteral("Hitos"),
+                             QStringLiteral("Sistema")})
         m_nav->addItem(s);
 
     m_pages = new QStackedWidget(this);
@@ -155,6 +158,7 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     m_pages->addWidget(wrap(pageAppearance()));
     m_pages->addWidget(wrap(pageTiles()));
     m_pages->addWidget(wrap(pageCelebrations()));
+    m_pages->addWidget(wrap(pageMilestones()));
     m_pages->addWidget(wrap(pageSystem()));
     connect(m_nav, &QListWidget::currentRowChanged, m_pages, &QStackedWidget::setCurrentIndex);
     m_nav->setCurrentRow(0);
@@ -551,6 +555,71 @@ QWidget* SettingsDialog::pageTiles()
     return w;
 }
 
+// M44: hitos. Lo mismo que el menú ⋯ › Hitos, más los números.
+namespace {
+const char* kMsKeys[6] = {"ms_day", "ms_streaks", "ms_weekly", "ms_hours", "ms_stages", "ms_month"};
+}
+
+QWidget* SettingsDialog::pageMilestones()
+{
+    auto* w = new QWidget(this);
+    const char* labels[6] = {"Marca del día (bronce, plata, oro)", "Rachas y récords", "Meta semanal",
+                             "Horas por actividad (1, 5, 10, 25, 50, 100, 150… h)",
+                             "Etapas hacia las 10.000 h (por actividad y nivel global)", "Resumen del mes"};
+    for (int i = 0; i < 6; ++i) {
+        m_msToggle[i] = new QCheckBox(QString::fromUtf8(labels[i]), w);
+        m_msToggle[i]->setChecked(m_db->setting(kMsKeys[i], 1).toBool());
+    }
+    const char* markKeys[3] = {"ms_bronze_min", "ms_silver_min", "ms_gold_min"};
+    const int markDef[3] = {120, 240, 360};
+    for (int i = 0; i < 3; ++i) {
+        m_markH[i] = new QDoubleSpinBox(w);
+        m_markH[i]->setRange(0.5, 16);
+        m_markH[i]->setSingleStep(0.5);
+        m_markH[i]->setDecimals(1);
+        m_markH[i]->setSuffix(QStringLiteral(" h"));
+        m_markH[i]->setValue(m_db->setting(markKeys[i], markDef[i]).toInt() / 60.0);
+        connect(m_msToggle[0], &QCheckBox::toggled, m_markH[i], &QWidget::setEnabled);
+        m_markH[i]->setEnabled(m_msToggle[0]->isChecked());
+    }
+    m_weeklyH = spin(1, 100, m_db->setting("ms_weekly_min", 20 * 60).toInt() / 60, QStringLiteral(" h por semana"), w);
+    connect(m_msToggle[2], &QCheckBox::toggled, m_weeklyH, &QWidget::setEnabled);
+    m_weeklyH->setEnabled(m_msToggle[2]->isChecked());
+
+    auto* mform = new QFormLayout;
+    mform->addRow(QStringLiteral("Bronce"), m_markH[0]);
+    mform->addRow(QStringLiteral("Plata"), m_markH[1]);
+    mform->addRow(QStringLiteral("Oro"), m_markH[2]);
+    auto* wform = new QFormLayout;
+    wform->addRow(QStringLiteral("Meta"), m_weeklyH);
+
+    auto* lay = new QVBoxLayout(w);
+    lay->addWidget(heading(QStringLiteral("Hitos"), w));
+    lay->addWidget(subheading(QStringLiteral("Corto plazo"), w));
+    lay->addWidget(m_msToggle[0]);
+    lay->addLayout(mform);
+    lay->addWidget(m_msToggle[1]);
+    lay->addWidget(note(QStringLiteral("Rachas de 3, 7, 14, 30, 60, 100… días; tu mejor día, tu mejor semana y tu racha más larga."), w));
+    lay->addWidget(m_msToggle[2]);
+    lay->addLayout(wform);
+    lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Mediano y largo plazo"), w));
+    lay->addWidget(m_msToggle[3]);
+    lay->addWidget(m_msToggle[4]);
+    lay->addWidget(note(QStringLiteral("Novato (0–20 h) · Aprendiz (20–100) · Practicante (100–500) · Competente (500–1.000) · "
+                                       "Avanzado (1.000–2.500) · Especialista (2.500–5.000) · Experto (5.000–10.000) · Maestro. "
+                                       "Cada etapa tiene tres subniveles."), w));
+    lay->addWidget(m_msToggle[5]);
+    lay->addWidget(note(QStringLiteral("Lo mismo se prende y se apaga desde el menú ⋯ › Hitos."), w));
+    lay->addStretch();
+    return w;
+}
+
+void SettingsDialog::showPage(int page)
+{
+    m_nav->setCurrentRow(qBound(0, page, m_nav->count() - 1));
+}
+
 QWidget* SettingsDialog::pageSystem()
 {
     auto* w = new QWidget(this);
@@ -633,6 +702,11 @@ void SettingsDialog::accept()
     }
     m_db->setSetting("group_style", m_groupStyle->currentIndex());
     m_db->setSetting("celebrations", m_celebrations->isChecked() ? 1 : 0);
+    for (int i = 0; i < 6; ++i) m_db->setSetting(kMsKeys[i], m_msToggle[i]->isChecked() ? 1 : 0);   // M44
+    m_db->setSetting("ms_bronze_min", int(std::lround(m_markH[0]->value() * 60)));
+    m_db->setSetting("ms_silver_min", int(std::lround(qMax(m_markH[0]->value(), m_markH[1]->value()) * 60)));
+    m_db->setSetting("ms_gold_min", int(std::lround(qMax(m_markH[1]->value(), m_markH[2]->value()) * 60)));
+    m_db->setSetting("ms_weekly_min", m_weeklyH->value() * 60);
     m_db->setSetting("activity_colors", m_activityColors->isChecked() ? 1 : 0);
     {
         const char* keys[] = {"celebration_pomodoro", "celebration_goal", "celebration_milestone"};
@@ -753,13 +827,20 @@ void SettingsDialog::resetSection(int page)
         pick(m_soundAlarm, 0);
         m_soundVolume->setValue(100);
         break;
-    case 5:   // Sistema
+    case 6:   // Sistema
         m_autostart->setChecked(true);
         m_greeting->setChecked(true);
         m_hotkey->setChecked(true);
         m_quietFullscreen->setChecked(true);
         m_backup->setChecked(true);
         m_backupDir->clear();
+        break;
+    case 5:   // Hitos
+        for (QCheckBox* c : m_msToggle) c->setChecked(true);
+        m_markH[0]->setValue(2);
+        m_markH[1]->setValue(4);
+        m_markH[2]->setValue(6);
+        m_weeklyH->setValue(20);
         break;
     default: break;
     }

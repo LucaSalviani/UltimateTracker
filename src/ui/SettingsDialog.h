@@ -26,6 +26,7 @@ public:
     static void loadTileStyle(Database* db);   // M18
 
     bool restartRequested() const { return m_restartRequested; }   // M20
+    void showPage(int page);
     void accept() override;
     void reject() override;
 
@@ -45,6 +46,7 @@ private:
     QWidget* pageTiles();   // M18
     QWidget* pageCelebrations();   // M32
     QWidget* pageSystem();
+    QWidget* pageMilestones();   // M44
     void resetSection(int page);   // M38: valores por defecto de la sección visible
 
     Database* m_db;
@@ -108,6 +110,11 @@ private:
     class QSpinBox* m_tileSize;
     int        m_originalTileSize = 100;
     tiles::Style m_originalTiles;
+
+    // Hitos (M44)
+    class QDoubleSpinBox* m_markH[3];
+    QSpinBox*  m_weeklyH;
+    QCheckBox* m_msToggle[6];
 
     // Sistema
     QCheckBox* m_autostart;

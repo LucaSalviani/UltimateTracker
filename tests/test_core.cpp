@@ -2,6 +2,7 @@
 #include "core/Database.h"
 #include "core/Goals.h"
 #include "core/Export.h"
+#include "core/Milestones.h"
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
@@ -598,6 +599,47 @@ private slots:
         QCOMPARE(db.goals().size(), 1);
         QCOMPARE(db.goals().first().id, r.id);
         QCOMPARE(db.goals().first().spec, QString("t:120"));
+    }
+
+    // M44: hitos
+    void stages()
+    {
+        QCOMPARE(ms::stageFor(0).label, QString("Novato"));
+        QCOMPARE(ms::stageFor(19 * 3600).label, QString("Novato"));
+        QCOMPARE(ms::stageFor(20 * 3600).label, QString("Aprendiz I"));
+        QCOMPARE(ms::stageFor(60 * 3600).label, QString("Aprendiz II"));
+        QCOMPARE(ms::stageFor(99 * 3600).label, QString("Aprendiz III"));
+        QCOMPARE(ms::stageFor(440 * 3600).label, QString("Practicante III"));
+        QCOMPARE(ms::stageFor(10000LL * 3600).label, QString("Maestro"));
+        const auto st = ms::stageFor(150 * 3600);   // Practicante I: 100 → 233,3
+        QCOMPARE(st.sub, 1);
+        QVERIFY(st.progress > 0.37 && st.progress < 0.38);
+    }
+
+    void hourCurve()
+    {
+        QCOMPARE(ms::hoursCrossed(0, 3600), QVector<int>{1});
+        QCOMPARE(ms::hoursCrossed(4 * 3600, 11 * 3600), (QVector<int>{5, 10}));
+        QCOMPARE(ms::hoursCrossed(30 * 3600, 49 * 3600), QVector<int>{});
+        QCOMPARE(ms::hoursCrossed(990 * 3600, 1600 * 3600), (QVector<int>{1000, 1500}));
+    }
+
+    void shortTerm()
+    {
+        const int marks[3] = {120, 240, 360};
+        QCOMPARE(ms::dayMark(119 * 60, marks), 0);
+        QCOMPARE(ms::dayMark(4 * 3600, marks), 2);
+        QCOMPARE(ms::dayMark(9 * 3600, marks), 3);
+        QMap<QDate, qint64> d;
+        const QDate mon(2026, 10, 19);   // lunes
+        d[mon.addDays(-7)] = 5 * 3600;   d[mon.addDays(-6)] = 6 * 3600;   // semana anterior: 11 h
+        d[mon] = 3 * 3600;               d[mon.addDays(1)] = 7 * 3600;    // esta semana: 10 h
+        const auto r = ms::records(d, mon.addDays(1));   // antes del martes
+        QCOMPARE(r.bestDay, qint64(6 * 3600));
+        QCOMPARE(r.bestWeek, qint64(11 * 3600));
+        QCOMPARE(ms::weekTotal(d, mon.addDays(3)), qint64(10 * 3600));
+        QCOMPARE(ms::weeksInARow(d, mon.addDays(2), 10 * 3600), 2);
+        QCOMPARE(ms::weeksInARow(d, mon.addDays(2), 12 * 3600), 0);
     }
 
     // M39: CSV

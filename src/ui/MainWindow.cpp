@@ -12,6 +12,7 @@
 #include "ui/Celebration.h"
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
+#include "core/Milestones.h"
 #include "ui/LiveStats.h"
 #include "ui/TimerDeck.h"
 #include "ui/Icons.h"
@@ -347,6 +348,10 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     // M13: sin "¿En qué trabajaste?" en el reproductor; la nota queda en el click derecho.
     m_deck->setNoteEnabled(false);
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::checkGoalReached);
+    connect(m_session, &SessionController::pomodoroSaved, this, [this](qint64 id) {
+        const auto p = id > 0 ? m_db->pomodoro(id) : std::nullopt;
+        if (p && p->status != PomoStatus::Running && p->status != PomoStatus::Parked) checkShortTermMilestones();
+    });
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::preloadFromGoal);
     connect(m_session, &SessionController::pomodoroSaved, this, [this](qint64 id) {
         // pomodoroSaved llega antes que pomodoroCompleted: se decide en la vuelta siguiente
@@ -563,7 +568,37 @@ QWidget* MainWindow::buildTitleBar()
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
     menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
-    menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, &MainWindow::openSettings);
+    // M44: hitos, cada uno se prende o se apaga por separado (los números, en Ajustes › Hitos).
+    auto* hitos = menu->addMenu(QStringLiteral("Hitos"));
+    connect(hitos, &QMenu::aboutToShow, this, [this, hitos] {
+        hitos->clear();
+        const QList<QPair<QString, QString>> items = {
+            {"ms_day", QStringLiteral("Marca del día (bronce, plata, oro)")},
+            {"ms_streaks", QStringLiteral("Rachas y récords")},
+            {"ms_weekly", QStringLiteral("Meta semanal")},
+            {"ms_hours", QStringLiteral("Horas por actividad")},
+            {"ms_stages", QStringLiteral("Etapas hacia las 10.000 h")},
+            {"ms_month", QStringLiteral("Resumen del mes")},
+        };
+        auto* sec = hitos->addAction(QStringLiteral("Corto plazo"));
+        sec->setEnabled(false);
+        int i = 0;
+        for (const auto& [key, label] : items) {
+            if (i == 3) hitos->addSection(QStringLiteral("Mediano y largo plazo"));
+            QAction* a = hitos->addAction(label);
+            a->setCheckable(true);
+            a->setChecked(m_db->setting(key, 1).toBool());
+            connect(a, &QAction::toggled, this, [this, key](bool on) {
+                m_db->setSetting(key, on ? 1 : 0);
+                refreshLiveStats();
+                if (m_overlay == Overlay::Stats) m_stats->refresh();
+            });
+            ++i;
+        }
+        hitos->addSeparator();
+        hitos->addAction(QStringLiteral("Ajustar números…"), this, [this] { openSettings(5); });
+    });
+    menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });
     menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);
     menu->addSeparator();
     menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
@@ -1238,21 +1273,138 @@ void MainWindow::togglePlay()
 void MainWindow::onStudyRecorded(qint64 folderId, qint64 seconds)
 {
     if (seconds <= 0) return;
-    const auto totals = m_tree.rollUp(m_db->studyByFolder());
-    for (qint64 id : m_tree.ancestorsAndSelf(folderId)) {
-        const qint64 after = totals.value(id);
-        for (int h : stats::milestonesCrossed(after - seconds, after)) {
-            if (!m_db->markMilestone(id, h)) continue;
+    const ms::Config cfg = ms::Config::load(*m_db);
+    if (!cfg.hours && !cfg.stages) return;
+    const auto direct = m_db->studyByFolder();
+    const auto totals = m_tree.rollUp(direct);
+    QStringList notes;
+    // M44 · largo plazo primero (si coinciden, se festeja la etapa).
+    if (cfg.stages) {
+        for (qint64 id : m_tree.ancestorsAndSelf(folderId)) {
+            const qint64 after = totals.value(id);
+            const ms::Stage a = ms::stageFor(after - seconds), b = ms::stageFor(after);
+            if (a.label == b.label || !m_db->markMilestone(id, -(b.index * 10 + b.sub))) continue;
             const QString name = m_tree.find(id)->name;
-            const QString msg = h <= 10
-                ? QStringLiteral("%1: ¡llegaste a %2 %3!").arg(name).arg(h).arg(h == 1 ? "hora" : "horas")
-                : QStringLiteral("%1: ¡%2 horas! (de 10.000)").arg(name).arg(h);
-            toast(msg);
-            celebrate(int(Celebration::Kind::Milestone), QStringLiteral("Hito alcanzado"),
-                      QStringLiteral("%1 horas").arg(h), name);
-            if (m_tray) m_tray->showMessage(QStringLiteral("UltimateTracker"), msg, QSystemTrayIcon::Information, 5000);
+            const bool newStage = a.index != b.index;
+            notes << QStringLiteral("%1: %2").arg(name, b.label);
+            celebrate(int(Celebration::Kind::Milestone), newStage ? QStringLiteral("Nueva etapa") : QStringLiteral("Subiste de nivel"),
+                      b.label, name);
+        }
+        qint64 all = 0;
+        for (qint64 v : direct) all += v;
+        const ms::Stage a = ms::stageFor(all - seconds), b = ms::stageFor(all);
+        if (a.label != b.label && m_db->markMilestone(-1, -(b.index * 10 + b.sub))) {
+            notes << QStringLiteral("Nivel global: %1").arg(b.label);
+            celebrate(int(Celebration::Kind::Milestone), QStringLiteral("Nivel global"), b.label,
+                      QStringLiteral("%1 en total").arg(fmt::hours(all)));
         }
     }
+    // Mediano plazo: horas por actividad (1, 5, 10, 25, 50, 100, 150, …).
+    if (cfg.hours) {
+        for (qint64 id : m_tree.ancestorsAndSelf(folderId)) {
+            const qint64 after = totals.value(id);
+            for (int h : ms::hoursCrossed(after - seconds, after)) {
+                if (!m_db->markMilestone(id, h)) continue;
+                const QString name = m_tree.find(id)->name;
+                notes << QStringLiteral("%1: %2 %3").arg(name).arg(h).arg(h == 1 ? "hora" : "horas");
+                celebrate(int(Celebration::Kind::Milestone), QStringLiteral("Hito alcanzado"),
+                          QStringLiteral("%1 %2").arg(h).arg(h == 1 ? "hora" : "horas"), name);
+            }
+        }
+    }
+    if (notes.isEmpty()) return;
+    queueNotes(notes);
+    if (m_tray) m_tray->showMessage(QStringLiteral("UltimateTracker"), notes.join(QStringLiteral("  ·  ")),
+                                    QSystemTrayIcon::Information, 5000);
+}
+
+// Los hitos que saltan con el mismo pomodoro salen juntos en un solo aviso.
+void MainWindow::queueNotes(const QStringList& notes)
+{
+    const bool scheduled = !m_pendingNotes.isEmpty();
+    m_pendingNotes += notes;
+    if (scheduled) return;
+    QTimer::singleShot(0, this, [this] {
+        const QStringList n = m_pendingNotes;
+        m_pendingNotes.clear();
+        if (!n.isEmpty()) toast(n.join(QStringLiteral("  ·  ")));
+    });
+}
+
+// M44 · corto plazo. Se revisa cada vez que se guarda un pomodoro terminado; cada
+// cosa se avisa una sola vez (por día o por semana) y el festejo es el minimalista
+// del "objetivo" (las semanas seguidas, el de los hitos).
+void MainWindow::checkShortTermMilestones()
+{
+    const ms::Config cfg = ms::Config::load(*m_db);
+    if (!cfg.dayMark && !cfg.streaks && !cfg.weekly) return;
+    const auto byDay = stats::studyByDay(*m_db, QDate(2000, 1, 1), m_today, nullptr);
+    const qint64 today = byDay.value(m_today);
+    const QString dk = fmt::dayKey(m_today);
+    const QString wk = fmt::dayKey(fmt::mondayOf(m_today));
+    QStringList notes;
+    auto once = [this](const QString& key) {
+        if (!m_db->setting(key).toString().isEmpty()) return false;
+        m_db->setSetting(key, 1);
+        return true;
+    };
+
+    if (cfg.weekly) {
+        const qint64 week = ms::weekTotal(byDay, m_today);
+        const qint64 goal = qint64(cfg.weeklyMin) * 60;
+        if (goal > 0 && week >= goal && once("ms/week/" + wk)) {
+            const int row = ms::weeksInARow(byDay, m_today, goal);
+            if (ms::weekStreakMarks().contains(row)) {
+                notes << QStringLiteral("%1 semanas seguidas cumpliendo la meta").arg(row);
+                celebrate(int(Celebration::Kind::Milestone), QStringLiteral("Constancia"),
+                          QStringLiteral("%1 semanas seguidas").arg(row), QStringLiteral("cumpliendo la meta semanal"));
+            } else {
+                notes << QStringLiteral("Meta semanal cumplida (%1)").arg(fmt::duration(int(goal)));
+            }
+            celebrate(int(Celebration::Kind::Goal), QStringLiteral("Meta semanal"), QStringLiteral("¡Cumplida!"),
+                      QStringLiteral("%1 esta semana").arg(fmt::hours(week)));
+        }
+    }
+    if (cfg.streaks) {
+        const ms::Records rec = ms::records(byDay, m_today);
+        int priorDays = 0;
+        for (auto it = byDay.cbegin(); it != byDay.cend(); ++it) if (it.key() < m_today && it.value() > 0) ++priorDays;
+        if (priorDays >= 3 && rec.bestDay >= 3600 && today > rec.bestDay && once("ms/rec_day/" + dk)) {
+            notes << QStringLiteral("Récord: tu mejor día");
+            celebrate(int(Celebration::Kind::Goal), QStringLiteral("Récord personal"), QStringLiteral("Tu mejor día"),
+                      QStringLiteral("%1 (antes %2)").arg(fmt::hours(today), fmt::hours(rec.bestDay)));
+        }
+        const qint64 week = ms::weekTotal(byDay, m_today);
+        if (rec.bestWeek >= 2 * 3600 && week > rec.bestWeek && once("ms/rec_week/" + wk)) {
+            notes << QStringLiteral("Récord: tu mejor semana");
+            celebrate(int(Celebration::Kind::Goal), QStringLiteral("Récord personal"), QStringLiteral("Tu mejor semana"),
+                      QStringLiteral("%1 (antes %2)").arg(fmt::hours(week), fmt::hours(rec.bestWeek)));
+        }
+        const auto streak = stats::streak(m_db->studiedDays(), m_today, m_jokers);
+        const int best = m_db->setting("ms/best_streak", 0).toInt();
+        if (streak.days > best) {
+            m_db->setSetting("ms/best_streak", streak.days);
+            if (best >= 3 && once("ms/rec_streak/" + dk)) notes << QStringLiteral("Récord de racha: %1 días").arg(streak.days);
+        }
+        if (ms::streakMarks().contains(streak.days) && once("ms/streak/" + dk)) {
+            notes << QStringLiteral("Racha de %1 días").arg(streak.days);
+            celebrate(int(Celebration::Kind::Goal), QStringLiteral("Racha"), QStringLiteral("%1 días").arg(streak.days),
+                      QStringLiteral("seguidos estudiando"));
+        }
+    }
+    if (cfg.dayMark) {
+        const int level = ms::dayMark(today, cfg.markMin);
+        if (level > m_db->setting("ms/day/" + dk, 0).toInt()) {
+            m_db->setSetting("ms/day/" + dk, level);
+            const QString name = ms::dayMarkName(level);
+            notes << QStringLiteral("Marca de %1 del día (%2)").arg(name, fmt::hours(today));
+            celebrate(int(Celebration::Kind::Goal), QStringLiteral("Marca del día"),
+                      name.left(1).toUpper() + name.mid(1), QStringLiteral("%1 hoy").arg(fmt::hours(today)));
+        }
+    }
+    if (notes.isEmpty()) return;
+    queueNotes(notes);
+    refreshLiveStats();
 }
 
 void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
@@ -2047,9 +2199,10 @@ void MainWindow::quitApp()
 }
 
 // M37: Ajustes (desde el menú ⋯ o Ctrl+,)
-void MainWindow::openSettings()
+void MainWindow::openSettings(int page)
 {
     SettingsDialog dlg(m_db, this);
+    if (page >= 0) dlg.showPage(page);
     win::applyChrome(&dlg);
     connect(&dlg, &SettingsDialog::tileSizePreview, this, [this](int pct) { m_grid->setBaseScale(pct / 100.0); });
     connect(&dlg, &SettingsDialog::soundPreview, m_sounds, &Sounds::preview);

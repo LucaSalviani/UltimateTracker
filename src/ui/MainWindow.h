@@ -100,6 +100,9 @@ private:
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel
     void updateObjectiveBand();
     void checkGoalReached();
+    void checkShortTermMilestones();   // M44: marca del día, rachas, récords, meta semanal
+    void queueNotes(const QStringList& notes);
+    QStringList m_pendingNotes;
     void preloadFromGoal();   // M17
     void showDayMenu(const QDate& day, const QPoint& globalPos);
 
@@ -110,7 +113,7 @@ private:
     void toggleMini();   // M19
     void editNote(qint64 pomodoroId);   // M37
     void showShortcuts();               // M37: panel de atajos (?)
-    void openSettings();
+    void openSettings(int page = -1);
     void undoGoals(const QVector<GoalRule>& before, const QDate& day);   // M40
     QToolButton* buildDevButton(QWidget* bar);   // M20
     void applySoundSettings();   // M27
