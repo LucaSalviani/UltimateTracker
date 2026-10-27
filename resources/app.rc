@@ -1,0 +1,3 @@
+// Ícono del ejecutable. Para regenerar app_icon.o (MinGW):
+//   windres --input-format=rc --output-format=coff -o app_icon.o app.rc
+IDI_ICON1 ICON "app.ico"

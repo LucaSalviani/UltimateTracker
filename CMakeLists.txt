@@ -52,9 +52,13 @@ if(WIN32)
     # Esquinas redondeadas, sombra y modo oscuro de Windows 11 (DWM).
     target_link_libraries(UltimateTracker PRIVATE dwmapi)
     # Ícono del .exe (el mismo de la barra de tareas).
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/app.rc
-         "IDI_ICON1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/resources/app.ico\"\n")
-    target_sources(UltimateTracker PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/app.rc)
+    # Con MinGW se enlaza un objeto ya compilado: windres falla con rutas que
+    # tienen espacios. Para regenerarlo, ver el comentario en resources/app.rc.
+    if(MINGW)
+        target_link_libraries(UltimateTracker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.o")
+    else()
+        target_sources(UltimateTracker PRIVATE resources/app.rc)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
