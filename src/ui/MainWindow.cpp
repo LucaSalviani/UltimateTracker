@@ -590,7 +590,7 @@ QWidget* MainWindow::buildTitleBar()
             a->setChecked(m_db->setting(key, 1).toBool());
             connect(a, &QAction::toggled, this, [this, key](bool on) {
                 m_db->setSetting(key, on ? 1 : 0);
-                refreshLiveStats();
+                reloadGrid();
                 if (m_overlay == Overlay::Stats) m_stats->refresh();
             });
             ++i;
@@ -1090,6 +1090,10 @@ void MainWindow::reloadGrid()
     m_grid->setData(pomos, m_db->dayTitles(m_grid->rangeStart(), m_grid->rangeEnd()));
     m_grid->setLive(m_session->currentPomodoro(), m_session->progress());
     m_grid->setFirstUse(pomos.isEmpty() && !m_session->currentPomodoro() && m_db->studiedDays().isEmpty());   // M36
+    m_msCfg = ms::Config::load(*m_db);   // M44
+    m_weekBeforeToday = 0;
+    if (m_msCfg.weekly && fmt::mondayOf(m_today) < m_today)
+        for (qint64 v : stats::studyByDay(*m_db, fmt::mondayOf(m_today), m_today.addDays(-1), nullptr)) m_weekBeforeToday += v;
     refreshGoals();
 
     // Pomodoros de hoy ya guardados (para numerar y para las stats en vivo).
@@ -1225,6 +1229,15 @@ void MainWindow::refreshLiveStats()
     if (m_liveActivityScope) {
         // Total histórico de la actividad (lo que corre ya está guardado cada 5 s).
         d.activityTotalSec = m_tree.rollUp(m_db->studyByFolder()).value(folder);
+    }
+    // M44: marca del día (sobre todo el día) y meta semanal.
+    qint64 dayTotal = cur ? cur->studiedSec : 0;
+    for (const Pomodoro& p : m_todayPomos) dayTotal += p.studiedSec;
+    if (m_msCfg.dayMark && !m_liveActivityScope) d.dayLevel = ms::dayMark(dayTotal, m_msCfg.markMin);
+    if (m_msCfg.weekly && m_msCfg.weeklyMin > 0) {
+        const qint64 week = m_weekBeforeToday + dayTotal;
+        d.weekFrac = double(week) / (m_msCfg.weeklyMin * 60.0);
+        d.weekText = QStringLiteral("Meta semanal: %1 de %2").arg(fmt::hours(week), fmt::hours(qint64(m_msCfg.weeklyMin) * 60));
     }
     m_liveStats->setData(d);
 }
@@ -1540,6 +1553,58 @@ void MainWindow::checkDayRollover()
 // Al terminar el día te cuenta cómo te fue (y cuántos recreos indebidos tomaste).
 // Aparece la próxima vez que mirás la ventana, una sola vez por día.
 void MainWindow::maybeShowDaySummary()
+{
+    showDaySummaryIfNeeded();
+    maybeShowMonthSummary();   // M44
+}
+
+// M44: al empezar un mes nuevo, una tarjetita con cómo te fue en el anterior.
+void MainWindow::maybeShowMonthSummary()
+{
+    if (!isVisible() || m_docked || isMinimized()) return;
+    if (!m_db->setting("ms_month", 1).toBool()) return;
+    const QDate prevStart = QDate(m_today.year(), m_today.month(), 1).addMonths(-1);
+    const QString key = prevStart.toString(QStringLiteral("yyyy-MM"));
+    if (m_db->setting("summary/month_shown").toString() >= key) return;
+    m_db->setSetting("summary/month_shown", key);
+    const QDate prevEnd = prevStart.addMonths(1).addDays(-1);
+    const auto byDay = stats::studyByDay(*m_db, prevStart, prevEnd, nullptr);
+    qint64 total = 0, best = 0;
+    int days = 0;
+    QDate bestDay;
+    for (auto it = byDay.cbegin(); it != byDay.cend(); ++it) {
+        total += it.value();
+        if (it.value() > 0) ++days;
+        if (it.value() > best) { best = it.value(); bestDay = it.key(); }
+    }
+    if (total <= 0) return;   // el mes pasado no usaste la app: nada que contar
+    qint64 before = 0;
+    for (qint64 v : stats::studyByDay(*m_db, prevStart.addMonths(-1), prevStart.addDays(-1), nullptr)) before += v;
+    const auto perFolder = m_tree.rollUp(m_db->studyByFolder(prevStart, prevEnd));
+    qint64 topId = 0, topSec = 0;
+    for (qint64 id : m_tree.children(0))
+        if (perFolder.value(id) > topSec) { topSec = perFolder.value(id); topId = id; }
+
+    QStringList lines;
+    lines << QStringLiteral("Estudiaste %1 en %2 %3").arg(fmt::hours(total)).arg(days).arg(days == 1 ? "día" : "días");
+    if (before > 0) {
+        const int pct = int(std::lround(100.0 * (total - before) / before));
+        lines << (pct >= 0 ? QStringLiteral("%1 % más que el mes anterior").arg(pct)
+                           : QStringLiteral("%1 % menos que el mes anterior").arg(-pct));
+    }
+    if (topId && m_tree.find(topId))
+        lines << QStringLiteral("Lo que más estudiaste: %1 (%2)").arg(m_tree.find(topId)->name, fmt::hours(topSec));
+    if (bestDay.isValid()) lines << QStringLiteral("Tu mejor día: %1 (%2)").arg(fmt::hours(best), fmt::shortDate(bestDay));
+    QMessageBox box(this);
+    box.setWindowTitle(QStringLiteral("Resumen del mes"));
+    box.setText(QStringLiteral("<b>%1</b>").arg(fmt::monthYear(prevStart)));
+    box.setInformativeText(lines.join(QLatin1Char('\n')));
+    box.setStandardButtons(QMessageBox::Ok);
+    win::applyChrome(&box);
+    box.exec();
+}
+
+void MainWindow::showDaySummaryIfNeeded()
 {
     if (!isVisible() || m_docked || isMinimized()) return;
     QDate last;

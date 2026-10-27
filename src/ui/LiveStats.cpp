@@ -28,6 +28,7 @@ LiveStats::LiveStats(QWidget* parent)
 void LiveStats::setData(const Data& d)
 {
     m_data = d;
+    setToolTip(d.weekFrac >= 0 ? d.weekText : QString());
     update();
 }
 
@@ -87,9 +88,31 @@ void LiveStats::paintEvent(QPaintEvent*)
         QFont sf = condensed(11, QFont::Medium);
         p.setFont(sf);
         p.setPen(theme::textDim);
+        const QString small = QFontMetrics(sf).elidedText(blocks[i].small, Qt::ElideRight, int(cell.right() - x - bw - 8));
         p.drawText(QRectF(x + bw + 6, cell.top() + 4, cell.right() - x - bw - 8, h - 4),
-                   Qt::AlignLeft | Qt::AlignVCenter,
-                   QFontMetrics(sf).elidedText(blocks[i].small, Qt::ElideRight, int(cell.right() - x - bw - 8)));
+                   Qt::AlignLeft | Qt::AlignVCenter, small);
+        // M44: marca del día: tres puntitos (bronce, plata, oro) al lado de "estudiado".
+        if (i == 1 && m_data.dayLevel >= 0) {
+            static const QColor medal[3] = {QColor(0xc0, 0x8a, 0x5a), QColor(0xb8, 0xbc, 0xc4), QColor(0xe0, 0xb8, 0x4a)};
+            const double dx = x + bw + 6 + QFontMetricsF(sf).horizontalAdvance(small) + 8;
+            const double cy = cell.top() + h / 2 + 2;
+            for (int k = 0; k < 3; ++k) {
+                const QRectF dot(dx + k * 9, cy - 3, 6, 6);
+                if (dot.right() > cell.right() - 4) break;
+                if (k < m_data.dayLevel) { p.setPen(Qt::NoPen); p.setBrush(medal[k]); }
+                else { p.setPen(QPen(theme::textFaint, 1)); p.setBrush(Qt::NoBrush); }
+                p.drawEllipse(dot);
+            }
+        }
+    }
+    // M44: meta semanal: una línea finita abajo de todo que se va llenando.
+    if (m_data.weekFrac >= 0) {
+        const QRectF track(0, height() - 2.5, width(), 2);
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::line);
+        p.drawRoundedRect(track, 1, 1);
+        p.setBrush(m_data.weekFrac >= 1 ? theme::breakAccent : theme::pomoAccent);
+        p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * qMin(1.0, m_data.weekFrac), 2), 1, 1);
     }
 }
 

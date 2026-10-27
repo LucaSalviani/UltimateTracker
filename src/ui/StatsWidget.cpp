@@ -3,6 +3,7 @@
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "core/Export.h"
+#include "core/Milestones.h"
 #include "ui/ActivitiesWidget.h"
 #include "ui/Fade.h"
 #include "ui/Icons.h"
@@ -33,6 +34,9 @@
 // suave en el tema gris, el acento en los temas de color).
 static QColor statsInk() { return theme::pomoAccent; }
 
+// M44: horas redondas para los cortes de etapa ("233 h", no "233h20").
+static QString roundHours(qint64 sec) { return QStringLiteral("%1 h").arg(QLocale().toString(qint64(std::llround(sec / 3600.0)))); }
+
 struct StatsData {
     StatsWidget::Period period = StatsWidget::Period::Week;
     QDate from, to, today;
@@ -46,6 +50,11 @@ struct StatsData {
     int jokers = 2;
     struct Row { QString name; int depth = 0; qint64 period = 0; qint64 total = 0; qint64 id = 0; };
     QVector<Row> rows;
+    // M44: hitos
+    ms::Config ms;
+    qint64 todaySec = 0, weekSec = 0, allSec = 0;
+    ms::Records records;   // incluye hoy
+    int bestStreak = 0;
     QHash<qint64, QColor> colors;   // M35: color de cada actividad (vacío si están apagados)
     QColor colorOf(qint64 id) const { return colors.value(id, statsInk()); }
 };
@@ -74,6 +83,7 @@ protected:
 
         y = paintCards(p, L, y, W) + 10;
         y = paintStreak(p, L, y, W) + 18;
+        if (hasChips()) y = paintChips(p, L, y, W) + 18;   // M44
         y = paintChart(p, L, y, W) + 22;
         paintFolders(p, L, y, W);
     }
@@ -81,6 +91,81 @@ protected:
 private:
     static constexpr double kCardH = 70;
     static constexpr double kRowH = 26;
+    static constexpr double kChipH = 52;
+
+    bool hasChips() const { return data.ms.dayMark || data.ms.weekly || data.ms.streaks || data.ms.stages; }
+
+    // M44: una fila de tarjetitas con los hitos de corto y largo plazo.
+    double paintChips(QPainter& p, double L, double y, double W)
+    {
+        struct Chip { QString label, value; double frac = -1; int dots = -1; };
+        QVector<Chip> chips;
+        if (data.ms.dayMark) {
+            const int lvl = ms::dayMark(data.todaySec, data.ms.markMin);
+            const QString next = lvl < 3 ? QStringLiteral(" · %1 a las %2").arg(ms::dayMarkName(lvl + 1),
+                                                                                 fmt::hours(qint64(data.ms.markMin[lvl]) * 60))
+                                         : QString();
+            chips.append({QStringLiteral("Marca de hoy"),
+                          (lvl ? ms::dayMarkName(lvl).left(1).toUpper() + ms::dayMarkName(lvl).mid(1) : QStringLiteral("Todavía no"))
+                              + next, -1, lvl});
+        }
+        if (data.ms.weekly && data.ms.weeklyMin > 0) {
+            const qint64 goal = qint64(data.ms.weeklyMin) * 60;
+            chips.append({QStringLiteral("Meta semanal"),
+                          QStringLiteral("%1 de %2").arg(fmt::hours(data.weekSec), fmt::hours(goal)),
+                          double(data.weekSec) / goal});
+        }
+        if (data.ms.streaks) {
+            QStringList parts;
+            if (data.records.bestDay > 0) parts << QStringLiteral("día %1").arg(fmt::hours(data.records.bestDay));
+            if (data.records.bestWeek > 0) parts << QStringLiteral("semana %1").arg(fmt::hours(data.records.bestWeek));
+            parts << QStringLiteral("racha %1").arg(data.bestStreak);
+            chips.append({QStringLiteral("Récords"), parts.join(QStringLiteral(" · "))});
+        }
+        if (data.ms.stages) {
+            const ms::Stage st = ms::stageFor(data.allSec);
+            chips.append({QStringLiteral("Nivel global"),
+                          st.toSec ? QStringLiteral("%1 · próx. %2").arg(st.label, roundHours(st.toSec)) : st.label,
+                          st.toSec ? st.progress : 1.0});
+        }
+        static const QColor medal[3] = {QColor(0xc0, 0x8a, 0x5a), QColor(0xb8, 0xbc, 0xc4), QColor(0xe0, 0xb8, 0x4a)};
+        const double gap = 10;
+        const int n = int(chips.size());
+        const double cw = (W - (n - 1) * gap) / n;
+        for (int i = 0; i < n; ++i) {
+            const Chip& c = chips[i];
+            const QRectF r(L + i * (cw + gap), y, cw, kChipH);
+            p.setPen(QPen(theme::line, 1));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
+            p.setFont(theme::uiFont(8));
+            p.setPen(theme::textDim);
+            p.drawText(r.adjusted(12, 8, -8, 0), Qt::AlignLeft | Qt::AlignTop, c.label);
+            double vx = r.left() + 12;
+            if (c.dots >= 0) {
+                for (int k = 0; k < 3; ++k) {
+                    const QRectF dot(vx + k * 10, r.top() + 30, 7, 7);
+                    if (k < c.dots) { p.setPen(Qt::NoPen); p.setBrush(medal[k]); }
+                    else { p.setPen(QPen(theme::textFaint, 1)); p.setBrush(Qt::NoBrush); }
+                    p.drawEllipse(dot);
+                }
+                vx += 36;
+            }
+            p.setFont(theme::uiFont(9.5, QFont::DemiBold));
+            p.setPen(theme::text);
+            const QRectF vr(vx, r.top() + 22, r.right() - vx - 10, 22);
+            p.drawText(vr, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(c.value, Qt::ElideRight, int(vr.width())));
+            if (c.frac >= 0) {
+                const QRectF track(r.left() + 12, r.bottom() - 9, r.width() - 24, 3);
+                p.setPen(Qt::NoPen);
+                p.setBrush(theme::surface);
+                p.drawRoundedRect(track, 1.5, 1.5);
+                p.setBrush(c.frac >= 1 ? theme::breakAccent : statsInk());
+                p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * qMin(1.0, c.frac), 3), 1.5, 1.5);
+            }
+        }
+        return y + kChipH;
+    }
 
     double chartHeight(double W) const
     {
@@ -95,7 +180,8 @@ private:
     int contentHeight(int w) const
     {
         const double W = w - 32;
-        return int(8 + kCardH + 10 + 20 + 18 + chartHeight(W) + 22 + 24 + data.rows.size() * kRowH + 24);
+        return int(8 + kCardH + 10 + 20 + 18 + (hasChips() ? kChipH + 18 : 0) + chartHeight(W) + 22 + 24 +
+                   data.rows.size() * kRowH + 24);
     }
 
     void sectionTitle(QPainter& p, double x, double y, const QString& t) const
@@ -140,6 +226,8 @@ private:
                         .arg(data.streak.days)
                         .arg(data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
         s += QStringLiteral("   ·   comodines esta semana: %1 de %2").arg(data.streak.jokersThisWeek).arg(data.jokers);
+        if (data.ms.streaks && data.bestStreak > data.streak.days)
+            s += QStringLiteral("   ·   récord: %1").arg(data.bestStreak);
         if (!data.streak.todayDone) s += QStringLiteral("   ·   hoy todavía no arrancaste");
         p.setPen(theme::text);
         p.drawText(QRectF(L, y, W, 20), Qt::AlignLeft | Qt::AlignVCenter, s);
@@ -335,7 +423,8 @@ private:
         const double cPeriod = L + W * 0.42, cTotal = L + W * 0.56, cBar = L + W * 0.70;
         p.drawText(QRectF(cPeriod - 60, y, 60 + 40, 16), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("período"));
         p.drawText(QRectF(cTotal - 60, y, 60 + 40, 16), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("total"));
-        p.drawText(QRectF(cBar + 10, y, W, 16), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("camino a las 10.000 h"));
+        p.drawText(QRectF(cBar + 10, y, W, 16), Qt::AlignLeft | Qt::AlignVCenter,
+                   data.ms.stages ? QStringLiteral("etapa · camino a las 10.000 h") : QStringLiteral("camino a las 10.000 h"));
         y += 24;
 
         if (data.rows.isEmpty()) {
@@ -363,21 +452,31 @@ private:
             p.setPen(theme::textDim);
             p.drawText(QRectF(cTotal - 60, y, 100, kRowH), Qt::AlignRight | Qt::AlignVCenter, fmt::hours(row.total));
 
-            // Barra hacia 10.000 h + próximo aviso
-            const double bx = cBar + 10, bw = L + W - bx - 136;
-            const double frac = qBound(0.0, row.total / (10000.0 * 3600.0), 1.0);
+            // Barra hacia 10.000 h + próximo aviso (M44: o hacia el próximo subnivel de la etapa)
+            const double textW = data.ms.stages ? 160 : 130;
+            const double bx = cBar + 10, bw = L + W - bx - textW - 6;
+            const ms::Stage stage = ms::stageFor(row.total);
+            const double frac = data.ms.stages ? stage.progress : qBound(0.0, row.total / (10000.0 * 3600.0), 1.0);
             p.setPen(Qt::NoPen);
             p.setBrush(theme::surface);
             p.drawRoundedRect(QRectF(bx, y + kRowH / 2 - 3, bw, 6), 3, 3);
             p.setBrush(row.id ? data.colorOf(row.id) : theme::squareFill);
             p.drawRoundedRect(QRectF(bx, y + kRowH / 2 - 3, qMax(frac > 0 ? 3.0 : 0.0, bw * frac), 6), 3, 3);
 
-            const qint64 h = row.total / 3600;
-            const qint64 next = h < 10 ? h + 1 : (h / 25 + 1) * 25;
             p.setFont(theme::uiFont(8));
             p.setPen(theme::textFaint);
-            p.drawText(QRectF(bx + bw + 8, y, 130, kRowH), Qt::AlignLeft | Qt::AlignVCenter,
-                       QStringLiteral("%1 %  · próx. %2 h").arg(QLocale().toString(frac * 100, 'f', frac < 0.1 ? 2 : 1)).arg(next));
+            if (data.ms.stages) {
+                p.setPen(row.total > 0 ? theme::textDim : theme::textFaint);
+                p.drawText(QRectF(bx + bw + 8, y, textW, kRowH), Qt::AlignLeft | Qt::AlignVCenter,
+                           stage.toSec ? QStringLiteral("%1 · %2").arg(stage.label, roundHours(stage.toSec)) : stage.label);
+            } else {
+                const qint64 h = row.total / 3600;
+                const auto marks = ms::hourMarks();
+                qint64 next = marks.last();
+                for (int m : marks) if (m > h) { next = m; break; }
+                p.drawText(QRectF(bx + bw + 8, y, 130, kRowH), Qt::AlignLeft | Qt::AlignVCenter,
+                           QStringLiteral("%1 %  · próx. %2 h").arg(QLocale().toString(frac * 100, 'f', frac < 0.1 ? 2 : 1)).arg(next));
+            }
             y += kRowH;
         }
     }
@@ -610,7 +709,19 @@ void StatsWidget::refresh()
         d.intervals = m_db->intervalsBetween(d.from, d.to);
     }
     d.colors = ActivitiesWidget::colorsFor(m_db, tree);
+    // M44: hitos (siempre sobre todo, sin el filtro de actividad)
+    d.ms = ms::Config::load(*m_db);
+    if (d.ms.dayMark || d.ms.weekly || d.ms.streaks) {
+        const auto all = stats::studyByDay(*m_db, QDate(2000, 1, 1), d.today, nullptr);
+        d.todaySec = all.value(d.today);
+        d.weekSec = ms::weekTotal(all, d.today);
+        d.records = ms::records(all, d.today.addDays(1));
+        if (d.weekSec > d.records.bestWeek) d.records.bestWeek = d.weekSec;   // la semana en curso también puede ser récord
+        d.bestStreak = qMax(m_db->setting("ms/best_streak", 0).toInt(), 0);
+    }
+    if (d.ms.stages) for (qint64 v : m_db->studyByFolder()) d.allSec += v;
     d.streak = stats::streak(m_db->studiedDays(), d.today, m_jokers);
+    d.bestStreak = qMax(d.bestStreak, d.streak.days);
 
     const auto periodTotals = tree.rollUp(m_db->studyByFolder(d.from, d.to));
     const auto allTotals = tree.rollUp(m_db->studyByFolder());

@@ -312,10 +312,14 @@ void Celebration::paintVisor(QPainter& p, qreal ms)
             // símbolo: ✓ para pomodoro/meta, número para hito
             p.setPen(QPen(QColor(255, 255, 255), qMax(2.0, s * 0.07), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             if (m_kind == Kind::Milestone) {
+                // Hito: el número ("100"); etapa (M44): el nombre, achicado hasta que entre.
+                const QString word = m_title.section(' ', 0, 0);
                 QFont f = theme::uiFont(10, QFont::Bold);
-                f.setPixelSize(int(s * 0.34));
+                int px = int(s * 0.34);
+                f.setPixelSize(px);
+                while (px > 9 && QFontMetricsF(f).horizontalAdvance(word) > sq.width() * 0.82) f.setPixelSize(--px);
                 p.setFont(f);
-                p.drawText(sq, Qt::AlignCenter, m_title.section(' ', 0, 0));
+                p.drawText(sq, Qt::AlignCenter, word);
             } else {
                 const qreal draw = ease(stage(ms, 560, 900), QEasingCurve::OutCubic);
                 QPainterPath check;

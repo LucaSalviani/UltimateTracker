@@ -6,6 +6,7 @@
 #include "core/Database.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
+#include "core/Milestones.h"
 #include "ui/EdgeTab.h"
 #include "ui/GridWidget.h"
 
@@ -100,9 +101,13 @@ private:
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel
     void updateObjectiveBand();
     void checkGoalReached();
-    void checkShortTermMilestones();   // M44: marca del día, rachas, récords, meta semanal
+    void checkShortTermMilestones();
+    void maybeShowMonthSummary();
+    void showDaySummaryIfNeeded();   // M44: marca del día, rachas, récords, meta semanal
     void queueNotes(const QStringList& notes);
     QStringList m_pendingNotes;
+    ms::Config  m_msCfg;              // M44 (se relee en reloadGrid)
+    qint64      m_weekBeforeToday = 0;
     void preloadFromGoal();   // M17
     void showDayMenu(const QDate& day, const QPoint& globalPos);
 
