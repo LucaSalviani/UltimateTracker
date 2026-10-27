@@ -104,6 +104,7 @@ private:
     // ---- festejos (M8): si en el mismo momento pasan varias cosas, gana la más importante
     void celebrate(int kind, const QString& kicker, const QString& title, const QString& subtitle);
 
+    void applySizeMode(GridWidget::SizeMode mode, bool announce);   // M16
     void applySystemSettings();   // M9: atajo global, inicio con Windows
     void runDailyBackup();
 

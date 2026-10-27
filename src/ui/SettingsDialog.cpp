@@ -263,8 +263,25 @@ QWidget* SettingsDialog::pageAppearance()
     m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir el objetivo o llegar a un hito"), w);
     m_celebrations->setChecked(m_db->setting("celebrations", 1).toBool());
 
+    // M16: tamaño de los cuadraditos
+    const int mask = m_db->setting("size_modes", 7).toInt();
+    const char* sizeNames[] = {"Todos iguales", "Proporcional solo a lo ancho", "Proporcional completo"};
+    auto* sizeRow = new QHBoxLayout;
+    for (int i = 0; i < 3; ++i) {
+        m_sizeModes[i] = new QCheckBox(QString::fromUtf8(sizeNames[i]), w);
+        m_sizeModes[i]->setChecked(mask & (1 << i));
+        sizeRow->addWidget(m_sizeModes[i]);
+    }
+    sizeRow->addStretch();
+    m_sizeButton = new QCheckBox(QStringLiteral("Mostrar el botón para alternar (si no, queda fijo el de por defecto)"), w);
+    m_sizeButton->setChecked(m_db->setting("size_button", 1).toBool());
+    m_sizeDefault = new QComboBox(w);
+    for (const char* n : sizeNames) m_sizeDefault->addItem(QString::fromUtf8(n));
+    m_sizeDefault->setCurrentIndex(m_db->setting("size_default", 0).toInt());
+
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Tamaño de la ventana"), m_size);
+    form->addRow(QStringLiteral("Cuadraditos por defecto"), m_sizeDefault);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Apariencia"), w));
@@ -273,6 +290,9 @@ QWidget* SettingsDialog::pageAppearance()
     lay->addLayout(grid);
     lay->addSpacing(8);
     lay->addLayout(form);
+    lay->addWidget(note(QStringLiteral("El botón de tamaño de la barra cicla entre:"), w));
+    lay->addLayout(sizeRow);
+    lay->addWidget(m_sizeButton);
     lay->addWidget(m_resizable);
     lay->addWidget(m_groupByActivity);
     lay->addWidget(m_celebrations);
@@ -340,6 +360,14 @@ void SettingsDialog::accept()
     m_db->setSetting("theme_mode", m_themeMode);
     m_db->setSetting("window_size", m_size->currentData().toString());
     m_db->setSetting("resizable", m_resizable->isChecked() ? 1 : 0);
+    {
+        int mask = 0;
+        for (int i = 0; i < 3; ++i) if (m_sizeModes[i]->isChecked()) mask |= 1 << i;
+        m_db->setSetting("size_modes", mask ? mask : 1);
+        m_db->setSetting("size_button", m_sizeButton->isChecked() ? 1 : 0);
+        m_db->setSetting("size_default", m_sizeDefault->currentIndex());
+        if (!(mask & (1 << m_db->setting("size_mode", 0).toInt()))) m_db->setSetting("size_mode", m_sizeDefault->currentIndex());
+    }
     m_db->setSetting("group_by_activity", m_groupByActivity->isChecked() ? 1 : 0);
     m_db->setSetting("celebrations", m_celebrations->isChecked() ? 1 : 0);
 

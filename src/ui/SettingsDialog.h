@@ -60,6 +60,9 @@ private:
     QComboBox*    m_size;
     QCheckBox*    m_resizable;
     QCheckBox*    m_groupByActivity;   // M8
+    QCheckBox*    m_sizeModes[3];      // M16
+    QCheckBox*    m_sizeButton;
+    QComboBox*    m_sizeDefault;
     QCheckBox*    m_celebrations;      // M8
 
     // Sistema

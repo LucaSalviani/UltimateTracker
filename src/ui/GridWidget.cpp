@@ -80,7 +80,7 @@ void GridWidget::setAnchor(const QDate& d)
     update();
 }
 void GridWidget::setToday(const QDate& d) { m_today = d; update(); }
-void GridWidget::setProportional(bool on) { m_proportional = on; update(); }
+void GridWidget::setSizeMode(SizeMode m) { m_sizeMode = m; update(); }
 
 QDate GridWidget::rangeStart() const
 {
@@ -208,14 +208,20 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
     for (const auto& g : groups) count += int(g.size());
     if (count == 0 || area.width() <= 4 || area.height() <= 4) return out;
 
-    QHash<int, double> w;
-    double maxW = 1.0;
+    // M16: tres modos de tamaño. Uniforme; solo ancho (largo ∝ minutos, alto fijo);
+    // proporcional completo (lado ∝ √minutos → área ∝ minutos). 25' = tamaño base.
+    QHash<int, double> w, h;
+    double maxW = 1.0, maxH = 1.0;
     for (const auto& g : groups)
         for (int idx : g) {
-            double v = 1.0;
-            if (m_proportional) v = std::sqrt(qMax(60, m_pomos[idx].representedSec()) / 1500.0);   // 25' = base
-            w.insert(idx, v);
-            maxW = qMax(maxW, v);
+            const double ratio = qMax(60, m_pomos[idx].representedSec()) / 1500.0;
+            double vw = 1.0, vh = 1.0;
+            if (m_sizeMode == SizeMode::Area) vw = vh = std::sqrt(ratio);
+            else if (m_sizeMode == SizeMode::Width) vw = qBound(0.45, ratio, 4.0);
+            w.insert(idx, vw);
+            h.insert(idx, vh);
+            maxW = qMax(maxW, vw);
+            maxH = qMax(maxH, vh);
         }
 
     auto attempt = [&](double k, Layout* lay) -> bool {
@@ -253,6 +259,7 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
             for (int i = 0; i < g.size(); ++i) {
                 const int idx = g[i];
                 const double s = k * w.value(idx);
+                const double sh = k * h.value(idx);
                 // Un pomodoro encadenado (sin recreo) va pegado al anterior.
                 if (i > 0 && m_pomos[idx].linked && x > area.left()) x -= gap - kLinkGap;
                 if (x + s > area.right() + 0.01 && x > area.left()) {
@@ -261,16 +268,16 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
                     y += rowH + gap;
                     rowH = 0;
                 }
-                if (lay) lay->placed.append({QRectF(x, y, s, s), idx});
+                if (lay) lay->placed.append({QRectF(x, y, qMin(s, area.width()), sh), idx});
                 x += s + gap;
-                rowH = qMax(rowH, s);
+                rowH = qMax(rowH, sh);
             }
         }
         closeRow();
         return y + rowH <= area.bottom() + 0.01;
     };
 
-    double hi = maxSide / maxW;
+    double hi = maxSide / (m_sizeMode == SizeMode::Width ? maxH : maxW);
     double lo = minSide;
     double best = lo;
     if (attempt(hi, nullptr)) {
@@ -289,7 +296,7 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
 // Fantasma: el lugar de un pomodoro de la meta que todavía no hiciste.
 void GridWidget::paintGhost(QPainter& p, const QRectF& r, const Pomodoro& g) const
 {
-    const double s = r.width();
+    const double s = qMin(r.width(), r.height());   // lado corto (en "solo ancho" no son cuadrados)
     const double radius = qMax(1.0, s * 0.12);
     QColor edge = theme::textFaint;
     edge.setAlphaF(0.7);
@@ -311,7 +318,7 @@ void GridWidget::paintGhost(QPainter& p, const QRectF& r, const Pomodoro& g) con
 void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo) const
 {
     if (isGhost(pomo)) { paintGhost(p, r, pomo); return; }
-    const double s = r.width();
+    const double s = qMin(r.width(), r.height());   // lado corto (en "solo ancho" no son cuadrados)
     const double radius = qMax(1.0, s * 0.12);
     QColor textColor;
 
@@ -364,8 +371,8 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
         p.setClipPath(clip);
         p.setPen(Qt::NoPen);
         p.setBrush(parked ? theme::squareFill.darker(160) : theme::squareFill);
-        const double w = s * qBound(0.0, progress, 1.0);
-        p.drawRect(QRectF(r.left(), r.top(), w, s));
+        const double w = r.width() * qBound(0.0, progress, 1.0);
+        p.drawRect(QRectF(r.left(), r.top(), w, r.height()));
         p.restore();
         if (parked && s >= 22) {
             // ⏸ chiquito arriba a la derecha
@@ -393,11 +400,11 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
             QColor stripe = c;
             stripe.setAlphaF(dayEnd ? 0.55 : 0.9);
             p.setBrush(stripe);
-            p.drawRect(QRectF(r.left(), r.bottom() - qMax(2.0, s * 0.075), s, qMax(2.0, s * 0.075)));
+            p.drawRect(QRectF(r.left(), r.bottom() - qMax(2.0, s * 0.075), r.width(), qMax(2.0, s * 0.075)));
         }
         QColor hl(255, 255, 255, dayEnd ? 60 : 22);
         p.setBrush(hl);
-        p.drawRect(QRectF(r.left(), r.top(), s, 1.0));
+        p.drawRect(QRectF(r.left(), r.top(), r.width(), 1.0));
         p.restore();
     }
 
@@ -417,7 +424,7 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
     double px = s * 0.30;
     f.setPixelSize(qMax(7, int(px)));
     QFontMetricsF fm(f);
-    while (fm.horizontalAdvance(label) > s * 0.86 && px > 7) {
+    while (fm.horizontalAdvance(label) > r.width() * 0.86 && px > 7) {
         px -= 0.5;
         f.setPixelSize(int(px));
         fm = QFontMetricsF(f);

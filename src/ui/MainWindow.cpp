@@ -233,7 +233,9 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     // ---- Página de grilla
     auto* gridPage = new QWidget(this);
     m_grid = new GridWidget(gridPage);
-    m_grid->setProportional(m_db->setting("proportional", 0).toBool());
+    // Ajuste viejo "proportional" (sí/no) → modo de tamaño.
+    if (m_db->setting("size_mode").toString().isEmpty())
+        m_db->setSetting("size_mode", m_db->setting("proportional", 0).toBool() ? 2 : 0);
     m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
     m_toast = new QLabel(gridPage);
     m_toast->setProperty("role", "toast");
@@ -309,6 +311,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_edgeTab, &EdgeTab::activated, this, &MainWindow::undock);
     buildTray();
     reloadFolders();   // ahora que existen la grilla y el menú de actividades
+    applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
 
     // ---- Señales del motor
     connect(m_session, &SessionController::stateChanged, this, &MainWindow::onStateChanged);
@@ -446,13 +449,17 @@ QWidget* MainWindow::buildTitleBar()
     logo->setPixmap(icons::get(icons::Id::AppLogo).pixmap(16, 16));
     auto* name = dimLabel(bar, QStringLiteral("UltimateTracker"));
 
-    m_btnProportional = iconButton(bar, icons::Id::Proportional,
-                                   QStringLiteral("Tamaño proporcional: cada cuadradito según cuánto duró"));
+    // M16: el botón va ciclando entre los modos de tamaño habilitados en Ajustes.
+    m_btnProportional = iconButton(bar, icons::Id::Proportional, QString());
     m_btnProportional->setCheckable(true);
-    m_btnProportional->setChecked(m_db->setting("proportional", 0).toBool());
-    connect(m_btnProportional, &QToolButton::toggled, this, [this](bool on) {
-        m_grid->setProportional(on);
-        m_db->setSetting("proportional", on ? 1 : 0);
+    connect(m_btnProportional, &QToolButton::clicked, this, [this] {
+        const int mask = m_db->setting("size_modes", 7).toInt();
+        int mode = int(m_grid->sizeMode());
+        for (int i = 0; i < 3; ++i) {
+            mode = (mode + 1) % 3;
+            if (mask & (1 << mode)) break;
+        }
+        applySizeMode(GridWidget::SizeMode(mode), true);
     });
 
     m_btnZoomIn = iconButton(bar, icons::Id::ZoomIn, QStringLiteral("Acercar: mes → semana → día (Ctrl +)"));
@@ -489,6 +496,7 @@ QWidget* MainWindow::buildTitleBar()
         applySizePreset();
         m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
         applySystemSettings();
+        applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
         if (!m_session->inProgress()) {
             m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
             m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -1502,6 +1510,21 @@ void MainWindow::bringToFront()
     show();
     win::forceForeground(this, m_btnPin->isChecked());
     QApplication::alert(this);
+}
+
+// M16: tamaño de los cuadraditos (uniforme / solo ancho / proporcional completo)
+void MainWindow::applySizeMode(GridWidget::SizeMode mode, bool announce)
+{
+    static const char* names[] = {"Tamaño: todos iguales", "Tamaño: proporcional solo a lo ancho",
+                                  "Tamaño: proporcional completo"};
+    const bool button = m_db->setting("size_button", 1).toBool();
+    if (!button) mode = GridWidget::SizeMode(m_db->setting("size_default", 0).toInt());
+    m_grid->setSizeMode(mode);
+    m_db->setSetting("size_mode", int(mode));
+    m_btnProportional->setVisible(button);
+    m_btnProportional->setChecked(mode != GridWidget::SizeMode::Uniform);
+    m_btnProportional->setToolTip(QString::fromUtf8(names[int(mode)]) + QStringLiteral(" (click para cambiar)"));
+    if (announce) toast(QString::fromUtf8(names[int(mode)]));
 }
 
 void MainWindow::applySystemSettings()

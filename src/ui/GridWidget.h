@@ -26,8 +26,9 @@ public:
     void  setAnchor(const QDate& d);
     QDate anchor() const { return m_anchor; }
     void  setToday(const QDate& d);
-    void  setProportional(bool on);
-    bool  proportional() const { return m_proportional; }
+    enum class SizeMode { Uniform = 0, Width = 1, Area = 2 };   // M16
+    void  setSizeMode(SizeMode m);
+    SizeMode sizeMode() const { return m_sizeMode; }
 
     // Rango de días que la vista actual necesita de la base.
     QDate rangeStart() const;
@@ -91,7 +92,7 @@ private:
     Zoom  m_zoom = Zoom::Day;
     QDate m_anchor;
     QDate m_today;
-    bool  m_proportional = false;
+    SizeMode m_sizeMode = SizeMode::Uniform;
 
     QVector<Pomodoro>            m_real;        // lo que viene de la base
     QHash<QDate, QVector<int>>   m_goalBlocks;
