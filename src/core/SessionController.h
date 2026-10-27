@@ -61,6 +61,12 @@ public:
     void   moveCurrentTo(qint64 id);
     // Pomodoros en pausa por actividad: actividad → segundos que llevaban.
     QHash<qint64, int> parkedSeconds() const;
+    // Borrar el pomodoro actual (corriendo o pausado) sin guardarlo.
+    void   discardCurrent();
+    // Pomodoros en pausa por actividad: borrar o pasarlos a otra actividad.
+    // moveParked devuelve false si la actividad destino ya tiene uno en pausa.
+    void   deleteParked(qint64 pomodoroId);
+    bool   moveParked(qint64 pomodoroId, qint64 folderId);
     int    workSec() const { return m_workSec; }
     void   setWorkSec(int sec);
     int    breakSec() const { return m_breakSec; }

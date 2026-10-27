@@ -288,6 +288,35 @@ private slots:
         QCOMPARE(db.studyByFolder().value(axel), 25 * 60);
     }
 
+    void deleteAndMovePausedOrParked()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 so = db.addFolder(0, "SO");
+        const qint64 axel = db.addFolder(0, "Axel");
+        const qint64 ing = db.addFolder(0, "Inglés");
+        auto* s = make(db);
+        const QDate d(2026, 10, 26);
+        s->setFolderId(so);
+        s->start();
+        advance(db, *s, 5 * 60);
+        s->pause();
+        s->discardCurrent();                          // borrar el pausado
+        QCOMPARE(db.pomodorosBetween(d, d).size(), 0);
+        QCOMPARE(s->state(), SessionController::State::Idle);
+
+        s->start();
+        advance(db, *s, 5 * 60);
+        s->setFolderId(axel);                         // SO queda estacionado
+        const qint64 parkedId = db.pomodorosBetween(d, d).first().id;
+        QVERIFY(s->moveParked(parkedId, ing));
+        QCOMPARE(s->parkedSeconds().value(ing), 5 * 60);
+        QVERIFY(!s->parkedSeconds().contains(so));
+        s->deleteParked(parkedId);
+        QVERIFY(s->parkedSeconds().isEmpty());
+        QCOMPARE(db.pomodorosBetween(d, d).size(), 0);
+    }
+
     void crashRecovery()
     {
         Database db;

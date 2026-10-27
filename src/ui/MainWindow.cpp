@@ -988,12 +988,17 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
     auto* move = new FolderMenu(&menu);
     move->setTitle(QStringLiteral("Mover a actividad"));
     move->rebuild(m_tree, p->folderId);
-    connect(move, &FolderMenu::folderChosen, this, [this, id, running](qint64 folder) {
+    connect(move, &FolderMenu::folderChosen, this, [this, id, running, parked](qint64 folder) {
         if (running) {
-            m_session->moveCurrentTo(folder);  // el que corre: se corrige su actividad
+            m_session->moveCurrentTo(folder);  // el actual (corriendo o pausado): se corrige su actividad
             m_db->setSetting("last_folder", folder);
             rebuildFolderMenu();
             reloadGrid();
+        } else if (parked) {
+            if (!m_session->moveParked(id, folder))
+                toast(QStringLiteral("%1 ya tiene un pomodoro en pausa").arg(m_tree.path(folder)));
+            else
+                toast(QStringLiteral("Pomodoro en pausa movido a %1").arg(m_tree.path(folder)));
         } else {
             m_db->setPomodoroFolder(id, folder);
             reloadGrid();
@@ -1001,15 +1006,9 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
         }
     });
     connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
-    QAction* moveAction = menu.addMenu(move);
-    if (parked) {
-        moveAction->setEnabled(false);
-        moveAction->setText(QStringLiteral("Mover a actividad (está en pausa)"));
-    }
+    menu.addMenu(move);
     menu.addSeparator();
-    QAction* del = menu.addAction(running || parked ? QStringLiteral("Borrar pomodoro (terminalo primero)")
-                                                    : QStringLiteral("Borrar pomodoro…"));
-    del->setEnabled(!running && !parked);
+    QAction* del = menu.addAction(QStringLiteral("Borrar pomodoro…"));
     connect(del, &QAction::triggered, this, [this, id] { deletePomodoro(id); });
     menu.exec(globalPos);
 }
@@ -1017,7 +1016,9 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
 void MainWindow::deletePomodoro(qint64 id)
 {
     const auto p = m_db->pomodoro(id);
-    if (!p || p->status == PomoStatus::Running || p->status == PomoStatus::Parked) return;
+    if (!p) return;
+    const bool running = p->status == PomoStatus::Running;
+    const bool parked = p->status == PomoStatus::Parked;
 
     QMessageBox box(this);
     box.setIcon(QMessageBox::Warning);
@@ -1034,7 +1035,9 @@ void MainWindow::deletePomodoro(qint64 id)
     box.exec();
     if (box.clickedButton() != del) return;
 
-    m_db->deletePomodoro(id);
+    if (running) m_session->discardCurrent();        // el actual (corriendo o pausado)
+    else if (parked) m_session->deleteParked(id);     // en pausa por cambio de actividad
+    else m_db->deletePomodoro(id);
     reloadGrid();
     toast(QStringLiteral("Pomodoro borrado"));
 }

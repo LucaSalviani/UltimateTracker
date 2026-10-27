@@ -91,6 +91,44 @@ QHash<qint64, int> SessionController::parkedSeconds() const
     return out;
 }
 
+void SessionController::discardCurrent()
+{
+    tick();
+    if (!m_hasPomo) return;
+    m_db->deletePomodoro(m_pomo.id);
+    m_hasPomo = false;
+    emit pomodoroSaved(0);
+    setState(m_lastPomoId ? State::Ready : State::Idle);
+}
+
+void SessionController::deleteParked(qint64 pomodoroId)
+{
+    for (auto it = m_parked.begin(); it != m_parked.end(); ++it) {
+        if (it->pomo.id != pomodoroId) continue;
+        m_db->deletePomodoro(pomodoroId);
+        m_parked.erase(it);
+        emit pomodoroChanged();
+        return;
+    }
+}
+
+bool SessionController::moveParked(qint64 pomodoroId, qint64 folderId)
+{
+    for (auto it = m_parked.begin(); it != m_parked.end(); ++it) {
+        if (it->pomo.id != pomodoroId) continue;
+        if (it.key() == folderId) return true;
+        if (m_parked.contains(folderId)) return false;
+        Parked pk = *it;
+        m_parked.erase(it);
+        pk.pomo.folderId = folderId;
+        m_db->setPomodoroFolder(pomodoroId, folderId);
+        m_parked.insert(folderId, pk);
+        emit pomodoroChanged();
+        return true;
+    }
+    return false;
+}
+
 void SessionController::parkCurrent()
 {
     if (!m_hasPomo) return;
