@@ -370,6 +370,14 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     auto* midnight = new QTimer(this);
     midnight->setInterval(30 * 1000);
     connect(midnight, &QTimer::timeout, this, &MainWindow::checkDayRollover);
+    // M15: "Seguir a Windows": si cambiás el modo de Windows, la app lo sigue.
+    connect(midnight, &QTimer::timeout, this, [this] {
+        const QString key = SettingsDialog::themeKey(m_db);
+        if (key != theme::current().key) {
+            theme::apply(key);
+            if (!isFullScreen()) win::applyChrome(this);
+        }
+    });
     midnight->start();
 
     // ---- M9: atajo global, inicio con Windows y copia de seguridad diaria

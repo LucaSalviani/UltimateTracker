@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QFont>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 // Temas de color. Cada paleta define unos pocos colores base y el resto (la
@@ -28,6 +29,12 @@ struct Palette {
 };
 
 const QVector<Palette>& palettes();
+// M15: el tema es color + modo. color: gray, ultra, pink, red, blue, gold.
+// modo: dark, light o system (sigue a Windows).
+QStringList colors();
+QString keyFor(const QString& color, const QString& mode);
+bool systemPrefersLight();
+void migrateSetting(QString* color, QString* mode, const QString& oldKey);
 const Palette& current();
 // Aplica el tema: recalcula los colores, la paleta de Qt y la hoja de estilos.
 void apply(const QString& key);

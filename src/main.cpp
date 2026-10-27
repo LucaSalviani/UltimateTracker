@@ -2,6 +2,7 @@
 #include "core/DayClock.h"
 #include "ui/Greeting.h"
 #include "ui/MainWindow.h"
+#include "ui/SettingsDialog.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
@@ -74,7 +75,7 @@ int main(int argc, char* argv[])
     dayclock::setStartHour(db.setting("day_start_hour", 4).toInt());
 
     // Tema de colores (paleta + hoja de estilos)
-    theme::apply(db.setting("theme", "dark").toString());
+    theme::apply(SettingsDialog::themeKey(&db));
 
     MainWindow w(&db);
     QObject::connect(&server, &QLocalServer::newConnection, &w, [&] {

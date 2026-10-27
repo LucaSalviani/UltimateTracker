@@ -19,6 +19,10 @@ class SettingsDialog : public QDialog {
 public:
     SettingsDialog(Database* db, QWidget* parent = nullptr);
 
+    // M15: tema guardado (color + modo) → clave de paleta.
+    static QString themeKey(Database* db);
+    static void currentTheme(Database* db, QString* color, QString* mode);
+
     void accept() override;
     void reject() override;
 
@@ -51,6 +55,8 @@ private:
 
     // Apariencia
     QButtonGroup* m_themes;
+    QButtonGroup* m_modes;
+    QString       m_themeColor, m_themeMode;
     QComboBox*    m_size;
     QCheckBox*    m_resizable;
     QCheckBox*    m_groupByActivity;   // M8

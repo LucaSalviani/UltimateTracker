@@ -65,10 +65,28 @@ QIcon swatch(const theme::Palette& p)
 }
 } // namespace
 
+void SettingsDialog::currentTheme(Database* db, QString* color, QString* mode)
+{
+    *color = db->setting("theme_color").toString();
+    *mode = db->setting("theme_mode").toString();
+    if (color->isEmpty()) {   // ajuste viejo de un solo valor
+        theme::migrateSetting(color, mode, db->setting("theme").toString());
+        db->setSetting("theme_color", *color);
+        db->setSetting("theme_mode", *mode);
+    }
+}
+
+QString SettingsDialog::themeKey(Database* db)
+{
+    QString c, m;
+    currentTheme(db, &c, &m);
+    return theme::keyFor(c, m);
+}
+
 SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     : QDialog(parent)
     , m_db(db)
-    , m_originalTheme(db->setting("theme", "dark").toString())
+    , m_originalTheme(themeKey(db))
 {
     setWindowTitle(QStringLiteral("Ajustes"));
     resize(620, 470);
@@ -170,28 +188,66 @@ QWidget* SettingsDialog::pageTimer()
 QWidget* SettingsDialog::pageAppearance()
 {
     auto* w = new QWidget(this);
+    // M15: color + modo (Oscuro / Claro / Seguir a Windows)
+    {
+        QString c, m;
+        currentTheme(m_db, &c, &m);
+        m_themeColor = c;
+        m_themeMode = m;
+    }
     m_themes = new QButtonGroup(w);
     auto* grid = new QGridLayout;
     grid->setSpacing(8);
-    int i = 0;
-    for (const theme::Palette& p : theme::palettes()) {
+    const QStringList colorKeys = theme::colors();
+    for (int i = 0; i < colorKeys.size(); ++i) {
         auto* b = new QToolButton(w);
         b->setObjectName("ThemeChoice");
         b->setCheckable(true);
-        b->setIcon(swatch(p));
         b->setIconSize(QSize(56, 34));
-        b->setText(p.name + (p.key == "dark" ? QStringLiteral(" (por defecto)") : QString()));
         b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-        b->setProperty("themeKey", p.key);
-        b->setChecked(p.key == m_originalTheme);
+        b->setProperty("color", colorKeys[i]);
+        b->setChecked(colorKeys[i] == m_themeColor);
         b->setMinimumWidth(118);
         m_themes->addButton(b, i);
         grid->addWidget(b, i / 3, i % 3);
-        ++i;
     }
+    m_modes = new QButtonGroup(w);
+    auto* modeRow = new QHBoxLayout;
+    modeRow->setSpacing(0);
+    const QList<QPair<QString, QString>> modes = {{"dark", QStringLiteral("Oscuro")},
+                                                  {"light", QStringLiteral("Claro")},
+                                                  {"system", QStringLiteral("Seguir a Windows")}};
+    for (int i = 0; i < modes.size(); ++i) {
+        auto* b = new QPushButton(modes[i].second, w);
+        b->setObjectName("GoalSeg");
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setProperty("mode", modes[i].first);
+        b->setChecked(modes[i].first == m_themeMode);
+        m_modes->addButton(b, i);
+        modeRow->addWidget(b);
+    }
+    modeRow->addStretch();
+    auto refreshSwatches = [this] {
+        for (QAbstractButton* b : m_themes->buttons()) {
+            const QString key = theme::keyFor(b->property("color").toString(), m_themeMode);
+            for (const theme::Palette& p : theme::palettes())
+                if (p.key == key) {
+                    b->setIcon(swatch(p));
+                    b->setText(p.name + (b->property("color") == "gray" ? QStringLiteral(" (por defecto)") : QString()));
+                }
+        }
+    };
+    refreshSwatches();
     // Vista previa al toque; si cancelás, vuelve al tema anterior.
     connect(m_themes, &QButtonGroup::idClicked, this, [this](int id) {
-        theme::apply(m_themes->button(id)->property("themeKey").toString());
+        m_themeColor = m_themes->button(id)->property("color").toString();
+        theme::apply(theme::keyFor(m_themeColor, m_themeMode));
+    });
+    connect(m_modes, &QButtonGroup::idClicked, this, [this, refreshSwatches](int id) {
+        m_themeMode = m_modes->button(id)->property("mode").toString();
+        refreshSwatches();
+        theme::apply(theme::keyFor(m_themeColor, m_themeMode));
     });
 
     m_size = new QComboBox(w);
@@ -213,6 +269,7 @@ QWidget* SettingsDialog::pageAppearance()
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Apariencia"), w));
     lay->addWidget(note(QStringLiteral("Tema de colores"), w));
+    lay->addLayout(modeRow);
     lay->addLayout(grid);
     lay->addSpacing(8);
     lay->addLayout(form);
@@ -279,8 +336,8 @@ void SettingsDialog::accept()
     m_db->setSetting("timer_step_small", m_stepSmall->value());
     m_db->setSetting("timer_step_big", m_stepBig->value());
 
-    if (QAbstractButton* b = m_themes->checkedButton())
-        m_db->setSetting("theme", b->property("themeKey").toString());
+    m_db->setSetting("theme_color", m_themeColor);
+    m_db->setSetting("theme_mode", m_themeMode);
     m_db->setSetting("window_size", m_size->currentData().toString());
     m_db->setSetting("resizable", m_resizable->isChecked() ? 1 : 0);
     m_db->setSetting("group_by_activity", m_groupByActivity->isChecked() ? 1 : 0);
