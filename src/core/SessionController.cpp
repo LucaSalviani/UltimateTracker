@@ -48,15 +48,92 @@ SessionController::IvKind SessionController::kindFor(State s)
 // ---------------------------------------------------------------------------
 // Configuración
 // ---------------------------------------------------------------------------
+bool SessionController::switchWouldPark(qint64 id) const
+{
+    return m_hasPomo && m_pomo.folderId != id && m_pomoMs >= qint64(kMinStudySec) * 1000;
+}
+
 void SessionController::setFolderId(qint64 id)
 {
+    tick();
+    if (!m_hasPomo || m_pomo.folderId == id) {
+        m_folderId = id;
+        // Volviste a una actividad con un pomodoro en pausa: aparece pausado,
+        // listo para seguir. Durante un recreo se espera a que le des play.
+        if (!m_hasPomo && m_state != State::Break) restoreParked(id);
+        return;
+    }
+    if (!switchWouldPark(id)) {
+        // Recién arrancado (menos de 1 minuto): fue un error de actividad, se corrige.
+        moveCurrentTo(id);
+        return;
+    }
+    parkCurrent();
     m_folderId = id;
-    // Cambio "en caliente": si hay un pomodoro en curso, pasa entero a la actividad nueva.
+    if (!restoreParked(id)) setState(State::Ready);
+}
+
+void SessionController::moveCurrentTo(qint64 id)
+{
+    m_folderId = id;
     if (m_hasPomo && m_pomo.folderId != id) {
         m_pomo.folderId = id;
         m_db->setPomodoroFolder(m_pomo.id, id);
         emit pomodoroChanged();
     }
+}
+
+QHash<qint64, int> SessionController::parkedSeconds() const
+{
+    QHash<qint64, int> out;
+    for (auto it = m_parked.cbegin(); it != m_parked.cend(); ++it)
+        out.insert(it.key(), int(it->ms / 1000));
+    return out;
+}
+
+void SessionController::parkCurrent()
+{
+    if (!m_hasPomo) return;
+    m_pomo.studiedSec = int(m_pomoMs / 1000);
+    m_pomo.endedAt = now() / 1000;
+    m_pomo.status = PomoStatus::Parked;
+    m_db->updatePomodoro(m_pomo);
+    m_parked.insert(m_pomo.folderId, Parked{m_pomo, m_pomoMs});
+    m_hasPomo = false;
+    emit pomodoroChanged();
+}
+
+bool SessionController::restoreParked(qint64 folder)
+{
+    if (m_hasPomo || !m_parked.contains(folder)) return false;
+    const Parked pk = m_parked.take(folder);
+    m_pomo = pk.pomo;
+    m_pomoMs = pk.ms;
+    m_pomo.status = PomoStatus::Running;
+    m_db->updatePomodoro(m_pomo);
+    m_hasPomo = true;
+    m_folderId = folder;
+    setState(State::Paused);
+    emit pomodoroChanged();
+    return true;
+}
+
+// Fin del día: los pomodoros en pausa que no se retomaron se cierran con lo que llevaban.
+void SessionController::finishParked()
+{
+    for (const Parked& pk : std::as_const(m_parked)) {
+        Pomodoro p = pk.pomo;
+        p.studiedSec = int(pk.ms / 1000);
+        if (p.studiedSec < kMinStudySec) {
+            m_db->deletePomodoro(p.id);
+            continue;
+        }
+        p.status = PomoStatus::Completed;
+        m_db->updatePomodoro(p);
+        emit studyRecorded(p.folderId, p.studiedSec);
+        emit pomodoroSaved(p.id);
+    }
+    m_parked.clear();
 }
 
 void SessionController::setWorkSec(int sec) { m_workSec = qMax(60, sec); }
@@ -119,6 +196,11 @@ void SessionController::start()
 {
     tick();
     if (m_state == State::Running || m_state == State::Paused || m_state == State::Break) return;
+    // Si esta actividad tenía un pomodoro en pausa, se sigue ese.
+    if (restoreParked(m_folderId)) {
+        setState(State::Running);
+        return;
+    }
     startPomodoro(false);
 }
 
@@ -176,7 +258,9 @@ void SessionController::startBreak()
 void SessionController::skipBreak()
 {
     tick();
-    if (m_state == State::WorkDone) startPomodoro(true);
+    if (m_state != State::WorkDone) return;
+    if (restoreParked(m_folderId)) setState(State::Running);
+    else startPomodoro(true);
 }
 
 void SessionController::endBreakEarly()
@@ -191,9 +275,10 @@ void SessionController::silenceAlarm()
     if (m_state == State::BreakOver) setState(State::Ready);
 }
 
-void SessionController::closeDay()
+void SessionController::closeDay(bool endOfDay)
 {
     tick();
+    if (endOfDay) finishParked();
     if (m_state == State::Idle) return;
     finishPomodoro();
     // Lo que quedó pendiente no se confirma: era el final del día (inactivo).
@@ -206,6 +291,17 @@ void SessionController::recoverAfterRestart()
 {
     for (Pomodoro p : m_db->pomodorosWithStatus(PomoStatus::Running)) {
         if (p.studiedSec < kMinStudySec) {
+            m_db->deletePomodoro(p.id);
+        } else {
+            p.status = PomoStatus::Completed;
+            m_db->updatePomodoro(p);
+        }
+    }
+    // Pomodoros en pausa: si son de hoy se pueden retomar; si son de otro día, ya terminaron.
+    for (Pomodoro p : m_db->pomodorosWithStatus(PomoStatus::Parked)) {
+        if (p.day == today()) {
+            m_parked.insert(p.folderId, Parked{p, qint64(p.studiedSec) * 1000});
+        } else if (p.studiedSec < kMinStudySec) {
             m_db->deletePomodoro(p.id);
         } else {
             p.status = PomoStatus::Completed;

@@ -130,7 +130,7 @@ TimerDeck::TimerDeck(QWidget* parent)
         case Mode::BreakReady: emit skipBreakClicked(); break;
         case Mode::Break:      emit endBreakClicked(); break;
         case Mode::BreakOver:  emit silenceClicked(); break;
-        case Mode::Ready:      break;
+        case Mode::Ready:      if (!m_model.canStart) emit goTodayClicked(); break;
         }
     });
 
@@ -159,7 +159,7 @@ void TimerDeck::setActivityMenu(QMenu* menu)
 
 void TimerDeck::setModel(const Model& m)
 {
-    const bool modeChanged = m_first || m.mode != m_model.mode;
+    const bool modeChanged = m_first || m.mode != m_model.mode || m.canStart != m_model.canStart;
     m_first = false;
     m_model = m;
     m_display->setModel(m);
@@ -203,9 +203,13 @@ void TimerDeck::applyMode()
         break;
     }
 
+    // Viendo otro día no se arranca nada: solo "Ir a hoy".
+    const bool blocked = m == Mode::Ready && !m_model.canStart;
+    if (blocked) m_primary->setVisible(false);
+
     // Acción secundaria
     const QColor ink = theme::text;
-    m_secondary->setVisible(m != Mode::Ready);
+    m_secondary->setVisible(m != Mode::Ready || blocked);
     m_secondary->setProperty("accent", brk ? "break" : "pomo");
     switch (m) {
     case Mode::Running:
@@ -230,11 +234,16 @@ void TimerDeck::applyMode()
         m_secondary->setToolTip(QStringLiteral("Apagar la alarma"));
         break;
     case Mode::Ready:
+        if (blocked) {
+            m_secondary->setText(QStringLiteral("Ir a hoy"));
+            m_secondary->setIcon(icons::get(icons::Id::ChevronRight, ink));
+            m_secondary->setToolTip(QStringLiteral("Los pomodoros se registran solo en el día de hoy"));
+        }
         break;
     }
 
     // − / + solo cuando se está por arrancar algo
-    m_stepper->setVisible(m == Mode::Ready || m == Mode::BreakReady);
+    m_stepper->setVisible((m == Mode::Ready && !blocked) || m == Mode::BreakReady);
     m_stepper->setToolTip(m == Mode::Ready ? QStringLiteral("Duración del pomodoro")
                                            : QStringLiteral("Duración del recreo"));
 
@@ -307,7 +316,8 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     // ---- Cabecera: LED + modo
     QString label;
     switch (mode) {
-    case Mode::Ready:      label = QStringLiteral("POMODORO %1").arg(m_model.number, 2, 10, QChar('0')); break;
+    case Mode::Ready:      label = m_model.canStart ? QStringLiteral("POMODORO %1").arg(m_model.number, 2, 10, QChar('0'))
+                                                        : QStringLiteral("SOLO HOY"); break;
     case Mode::Running:    label = QStringLiteral("POMODORO %1").arg(m_model.number, 2, 10, QChar('0')); break;
     case Mode::Paused:     label = QStringLiteral("POMODORO %1").arg(m_model.number, 2, 10, QChar('0')); break;
     case Mode::BreakReady: label = QStringLiteral("RECREO"); break;
@@ -386,7 +396,7 @@ void DeckDisplay::paintEvent(QPaintEvent*)
         p.drawText(QRectF(x, center.top(), tw + 4, center.height()), Qt::AlignLeft | Qt::AlignVCenter, txt);
     } else {
         // Dígitos grandes de contador
-        QString digits = fmt::clock(shown);
+        QString digits = (mode == Mode::Ready && !m_model.canStart) ? QStringLiteral("--:--") : fmt::clock(shown);
         QFont df = deckFont(qMin(center.height() * 0.80, center.width() * 0.34), QFont::DemiBold);
         QFontMetricsF fm(df);
         while (fm.horizontalAdvance(digits) > center.width() * 0.96 && df.pixelSize() > 12) {

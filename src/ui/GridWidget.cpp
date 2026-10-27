@@ -26,7 +26,13 @@ GridWidget::GridWidget(QWidget* parent)
 // ---------------------------------------------------------------------------
 // Estado
 // ---------------------------------------------------------------------------
-void GridWidget::setZoom(Zoom z) { m_zoom = z; update(); }
+void GridWidget::setZoom(Zoom z)
+{
+    m_zoom = z;
+    m_hoverDay = {};
+    unsetCursor();
+    update();
+}
 void GridWidget::setAnchor(const QDate& d) { m_anchor = d; update(); }
 void GridWidget::setToday(const QDate& d) { m_today = d; update(); }
 void GridWidget::setProportional(bool on) { m_proportional = on; update(); }
@@ -85,7 +91,7 @@ void GridWidget::recomputeDayEnds()
 // pinta rojo mientras no haya nada en marcha (si volvés a estudiar, pasa a negro).
 bool GridWidget::isDayEnd(const Pomodoro& p) const
 {
-    if (p.status == PomoStatus::Running) return false;
+    if (p.status == PomoStatus::Running || p.status == PomoStatus::Parked) return false;
     if (m_lastOfDay.value(p.day) != p.id) return false;
     return !(p.day == m_today && m_todayActive);
 }
@@ -196,12 +202,15 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
         p.drawRoundedRect(r, radius, radius);
         textColor = Qt::white;
         break;
-    case PomoStatus::Running: {
+    case PomoStatus::Running:
+    case PomoStatus::Parked: {
+        const bool parked = pomo.status == PomoStatus::Parked;
         const double progress = pomo.id == m_liveId
             ? m_liveProgress
             : (pomo.plannedSec > 0 ? double(pomo.studiedSec) / pomo.plannedSec : 0.0);
         p.setBrush(theme::squareEmpty);
-        p.setPen(QPen(theme::squareFill.darker(150), 1));
+        // En pausa por cambio de actividad: borde punteado.
+        p.setPen(QPen(theme::squareFill.darker(150), 1, parked ? Qt::DashLine : Qt::SolidLine));
         p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
         // Se llena de izquierda a derecha, como una barra que sigue a la anterior.
         p.save();
@@ -209,11 +218,20 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
         clip.addRoundedRect(r, radius, radius);
         p.setClipPath(clip);
         p.setPen(Qt::NoPen);
-        p.setBrush(theme::squareFill);
+        p.setBrush(parked ? theme::squareFill.darker(160) : theme::squareFill);
         const double w = s * qBound(0.0, progress, 1.0);
         p.drawRect(QRectF(r.left(), r.top(), w, s));
         p.restore();
-        textColor = theme::text;
+        if (parked && s >= 22) {
+            // ⏸ chiquito arriba a la derecha
+            const double g = s * 0.16, bw = g * 0.32;
+            const QPointF o(r.right() - s * 0.1 - g, r.top() + s * 0.1);
+            p.setPen(Qt::NoPen);
+            p.setBrush(theme::text);
+            p.drawRect(QRectF(o.x(), o.y(), bw, g));
+            p.drawRect(QRectF(o.x() + g * 0.62, o.y(), bw, g));
+        }
+        textColor = parked ? theme::textDim : theme::text;
         break;
     }
     }
@@ -314,9 +332,16 @@ void GridWidget::paintWeek(QPainter& p)
 
         QRectF header = col.adjusted(3, 0, -3, 0);
         header.setHeight(headerH);
-        p.setPen(Qt::NoPen);
-        p.setBrush(isToday ? theme::surfaceHi : theme::surface);
-        p.drawRoundedRect(header, 6, 6);
+        const bool hover = d == m_hoverDay;
+        if (hover) {
+            // Toda la columna se ilumina: se nota que se puede clickear.
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(0x23, 0x23, 0x23));
+            p.drawRoundedRect(col.adjusted(1, 0, -1, 0), 8, 8);
+        }
+        p.setPen(hover ? QPen(QColor(0x6a, 0x6a, 0x6a), 1) : QPen(Qt::NoPen));
+        p.setBrush(hover ? QColor(0x3a, 0x3a, 0x3a) : (isToday ? theme::surfaceHi : theme::surface));
+        p.drawRoundedRect(header.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6);
 
         p.setFont(theme::uiFont(9.5, isToday ? QFont::DemiBold : QFont::Normal));
         p.setPen(isToday ? theme::text : theme::textDim);
@@ -329,10 +354,15 @@ void GridWidget::paintWeek(QPainter& p)
             p.drawText(header.adjusted(8, 5, -8, 0), Qt::AlignRight | Qt::AlignTop, fmt::duration(study));
         }
         const QString title = m_titles.value(d);
+        if (hover) {
+            p.setFont(theme::uiFont(8, QFont::DemiBold));
+            p.setPen(theme::text);
+            p.drawText(header.adjusted(8, 25, -8, -4), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("ver día ›"));
+        }
         if (!title.isEmpty()) {
             p.setFont(theme::uiFont(8));
             p.setPen(theme::textFaint);
-            const QRectF tr = header.adjusted(8, 25, -8, -4);
+            const QRectF tr = header.adjusted(8, 25, hover ? -62 : -8, -4);
             p.drawText(tr, Qt::AlignLeft | Qt::AlignVCenter,
                        QFontMetrics(p.font()).elidedText(title, Qt::ElideRight, int(tr.width())));
         }
@@ -370,9 +400,16 @@ void GridWidget::paintMonth(QPainter& p)
             const bool inMonth = d.month() == m_anchor.month();
             const bool isToday = d == m_today;
 
-            p.setPen(Qt::NoPen);
-            p.setBrush(isToday ? theme::surfaceHi : (inMonth ? theme::surface : theme::bg));
-            p.drawRoundedRect(box, 6, 6);
+            const bool hover = d == m_hoverDay;
+            p.setPen(hover ? QPen(QColor(0x6a, 0x6a, 0x6a), 1) : QPen(Qt::NoPen));
+            p.setBrush(hover ? QColor(0x34, 0x34, 0x34)
+                             : (isToday ? theme::surfaceHi : (inMonth ? theme::surface : theme::bg)));
+            p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6);
+            if (hover) {
+                p.setFont(theme::uiFont(8, QFont::DemiBold));
+                p.setPen(theme::text);
+                p.drawText(box.adjusted(7, 0, -7, -4), Qt::AlignRight | Qt::AlignBottom, QStringLiteral("ver día ›"));
+            }
 
             p.setFont(theme::uiFont(8.5, isToday ? QFont::Bold : QFont::Normal));
             p.setPen(isToday ? theme::text : (inMonth ? theme::textDim : theme::textFaint));
@@ -395,12 +432,24 @@ void GridWidget::paintMonth(QPainter& p)
 // ---------------------------------------------------------------------------
 void GridWidget::mouseMoveEvent(QMouseEvent* e)
 {
+    if (m_zoom != Zoom::Day) {
+        QDate over;
+        for (const auto& [r, d] : m_dayRects)
+            if (r.contains(e->position())) { over = d; break; }
+        if (over != m_hoverDay) {
+            m_hoverDay = over;
+            if (over.isValid()) setCursor(Qt::PointingHandCursor);
+            else unsetCursor();
+            update();
+        }
+    }
     for (const Placed& pl : m_placed) {
         if (!pl.rect.contains(e->position())) continue;
         const Pomodoro& pm = m_pomos[pl.index];
         const QString start = QDateTime::fromSecsSinceEpoch(pm.startedAt).time().toString("HH:mm");
         QString status;
         if (pm.status == PomoStatus::Running)       status = QStringLiteral("en curso");
+        else if (pm.status == PomoStatus::Parked)   status = QStringLiteral("en pausa (cambiaste de actividad)");
         else if (pm.studiedSec >= pm.plannedSec)    status = QStringLiteral("completo");
         else                                        status = QStringLiteral("cortado antes");
         if (isDayEnd(pm)) status += QStringLiteral(" · último del día");
@@ -414,6 +463,15 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         return;
     }
     QToolTip::hideText();
+}
+
+void GridWidget::leaveEvent(QEvent*)
+{
+    if (m_hoverDay.isValid()) {
+        m_hoverDay = {};
+        unsetCursor();
+        update();
+    }
 }
 
 void GridWidget::contextMenuEvent(QContextMenuEvent* e)

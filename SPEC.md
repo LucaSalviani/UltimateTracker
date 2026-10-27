@@ -28,11 +28,15 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Panel a la derecha de la grilla, ~80 % del alto de la vista día. Inspirado en caseteras/DVD: visor con contador grande, LED, carretes que giran, barra de progreso con transcurrido/total como Spotify.
 - Rojo = pomodoro; verde agua = recreo.
 - Adentro está todo lo que avanza, cambia o mueve el tiempo: actividad, duración (− / +), play/pausa, terminar pomodoro, iniciar/saltear recreo, terminar recreo, silenciar.
-- La actividad se puede cambiar en cualquier momento; si hay un pomodoro corriendo, pasa entero a la actividad nueva.
+- La actividad se puede cambiar en cualquier momento:
+  - En el primer minuto del pomodoro: se corrige la actividad (fue un error).
+  - Después: avisa y el pomodoro queda **en pausa para su actividad** (⏸ en el menú, borde punteado en la grilla). Al volver a esa actividad aparece pausado para seguirlo. Si no se retoma en el día, se cierra solo con el tiempo que llevaba. Sobrevive a cerrar la app.
+- Los pomodoros se registran solo hoy: viendo otro día, el reproductor muestra "SOLO HOY" e "Ir a hoy".
 
 ## Stats en vivo
 - Abajo de la grilla: pomodoros, minutos // horas y un tercer dato.
 - Por defecto muestra la actividad actual (tercer dato: total histórico de la actividad); se puede cambiar a todo el día (tercer dato: cuántas actividades distintas).
+- El mismo toggle filtra los cuadraditos de la grilla (y su numeración) en todas las vistas.
 
 ## Tiempos
 | Contador | Qué suma |
@@ -59,6 +63,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
   - **Terminado:** negro (como tachar la hoja), con el tiempo que duró.
   - **Último del día:** **rojo**. Para hoy es provisorio: se pinta rojo mientras no haya nada en marcha.
 - Click derecho sobre un cuadradito → **Mover a actividad** o **Borrar pomodoro** (con confirmación; se descuenta de las estadísticas).
+- En semana y mes, el día bajo el mouse se ilumina con "ver día ›" y cursor de mano.
 - Toggle **proporcional**: el área de cada cuadradito pasa a ser proporcional a sus minutos.
 - Vistas tipo Google Calendar:
   - **Día** (al abrir siempre muestra hoy): ventana horizontal chica. Banda gris con la tarea del día (opcional) a la izquierda y la fecha a la derecha (por defecto `26/10/26`; en Ajustes se puede poner escrita).

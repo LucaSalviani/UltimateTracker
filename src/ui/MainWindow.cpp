@@ -174,6 +174,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_jokers = m_db->setting("jokers_per_week", 2).toInt();
     m_resizable = m_db->setting("resizable", 1).toBool();
     m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
+    m_sessionDay = QDate::currentDate();
 
     m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
     m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -198,7 +199,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_liveStats, &LiveStats::scopeToggled, this, [this] {
         m_liveActivityScope = !m_liveActivityScope;
         m_db->setSetting("live_scope", m_liveActivityScope ? "activity" : "day");
-        refreshLiveStats();
+        reloadGrid();
     });
 
     // Columna izquierda: grilla + stats en vivo. Derecha: el reproductor.
@@ -254,11 +255,13 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_session, &SessionController::stateChanged, this, &MainWindow::onStateChanged);
     connect(m_session, &SessionController::ticked, this, &MainWindow::onTick);
     connect(m_session, &SessionController::pomodoroStarted, this, [this] {
-        m_sessionDay = QDate::currentDate();
         reloadGrid();
     });
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::reloadGrid);
-    connect(m_session, &SessionController::pomodoroChanged, this, &MainWindow::reloadGrid);
+    connect(m_session, &SessionController::pomodoroChanged, this, [this] {
+        rebuildFolderMenu();
+        reloadGrid();
+    });
     connect(m_session, &SessionController::studyRecorded, this, &MainWindow::onStudyRecorded);
     connect(m_session, &SessionController::pomodoroCompleted, this, [this] {
         m_sounds->playChime();
@@ -488,6 +491,7 @@ QWidget* MainWindow::buildDeck()
     connect(m_deck, &TimerDeck::skipBreakClicked, m_session, &SessionController::skipBreak);
     connect(m_deck, &TimerDeck::endBreakClicked, m_session, &SessionController::endBreakEarly);
     connect(m_deck, &TimerDeck::silenceClicked, m_session, &SessionController::silenceAlarm);
+    connect(m_deck, &TimerDeck::goTodayClicked, this, &MainWindow::goToday);
     connect(m_deck, &TimerDeck::durationChanged, this, [this](int min) {
         // El − / + ajusta lo que está por arrancar: el pomodoro o el recreo.
         if (m_session->state() == SessionController::State::WorkDone) m_session->setBreakSec(min * 60);
@@ -736,7 +740,7 @@ void MainWindow::navigate(int dir)
     }
     m_grid->setAnchor(a);
     refreshBand();
-    reloadGrid();
+    reloadGrid();   // también refresca el reproductor (solo se arranca hoy)
 }
 
 void MainWindow::goToday()
@@ -776,7 +780,11 @@ void MainWindow::refreshBand()
 
 void MainWindow::reloadGrid()
 {
-    const QVector<Pomodoro> pomos = m_db->pomodorosBetween(m_grid->rangeStart(), m_grid->rangeEnd());
+    // "Ver esta actividad" filtra los cuadraditos (y su numeración); "todo el día" muestra todo.
+    const QSet<qint64> scope = m_tree.subtree(m_session->folderId());
+    QVector<Pomodoro> pomos;
+    for (const Pomodoro& p : m_db->pomodorosBetween(m_grid->rangeStart(), m_grid->rangeEnd()))
+        if (!m_liveActivityScope || scope.contains(p.folderId)) pomos.append(p);
     m_grid->setData(pomos, m_db->dayTitles(m_grid->rangeStart(), m_grid->rangeEnd()));
     m_grid->setLive(m_session->currentPomodoro(), m_session->progress());
 
@@ -797,7 +805,7 @@ void MainWindow::reloadFolders()
     if (m_grid) m_grid->setFolderPaths(paths);
     if (m_session->folderId() && !m_tree.contains(m_session->folderId()))
         m_session->setFolderId(m_tree.children(0).isEmpty() ? 0 : m_tree.children(0).first());
-    if (m_folderMenu) m_folderMenu->rebuild(m_tree, m_session->folderId());
+    if (m_folderMenu) rebuildFolderMenu();
     if (m_stats && m_overlay == Overlay::Stats) m_stats->refresh();
     if (m_deck) {
         refreshDeck();
@@ -807,15 +815,52 @@ void MainWindow::reloadFolders()
 
 void MainWindow::chooseFolder(qint64 id)
 {
+    if (m_session->switchWouldPark(id)) {
+        const auto cur = m_session->currentPomodoro();
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Question);
+        box.setWindowTitle(QStringLiteral("Cambiar de actividad"));
+        box.setText(QStringLiteral("Tu pomodoro de «%1» (lleva %2) queda en pausa.")
+                        .arg(m_tree.find(cur->folderId) ? m_tree.find(cur->folderId)->name : QStringLiteral("Sin actividad"),
+                             fmt::duration(cur->studiedSec)));
+        box.setInformativeText(QStringLiteral("Lo retomás cuando vuelvas a esa actividad. Si no lo retomás hoy, "
+                                              "se cierra solo con el tiempo que lleve."));
+        QPushButton* ok = box.addButton(QStringLiteral("Cambiar a «%1»").arg(m_tree.find(id) ? m_tree.find(id)->name : QString()),
+                                        QMessageBox::AcceptRole);
+        box.addButton(QStringLiteral("Cancelar"), QMessageBox::RejectRole);
+        win::applyChrome(&box);
+        box.exec();
+        if (box.clickedButton() != ok) {
+            rebuildFolderMenu();   // vuelve a marcar la actividad actual
+            return;
+        }
+    }
     m_session->setFolderId(id);
     m_db->setSetting("last_folder", id);
-    m_folderMenu->rebuild(m_tree, id);
+    rebuildFolderMenu();
     reloadGrid();
 }
 
+// Menú de actividades con un ⏸ en las que tienen un pomodoro en pausa.
+void MainWindow::rebuildFolderMenu()
+{
+    QHash<qint64, QString> badges;
+    const auto parked = m_session->parkedSeconds();
+    for (auto it = parked.cbegin(); it != parked.cend(); ++it)
+        badges.insert(it.key(), QStringLiteral("⏸ %1").arg(fmt::duration(it.value())));
+    m_folderMenu->rebuild(m_tree, m_session->folderId(), badges);
+}
+
+// Pomodoros ya terminados hoy dentro de lo que se está mostrando (actividad o día).
 int MainWindow::todayCount() const
 {
-    return int(m_todayPomos.size());
+    const QSet<qint64> scope = m_tree.subtree(m_session->folderId());
+    int n = 0;
+    for (const Pomodoro& p : m_todayPomos)
+        if ((p.status == PomoStatus::Completed || p.status == PomoStatus::Final) &&
+            (!m_liveActivityScope || scope.contains(p.folderId)))
+            ++n;
+    return n;
 }
 
 void MainWindow::refreshDeck()
@@ -840,6 +885,8 @@ void MainWindow::refreshDeck()
     m.remainingSec = m_session->remainingSec();
     m.totalSec = cur ? cur->plannedSec : (m.mode == M::Break ? m_session->breakSec() : m_session->workSec());
     m.durationMin = (m.mode == M::BreakReady ? m_session->breakSec() : m_session->workSec()) / 60;
+    // Los pomodoros se registran solo hoy: viendo otro día, el reproductor ofrece volver.
+    m.canStart = m_grid->zoom() != GridWidget::Zoom::Day || m_grid->anchor() == m_today;
     m_deck->setModel(m);
 }
 
@@ -855,8 +902,8 @@ void MainWindow::refreshLiveStats()
     QSet<qint64> activities;
     for (const Pomodoro& p : m_todayPomos) {
         if (m_liveActivityScope && !scope.contains(p.folderId)) continue;
-        ++d.pomos;
-        d.seconds += p.studiedSec;
+        if (p.status == PomoStatus::Completed || p.status == PomoStatus::Final) ++d.pomos;
+        d.seconds += p.studiedSec;          // los que están en pausa suman minutos
         activities.insert(p.folderId);
     }
     if (cur && (!m_liveActivityScope || scope.contains(cur->folderId))) {
@@ -865,9 +912,8 @@ void MainWindow::refreshLiveStats()
     }
     d.activities = int(activities.size());
     if (m_liveActivityScope) {
-        // Total histórico de la actividad (con lo que está corriendo ahora).
+        // Total histórico de la actividad (lo que corre ya está guardado cada 5 s).
         d.activityTotalSec = m_tree.rollUp(m_db->studyByFolder()).value(folder);
-        if (cur && scope.contains(cur->folderId)) d.activityTotalSec += cur->studiedSec;
     }
     m_liveStats->setData(d);
 }
@@ -902,6 +948,9 @@ void MainWindow::togglePlay()
     switch (m_session->state()) {
     case S::Idle:
     case S::Ready:
+        if (m_grid->zoom() == GridWidget::Zoom::Day && m_grid->anchor() != m_today) goToday();
+        else m_session->start();
+        break;
     case S::BreakOver: m_session->start(); break;
     case S::Running:   m_session->pause(); break;
     case S::Paused:    m_session->resume(); break;
@@ -933,6 +982,7 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
     const auto p = m_db->pomodoro(id);
     if (!p) return;
     const bool running = p->status == PomoStatus::Running;
+    const bool parked = p->status == PomoStatus::Parked;
 
     QMenu menu(this);
     auto* move = new FolderMenu(&menu);
@@ -940,7 +990,10 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
     move->rebuild(m_tree, p->folderId);
     connect(move, &FolderMenu::folderChosen, this, [this, id, running](qint64 folder) {
         if (running) {
-            chooseFolder(folder);              // el que corre: cambia la actividad en curso
+            m_session->moveCurrentTo(folder);  // el que corre: se corrige su actividad
+            m_db->setSetting("last_folder", folder);
+            rebuildFolderMenu();
+            reloadGrid();
         } else {
             m_db->setPomodoroFolder(id, folder);
             reloadGrid();
@@ -948,11 +1001,15 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
         }
     });
     connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
-    menu.addMenu(move);
+    QAction* moveAction = menu.addMenu(move);
+    if (parked) {
+        moveAction->setEnabled(false);
+        moveAction->setText(QStringLiteral("Mover a actividad (está en pausa)"));
+    }
     menu.addSeparator();
-    QAction* del = menu.addAction(running ? QStringLiteral("Borrar pomodoro (terminalo primero)")
-                                          : QStringLiteral("Borrar pomodoro…"));
-    del->setEnabled(!running);
+    QAction* del = menu.addAction(running || parked ? QStringLiteral("Borrar pomodoro (terminalo primero)")
+                                                    : QStringLiteral("Borrar pomodoro…"));
+    del->setEnabled(!running && !parked);
     connect(del, &QAction::triggered, this, [this, id] { deletePomodoro(id); });
     menu.exec(globalPos);
 }
@@ -960,7 +1017,7 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
 void MainWindow::deletePomodoro(qint64 id)
 {
     const auto p = m_db->pomodoro(id);
-    if (!p || p->status == PomoStatus::Running) return;
+    if (!p || p->status == PomoStatus::Running || p->status == PomoStatus::Parked) return;
 
     QMessageBox box(this);
     box.setIcon(QMessageBox::Warning);
@@ -987,10 +1044,11 @@ void MainWindow::deletePomodoro(qint64 id)
 void MainWindow::checkDayRollover()
 {
     const QDate now = QDate::currentDate();
-    if (m_session->state() != SessionController::State::Idle && !m_session->inProgress() &&
-        m_sessionDay.isValid() && m_sessionDay < now) {
-        m_session->closeDay();
-        m_sessionDay = {};
+    // Si hay algo en marcha se espera a que termine (el pomodoro cuenta para el día en que empezó).
+    if (m_sessionDay < now && !m_session->inProgress()) {
+        m_session->closeDay(true);
+        m_sessionDay = now;
+        rebuildFolderMenu();
     }
     if (now != m_today) {
         const bool wasOnToday = m_grid->anchor() == m_today;
@@ -1239,8 +1297,9 @@ void MainWindow::closeEvent(QCloseEvent* e)
 
 void MainWindow::quitApp()
 {
-    // Si había un pomodoro corriendo, se guarda hasta donde llegó.
-    m_session->closeDay();
+    // Si había un pomodoro corriendo, se guarda hasta donde llegó. Los que están
+    // en pausa por actividad quedan guardados para retomarlos hoy.
+    m_session->closeDay(false);
     m_sounds->stopAlarm();
     if (m_tray) m_tray->hide();
     m_edgeTab->close();

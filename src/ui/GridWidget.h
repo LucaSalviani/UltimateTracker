@@ -46,6 +46,7 @@ protected:
     void mouseMoveEvent(QMouseEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
     void contextMenuEvent(QContextMenuEvent*) override;
+    void leaveEvent(QEvent*) override;
 
 private:
     struct Placed { QRectF rect; int index; };
@@ -73,6 +74,7 @@ private:
     QHash<QDate, qint64>         m_lastOfDay;   // id del último pomodoro de cada día
     QHash<qint64, int>           m_number;      // número del pomodoro dentro de su día (1, 2, …)
     bool   m_todayActive = false;
+    QDate  m_hoverDay;                          // día bajo el mouse (semana / mes)
     qint64 m_liveId = 0;
     double m_liveProgress = 0.0;
 

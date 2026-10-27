@@ -10,7 +10,8 @@ class FolderMenu : public QMenu {
     Q_OBJECT
 public:
     explicit FolderMenu(QWidget* parent = nullptr);
-    void rebuild(const FolderTree& tree, qint64 current);
+    // badges: texto extra al lado de algunas actividades (ej. "⏸ 12m").
+    void rebuild(const FolderTree& tree, qint64 current, const QHash<qint64, QString>& badges = {});
 
 signals:
     void folderChosen(qint64 id);
@@ -18,4 +19,6 @@ signals:
 
 private:
     void addLevel(QMenu* menu, const FolderTree& tree, qint64 parent, qint64 current);
+    QString label(const Folder* f) const;
+    QHash<qint64, QString> m_badges;
 };

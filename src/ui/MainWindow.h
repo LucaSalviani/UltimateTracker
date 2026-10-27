@@ -91,6 +91,7 @@ private:
     void onStudyRecorded(qint64 folderId, qint64 seconds);
     void togglePlay();
     void chooseFolder(qint64 id);
+    void rebuildFolderMenu();
     void deletePomodoro(qint64 id);
     void showPomodoroMenu(qint64 id, const QPoint& globalPos);
     int  todayCount() const;

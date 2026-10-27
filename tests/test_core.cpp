@@ -204,13 +204,87 @@ private slots:
         s->setFolderId(so);
         s->start();
         advance(db, *s, 15 * 60);
-        s->setFolderId(axel);                         // te diste cuenta a mitad
+        s->moveCurrentTo(axel);                       // corrección explícita (click derecho → mover)
         advance(db, *s, 10 * 60);
         const QDate d(2026, 10, 26);
         const auto pomos = db.pomodorosBetween(d, d);
         QCOMPARE(pomos.size(), 1);
         QCOMPARE(pomos[0].folderId, axel);
         QCOMPARE(db.studyByFolder().value(so), 0);
+        QCOMPARE(db.studyByFolder().value(axel), 25 * 60);
+    }
+
+    void switchingActivityParksAndResumes()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 so = db.addFolder(0, "SO");
+        const qint64 axel = db.addFolder(0, "Clases Axel");
+        auto* s = make(db);
+        s->setFolderId(so);
+        s->start();
+        advance(db, *s, 10 * 60);
+        QVERIFY(s->switchWouldPark(axel));
+        s->setFolderId(axel);                         // SO queda en pausa con 10'
+        QCOMPARE(s->state(), SessionController::State::Ready);
+        QCOMPARE(s->parkedSeconds().value(so), 10 * 60);
+        s->start();                                   // pomodoro nuevo en Axel
+        advance(db, *s, 25 * 60);
+        s->skipBreak();                               // (Axel otra vez)
+        advance(db, *s, 5);
+        s->endPomodoro();                             // 5 s: se descarta
+        s->setFolderId(so);                           // vuelvo a SO: aparece pausado
+        QCOMPARE(s->state(), SessionController::State::Paused);
+        QCOMPARE(s->remainingSec(), 15 * 60);
+        s->resume();
+        advance(db, *s, 15 * 60);                     // lo termina
+        const QDate d(2026, 10, 26);
+        QCOMPARE(db.studyByFolder().value(so), 25 * 60);
+        QCOMPARE(db.studyByFolder().value(axel), 25 * 60);
+        QCOMPARE(db.pomodorosBetween(d, d).size(), 2);
+        QVERIFY(s->parkedSeconds().isEmpty());
+    }
+
+    void parkedFinishesAtEndOfDayAndSurvivesRestart()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 so = db.addFolder(0, "SO");
+        const qint64 axel = db.addFolder(0, "Clases Axel");
+        const QDate d(2026, 10, 26);
+        {
+            auto* s = make(db);
+            s->setFolderId(so);
+            s->start();
+            advance(db, *s, 12 * 60);
+            s->setFolderId(axel);
+            s->closeDay(false);                       // salir de la app: queda en pausa
+            delete s;
+        }
+        auto* s2 = make(db);
+        s2->recoverAfterRestart();
+        QCOMPARE(s2->parkedSeconds().value(so), 12 * 60);
+        s2->closeDay(true);                           // medianoche: se da por terminado
+        const auto pomos = db.pomodorosBetween(d, d);
+        QCOMPARE(pomos.size(), 1);
+        QCOMPARE(pomos[0].status, PomoStatus::Completed);
+        QCOMPARE(pomos[0].studiedSec, 12 * 60);
+    }
+
+    void earlySwitchJustMovesThePomodoro()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 so = db.addFolder(0, "SO");
+        const qint64 axel = db.addFolder(0, "Clases Axel");
+        auto* s = make(db);
+        s->setFolderId(so);
+        s->start();
+        advance(db, *s, 20);
+        QVERIFY(!s->switchWouldPark(axel));
+        s->setFolderId(axel);                         // a los 20 s: me equivoqué, se corrige
+        QCOMPARE(s->state(), SessionController::State::Running);
+        advance(db, *s, 25 * 60);
         QCOMPARE(db.studyByFolder().value(axel), 25 * 60);
     }
 

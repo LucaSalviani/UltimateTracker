@@ -31,6 +31,7 @@ public:
         int     remainingSec = 0;
         int     totalSec = 0;
         int     durationMin = 25;    // lo que ajusta el − / + (pomodoro o recreo)
+        bool    canStart = true;     // false viendo otro día: solo se registra hoy
     };
 
     explicit TimerDeck(QWidget* parent = nullptr);
@@ -46,6 +47,7 @@ signals:
     void endBreakClicked();
     void silenceClicked();
     void durationChanged(int minutes);
+    void goTodayClicked();
 
 private:
     void applyMode();

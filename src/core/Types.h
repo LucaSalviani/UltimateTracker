@@ -9,6 +9,7 @@ enum class PomoStatus {
     Running   = 0,  // en curso (o quedó así si la app se cerró de golpe)
     Completed = 1,  // terminado (por tiempo o a mano; studiedSec dice cuánto duró)
     Final     = 2,  // versiones viejas: se trata igual que Completed
+    Parked    = 3,  // en pausa porque cambiaste de actividad: se retoma al volver a ella
 };
 // El rojo NO se guarda: se pinta rojo el último pomodoro de cada día (ver GridWidget).
 
@@ -41,7 +42,7 @@ struct Pomodoro {
     // Minutos que "representa" el cuadradito.
     int representedSec() const
     {
-        return status == PomoStatus::Running ? plannedSec : studiedSec;
+        return (status == PomoStatus::Running || status == PomoStatus::Parked) ? plannedSec : studiedSec;
     }
 };
 

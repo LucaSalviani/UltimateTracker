@@ -2,6 +2,7 @@
 
 #include "core/Database.h"
 
+#include <QHash>
 #include <QObject>
 #include <QTimer>
 #include <functional>
@@ -23,6 +24,10 @@
 //                                 start ──▶ Running
 //
 // Un pomodoro de menos de 1 minuto no se guarda.
+//
+// Cambiar de actividad a mitad de un pomodoro lo "estaciona": queda en pausa
+// guardado para esa actividad y se retoma al volver a ella. Si no se retoma en
+// el día, al cerrar el día se da por terminado con el tiempo que llevaba.
 //
 // La sesión es el día: no se "termina" a mano. closeDay() la cierra a la
 // medianoche o al salir de la app.
@@ -47,7 +52,15 @@ public:
 
     // ---- Configuración del próximo pomodoro / recreo --------------------
     qint64 folderId() const { return m_folderId; }
+    // Cambia la actividad. Si hay un pomodoro andando (más de 1 minuto) lo deja
+    // en pausa para su actividad; si la nueva tenía uno en pausa, lo retoma.
     void   setFolderId(qint64 id);
+    // true si cambiar a `id` va a dejar en pausa el pomodoro actual (para avisar antes).
+    bool   switchWouldPark(qint64 id) const;
+    // Corrige la actividad del pomodoro actual sin dejarlo en pausa.
+    void   moveCurrentTo(qint64 id);
+    // Pomodoros en pausa por actividad: actividad → segundos que llevaban.
+    QHash<qint64, int> parkedSeconds() const;
     int    workSec() const { return m_workSec; }
     void   setWorkSec(int sec);
     int    breakSec() const { return m_breakSec; }
@@ -62,7 +75,9 @@ public:
     void skipBreak();      // WorkDone → Running (el siguiente, pegado al anterior)
     void endBreakEarly();  // Break → Ready
     void silenceAlarm();   // BreakOver → Ready
-    void closeDay();       // * → Idle (medianoche o salir de la app)
+    // * → Idle. Con endOfDay (medianoche) también se terminan los pomodoros en
+    // pausa; al salir de la app quedan guardados para retomarlos hoy.
+    void closeDay(bool endOfDay = true);
 
     // Avanza el reloj. Lo llama un QTimer interno (o los tests a mano).
     void tick();
@@ -99,6 +114,9 @@ private:
     void   addToInterval(qint64 ms);
     void   confirmPending();
     bool   finishPomodoro();   // false si duró menos del mínimo y se descartó
+    void   parkCurrent();
+    bool   restoreParked(qint64 folder);
+    void   finishParked();
     void   startPomodoro(bool linked);
     void   persist();
 
@@ -129,4 +147,7 @@ private:
     QDate  m_ivDay;
 
     QVector<qint64> m_pendingIds;   // intervalos "pendientes" de hoy sin confirmar
+
+    struct Parked { Pomodoro pomo; qint64 ms = 0; };
+    QHash<qint64, Parked> m_parked; // actividad → pomodoro en pausa
 };
