@@ -9,6 +9,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QInputDialog>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -111,6 +112,7 @@ void ActivitiesWidget::refresh(qint64 selectId)
     m_tree->clear();
     const FolderTree tree(m_db->folders());
     const auto totals = tree.rollUp(m_db->studyByFolder());
+    const auto prior = m_db->priorByFolder();
 
     std::function<void(QTreeWidgetItem*, qint64)> add = [&](QTreeWidgetItem* parentItem, qint64 parentId) {
         for (qint64 id : tree.children(parentId)) {
@@ -119,6 +121,8 @@ void ActivitiesWidget::refresh(qint64 selectId)
             item->setText(1, fmt::hours(totals.value(id)));
             item->setForeground(1, theme::textDim);
             item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+            if (prior.value(id) > 0)
+                item->setToolTip(1, QStringLiteral("Incluye %1 previas").arg(fmt::hours(prior.value(id))));
             item->setData(0, kIdRole, id);
             item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable |
                            Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
@@ -208,6 +212,27 @@ void ActivitiesWidget::persistStructure()
     emit activitiesChanged();
 }
 
+// M11: horas que ya tenías antes de la app (por ejemplo, las de la hoja en la pared).
+void ActivitiesWidget::editPriorHours(QTreeWidgetItem* item)
+{
+    const qint64 id = item->data(0, kIdRole).toLongLong();
+    const qint64 cur = m_db->priorByFolder().value(id);
+    QInputDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Horas previas"));
+    dlg.setLabelText(QStringLiteral("¿Cuántas horas de \"%1\" tenías antes de usar la app?\n"
+                                    "Se suman a tu total y a los hitos (no aparecen en los días).")
+                         .arg(item->text(0)));
+    dlg.setInputMode(QInputDialog::DoubleInput);
+    dlg.setDoubleRange(0, 10000);
+    dlg.setDoubleDecimals(1);
+    dlg.setDoubleStep(0.5);
+    dlg.setDoubleValue(cur / 3600.0);
+    if (dlg.exec() != QDialog::Accepted) return;
+    m_db->setFolderPriorSeconds(id, qint64(dlg.doubleValue() * 3600));
+    refresh(id);
+    emit activitiesChanged();
+}
+
 void ActivitiesWidget::showContextMenu(const QPoint& pos)
 {
     QTreeWidgetItem* item = m_tree->itemAt(pos);
@@ -216,6 +241,7 @@ void ActivitiesWidget::showContextMenu(const QPoint& pos)
         m_tree->setCurrentItem(item);
         menu.addAction(QStringLiteral("Agregar subactividad"), this, [this, item] { addChild(item); });
         menu.addAction(QStringLiteral("Renombrar"), this, [this, item] { m_tree->editItem(item, 0); });
+        menu.addAction(QStringLiteral("Horas previas…"), this, [this, item] { editPriorHours(item); });
         menu.addSeparator();
         menu.addAction(QStringLiteral("Eliminar…"), this, [this, item] { deleteItem(item); });
     } else {

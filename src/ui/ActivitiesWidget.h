@@ -27,6 +27,7 @@ private:
     void deleteItem(QTreeWidgetItem* item);
     void persistStructure();
     void showContextMenu(const QPoint& pos);
+    void editPriorHours(class QTreeWidgetItem* item);   // M11
     void onItemChanged(QTreeWidgetItem* item, int column);
 
     Database*     m_db;

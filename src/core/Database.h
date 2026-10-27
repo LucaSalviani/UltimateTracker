@@ -32,6 +32,9 @@ public:
     bool   moveFolder(qint64 id, qint64 newParentId);
     // Padre y orden entre hermanos (después de arrastrar en el gestor).
     void   setFolderPlacement(qint64 id, qint64 parentId, int sort);
+    // M11: horas que ya tenías antes de usar la app (se suman al histórico).
+    QHash<qint64, qint64> priorByFolder() const;
+    void   setFolderPriorSeconds(qint64 id, qint64 seconds);
 
     // ---- Días ------------------------------------------------------------
     QString dayTitle(const QDate& day) const;

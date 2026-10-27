@@ -515,6 +515,20 @@ private slots:
         QVERIFY(copy.open(tmp.filePath("copy.db")));
         QCOMPARE(copy.pomodorosBetween(p.day, p.day).size(), 1);
     }
+
+    // M11: horas previas
+    void priorHoursCountInHistoryOnly()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 f = db.addFolder(0, "Piano");
+        Pomodoro p; p.folderId = f; p.day = QDate(2026, 10, 26); p.plannedSec = 1500; p.studiedSec = 1500;
+        p.status = PomoStatus::Completed;
+        db.insertPomodoro(p);
+        db.setFolderPriorSeconds(f, 120 * 3600);
+        QCOMPARE(db.studyByFolder().value(f), qint64(120 * 3600 + 1500));
+        QCOMPARE(db.studyByFolder(p.day, p.day).value(f), qint64(1500));   // un período: solo lo registrado
+    }
 };
 
 QTEST_GUILESS_MAIN(CoreTest)

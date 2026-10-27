@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 4;
+constexpr int kSchemaVersion = 5;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -124,6 +124,7 @@ bool Database::migrate()
     // rompe la base (la columna queda ahí, sin usar).
     if (version < 2) addColumnIfMissing("pomodoros", "linked", "INTEGER NOT NULL DEFAULT 0");  // encadenados
     if (version < 3) addColumnIfMissing("pomodoros", "note", "TEXT NOT NULL DEFAULT ''");      // M6: nota
+    if (version < 5) addColumnIfMissing("folders", "prior_sec", "INTEGER NOT NULL DEFAULT 0"); // M11: horas previas
     if (version < kSchemaVersion) exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
     return true;
 }
@@ -392,7 +393,30 @@ QHash<qint64, qint64> Database::studyByFolder(const QDate& from, const QDate& to
         q.exec("SELECT COALESCE(folder_id, 0), SUM(studied_sec) FROM pomodoros GROUP BY folder_id");
     }
     while (q.next()) out.insert(q.value(0).toLongLong(), q.value(1).toLongLong());
+    // M11: en el histórico completo también cuentan las horas previas (las de papel).
+    if (!from.isValid() || !to.isValid()) {
+        const auto prior = priorByFolder();
+        for (auto it = prior.cbegin(); it != prior.cend(); ++it) out[it.key()] += it.value();
+    }
     return out;
+}
+
+QHash<qint64, qint64> Database::priorByFolder() const
+{
+    QHash<qint64, qint64> out;
+    QSqlQuery q(m_db);
+    q.exec("SELECT id, prior_sec FROM folders WHERE prior_sec > 0");
+    while (q.next()) out.insert(q.value(0).toLongLong(), q.value(1).toLongLong());
+    return out;
+}
+
+void Database::setFolderPriorSeconds(qint64 id, qint64 seconds)
+{
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE folders SET prior_sec = ? WHERE id = ?");
+    q.addBindValue(qMax<qint64>(0, seconds));
+    q.addBindValue(id);
+    q.exec();
 }
 
 // ---------------------------------------------------------------------------
