@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Database.h"
+#include "ui/Tiles.h"
 
 #include <QDialog>
 
@@ -22,6 +23,7 @@ public:
     // M15: tema guardado (color + modo) → clave de paleta.
     static QString themeKey(Database* db);
     static void currentTheme(Database* db, QString* color, QString* mode);
+    static void loadTileStyle(Database* db);   // M18
 
     void accept() override;
     void reject() override;
@@ -30,6 +32,7 @@ private:
     QWidget* pageGeneral();
     QWidget* pageTimer();
     QWidget* pageAppearance();
+    QWidget* pageTiles();   // M18
     QWidget* pageSystem();
 
     Database* m_db;
@@ -65,6 +68,13 @@ private:
     QCheckBox*    m_sizeButton;
     QComboBox*    m_sizeDefault;
     QCheckBox*    m_celebrations;      // M8
+
+    // Cuadraditos (M18)
+    QComboBox* m_tileShape;
+    QComboBox* m_tileMark;
+    QComboBox* m_tileFill;
+    QComboBox* m_tileComplete;
+    tiles::Style m_originalTiles;
 
     // Sistema
     QCheckBox* m_autostart;

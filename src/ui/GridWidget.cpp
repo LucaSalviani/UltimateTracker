@@ -2,6 +2,7 @@
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "ui/Theme.h"
+#include "ui/Tiles.h"
 
 #include <QContextMenuEvent>
 #include <QEasingCurve>
@@ -215,8 +216,8 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
     for (const auto& g : groups)
         for (int idx : g) {
             const double ratio = qMax(60, m_pomos[idx].representedSec()) / 1500.0;
-            double vw = 1.0, vh = 1.0;
-            if (m_sizeMode == SizeMode::Area) vw = vh = std::sqrt(ratio);
+            double vw = 1.0, vh = 1.0 / tiles::aspect();   // la tarjeta es vertical
+            if (m_sizeMode == SizeMode::Area) { vw = std::sqrt(ratio); vh = vw / tiles::aspect(); }
             else if (m_sizeMode == SizeMode::Width) vw = qBound(0.45, ratio, 4.0);
             w.insert(idx, vw);
             h.insert(idx, vh);
@@ -293,145 +294,40 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
     return out;
 }
 
-// Fantasma: el lugar de un pomodoro de la meta que todavía no hiciste.
-void GridWidget::paintGhost(QPainter& p, const QRectF& r, const Pomodoro& g) const
-{
-    const double s = qMin(r.width(), r.height());   // lado corto (en "solo ancho" no son cuadrados)
-    const double radius = qMax(1.0, s * 0.12);
-    QColor edge = theme::textFaint;
-    edge.setAlphaF(0.7);
-    QPen pen(edge, 1, Qt::DashLine);
-    pen.setDashPattern({3, 3});
-    p.setPen(pen);
-    QColor fill = theme::text;
-    fill.setAlphaF(0.025);
-    p.setBrush(fill);
-    p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-    if (s < 15) return;
-    QFont f = theme::uiFont(9, QFont::Medium);
-    f.setPixelSize(qMax(7, int(s * 0.26)));
-    p.setFont(f);
-    p.setPen(theme::textFaint);
-    p.drawText(r, Qt::AlignCenter, fmt::duration(g.plannedSec));
-}
-
+// El dibujo de cada cuadradito vive en Tiles (M18): forma, marca, llenado y
+// animación de completado se eligen en Ajustes.
 void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo) const
 {
-    if (isGhost(pomo)) { paintGhost(p, r, pomo); return; }
-    const double s = qMin(r.width(), r.height());   // lado corto (en "solo ancho" no son cuadrados)
-    const double radius = qMax(1.0, s * 0.12);
-    QColor textColor;
+    tiles::Tile t;
+    if (isGhost(pomo)) {
+        t.state = tiles::State::Ghost;
+        t.label = fmt::duration(pomo.plannedSec);
+        tiles::paint(p, r, t, m_clock.elapsed());
+        return;
+    }
+    if (isDayEnd(pomo)) t.state = tiles::State::Final;
+    else if (pomo.status == PomoStatus::Running) t.state = tiles::State::Running;
+    else if (pomo.status == PomoStatus::Parked) t.state = tiles::State::Parked;
+    else t.state = tiles::State::Done;
+    t.progress = pomo.id == m_liveId ? m_liveProgress
+                                     : (pomo.plannedSec > 0 ? double(pomo.studiedSec) / pomo.plannedSec : 0.0);
+    t.label = fmt::duration(pomo.representedSec());
+    t.caption = m_names.value(pomo.folderId);
+    t.number = m_number.value(pomo.id);
+    t.stripe = m_colors.value(pomo.folderId);
+    if (m_completeAt.contains(pomo.id)) {
+        const qint64 dt = m_clock.elapsed() - m_completeAt.value(pomo.id);
+        t.completeT = dt < 0 ? -1 : qMin(1.0, double(dt) / tiles::kCompleteMs);
+        if (dt < 0) t.state = tiles::State::Running, t.progress = 1.0;   // espera a que termine el festejo
+    }
+    tiles::paint(p, r, t, m_clock.elapsed());
+}
 
-    p.setPen(Qt::NoPen);
-    const bool dayEnd = isDayEnd(pomo);
-    switch (dayEnd ? PomoStatus::Final : (pomo.status == PomoStatus::Final ? PomoStatus::Completed : pomo.status)) {
-    case PomoStatus::Completed: {
-        // Sombra apenas debajo + cuerpo con un brillo arriba, como una tecla.
-        if (s >= 12) {
-            p.setBrush(QColor(0, 0, 0, 70));
-            p.drawRoundedRect(r.translated(0, qMax(1.0, s * 0.035)), radius, radius);
-        }
-        QLinearGradient body(r.topLeft(), r.bottomLeft());
-        body.setColorAt(0, theme::mix(theme::squareDone, theme::squareDoneEdge, 0.30));
-        body.setColorAt(0.45, theme::squareDone);
-        body.setColorAt(1, theme::squareDone);
-        p.setBrush(body);
-        p.setPen(QPen(theme::squareDoneEdge, 1));
-        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-        textColor = theme::mix(theme::squareDone, theme::squareDone.lightness() < 128 ? Qt::white : Qt::black, 0.6);
-        break;
-    }
-    case PomoStatus::Final: {
-        if (s >= 12) {
-            p.setBrush(QColor(0, 0, 0, 70));
-            p.drawRoundedRect(r.translated(0, qMax(1.0, s * 0.035)), radius, radius);
-        }
-        QLinearGradient body(r.topLeft(), r.bottomLeft());
-        body.setColorAt(0, theme::squareFinal.lighter(122));
-        body.setColorAt(1, theme::squareFinal.darker(108));
-        p.setBrush(body);
-        p.drawRoundedRect(r, radius, radius);
-        textColor = Qt::white;
-        break;
-    }
-    case PomoStatus::Running:
-    case PomoStatus::Parked: {
-        const bool parked = pomo.status == PomoStatus::Parked;
-        const double progress = pomo.id == m_liveId
-            ? m_liveProgress
-            : (pomo.plannedSec > 0 ? double(pomo.studiedSec) / pomo.plannedSec : 0.0);
-        p.setBrush(theme::squareEmpty);
-        // En pausa por cambio de actividad: borde punteado.
-        p.setPen(QPen(theme::squareFill.darker(150), 1, parked ? Qt::DashLine : Qt::SolidLine));
-        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-        // Se llena de izquierda a derecha, como una barra que sigue a la anterior.
-        p.save();
-        QPainterPath clip;
-        clip.addRoundedRect(r, radius, radius);
-        p.setClipPath(clip);
-        p.setPen(Qt::NoPen);
-        p.setBrush(parked ? theme::squareFill.darker(160) : theme::squareFill);
-        const double w = r.width() * qBound(0.0, progress, 1.0);
-        p.drawRect(QRectF(r.left(), r.top(), w, r.height()));
-        p.restore();
-        if (parked && s >= 22) {
-            // ⏸ chiquito arriba a la derecha
-            const double g = s * 0.16, bw = g * 0.32;
-            const QPointF o(r.right() - s * 0.1 - g, r.top() + s * 0.1);
-            p.setPen(Qt::NoPen);
-            p.setBrush(theme::text);
-            p.drawRect(QRectF(o.x(), o.y(), bw, g));
-            p.drawRect(QRectF(o.x() + g * 0.62, o.y(), bw, g));
-        }
-        textColor = parked ? theme::textDim : theme::text;
-        break;
-    }
-    }
-
-    // Rayita del color de la actividad abajo (M8) + filo de luz arriba.
-    if (s >= 12) {
-        p.save();
-        QPainterPath clip;
-        clip.addRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-        p.setClipPath(clip);
-        p.setPen(Qt::NoPen);
-        const QColor c = m_colors.value(pomo.folderId);
-        if (c.isValid()) {
-            QColor stripe = c;
-            stripe.setAlphaF(dayEnd ? 0.55 : 0.9);
-            p.setBrush(stripe);
-            p.drawRect(QRectF(r.left(), r.bottom() - qMax(2.0, s * 0.075), r.width(), qMax(2.0, s * 0.075)));
-        }
-        QColor hl(255, 255, 255, dayEnd ? 60 : 22);
-        p.setBrush(hl);
-        p.drawRect(QRectF(r.left(), r.top(), r.width(), 1.0));
-        p.restore();
-    }
-
-    if (s < 15) return;
-    if (s >= 30) {
-        const int n = m_number.value(pomo.id);
-        QFont nf = theme::uiFont(8, QFont::DemiBold);
-        nf.setPixelSize(qMax(8, int(s * 0.17)));
-        p.setFont(nf);
-        QColor nc = textColor;
-        nc.setAlphaF(0.55);
-        p.setPen(nc);
-        p.drawText(r.adjusted(s * 0.09, s * 0.05, 0, 0), Qt::AlignLeft | Qt::AlignTop, QString::number(n));
-    }
-    const QString label = fmt::duration(pomo.representedSec());
-    QFont f = theme::uiFont(9, QFont::DemiBold);
-    double px = s * 0.30;
-    f.setPixelSize(qMax(7, int(px)));
-    QFontMetricsF fm(f);
-    while (fm.horizontalAdvance(label) > r.width() * 0.86 && px > 7) {
-        px -= 0.5;
-        f.setPixelSize(int(px));
-        fm = QFontMetricsF(f);
-    }
-    p.setFont(f);
-    p.setPen(textColor);
-    p.drawText(r, Qt::AlignCenter, label);
+void GridWidget::markCompleted(qint64 id, int delayMs)
+{
+    if (m_completeAt.contains(id)) return;
+    m_completeAt.insert(id, m_clock.elapsed() + delayMs);
+    update();
 }
 
 void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day, double maxSide, double minSide,
@@ -485,6 +381,11 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         const Pomodoro& pm = m_pomos[pl.index];
         double scale = 1, opacity = 1;
         if (animFrame(pm.id, m_paintOrder++, &scale, &opacity)) m_animating = true;
+        // Repintar seguido mientras haya un completado en curso o un llenado que se mueve.
+        if (m_completeAt.contains(pm.id) && m_clock.elapsed() - m_completeAt.value(pm.id) < tiles::kCompleteMs)
+            m_animating = true;
+        if ((pm.status == PomoStatus::Running || (pm.id == m_liveId)) && tiles::animatesWhileRunning())
+            m_animating = true;
         if (scale <= 0.01) { m_placed.append(pl); continue; }
         if (scale != 1.0 || opacity != 1.0) {
             p.save();
@@ -560,6 +461,7 @@ void GridWidget::paintEvent(QPaintEvent*)
         m_animTimer.stop();
         m_introAt = -1;
         m_popAt.clear();
+        m_completeAt.clear();
     }
 }
 

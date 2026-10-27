@@ -76,6 +76,7 @@ int main(int argc, char* argv[])
 
     // Tema de colores (paleta + hoja de estilos)
     theme::apply(SettingsDialog::themeKey(&db));
+    SettingsDialog::loadTileStyle(&db);
 
     MainWindow w(&db);
     QObject::connect(&server, &QLocalServer::newConnection, &w, [&] {

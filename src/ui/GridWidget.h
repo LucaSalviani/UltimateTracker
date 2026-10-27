@@ -43,6 +43,9 @@ public:
     // M8: nombre corto y color de cada actividad, y si se agrupan los cuadraditos.
     void setFolderLooks(const QHash<qint64, QString>& names, const QHash<qint64, QColor>& colors);
     void setGrouping(bool on) { m_grouping = on; update(); }
+    // M18: arranca la animación de completado de ese cuadradito (con demora,
+    // para que no quede tapada por el festejo grande).
+    void markCompleted(qint64 id, int delayMs);
     // Si hay algo en marcha hoy (pomodoro, pausa o recreo), el último pomodoro
     // de hoy todavía no es "el final del día" y no se pinta rojo.
     void setTodayActive(bool active) { m_todayActive = active; update(); }
@@ -86,7 +89,6 @@ private:
     void   recomputeDayEnds();
     void   rebuild();                 // reales + fantasmas → m_pomos / m_byDay
     static bool isGhost(const Pomodoro& p) { return p.id < 0; }
-    void   paintGhost(QPainter& p, const QRectF& r, const Pomodoro& g) const;
     QDate  dayAt(const QPointF& pos) const;
 
     Zoom  m_zoom = Zoom::Day;
@@ -108,6 +110,7 @@ private:
     QTimer        m_animTimer;
     qint64        m_introAt = -1;               // ms: arrancó la entrada de toda la vista
     QHash<qint64, qint64> m_popAt;              // ms: cuadraditos nuevos que "saltan"
+    QHash<qint64, qint64> m_completeAt;         // ms: animación de completado (M18)
     QSet<qint64>  m_seen;
     int           m_paintOrder = 0;
     bool          m_animating = false;

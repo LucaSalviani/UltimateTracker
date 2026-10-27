@@ -325,6 +325,15 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_deck->setNoteEnabled(false);
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::checkGoalReached);
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::preloadFromGoal);
+    connect(m_session, &SessionController::pomodoroSaved, this, [this](qint64 id) {
+        // pomodoroSaved llega antes que pomodoroCompleted: se decide en la vuelta siguiente
+        // si terminó por tiempo (hay festejo grande → demora) o a mano.
+        if (id <= 0) return;
+        QTimer::singleShot(0, this, [this, id] {
+            const bool byTime = m_lastCompletedId == id && m_db->setting("celebrations", 1).toBool();
+            m_grid->markCompleted(id, byTime ? 2400 : 150);
+        });
+    });
     connect(m_session, &SessionController::pomodoroChanged, this, [this] {
         rebuildFolderMenu();
         reloadGrid();
@@ -333,6 +342,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_session, &SessionController::pomodoroCompleted, this, [this](qint64 id) {
         m_sounds->playChime();
         bringToFront();
+        m_lastCompletedId = id;   // M18: el cuadradito espera a que termine el festejo grande
         // M8: animación de logro
         const auto p = m_db->pomodoro(id);
         if (!p) return;

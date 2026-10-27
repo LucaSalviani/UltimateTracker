@@ -1,5 +1,7 @@
 #include "ui/SettingsDialog.h"
 #include "ui/Theme.h"
+#include "ui/Tiles.h"
+#include <QApplication>
 
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -76,6 +78,15 @@ void SettingsDialog::currentTheme(Database* db, QString* color, QString* mode)
     }
 }
 
+void SettingsDialog::loadTileStyle(Database* db)
+{
+    tiles::Style& s = tiles::style();
+    s.shape = tiles::Shape(qBound(0, db->setting("tile_shape", 0).toInt(), 3));
+    s.mark = tiles::Mark(qBound(0, db->setting("tile_mark", 0).toInt(), 3));
+    s.fill = tiles::Fill(qBound(0, db->setting("tile_fill", 0).toInt(), 3));
+    s.complete = tiles::Complete(qBound(0, db->setting("tile_complete", 0).toInt(), 3));
+}
+
 QString SettingsDialog::themeKey(Database* db)
 {
     QString c, m;
@@ -95,13 +106,14 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     m_nav->setObjectName("SettingsNav");
     m_nav->setFixedWidth(150);
     for (const QString& s : {QStringLiteral("General"), QStringLiteral("Cronómetro"),
-                             QStringLiteral("Apariencia"), QStringLiteral("Sistema")})
+                             QStringLiteral("Apariencia"), QStringLiteral("Cuadraditos"), QStringLiteral("Sistema")})
         m_nav->addItem(s);
 
     m_pages = new QStackedWidget(this);
     m_pages->addWidget(pageGeneral());
     m_pages->addWidget(pageTimer());
     m_pages->addWidget(pageAppearance());
+    m_pages->addWidget(pageTiles());
     m_pages->addWidget(pageSystem());
     connect(m_nav, &QListWidget::currentRowChanged, m_pages, &QStackedWidget::setCurrentIndex);
     m_nav->setCurrentRow(0);
@@ -306,6 +318,54 @@ QWidget* SettingsDialog::pageAppearance()
     return w;
 }
 
+// M18: estilo de los cuadraditos, con muestra en vivo.
+QWidget* SettingsDialog::pageTiles()
+{
+    auto* w = new QWidget(this);
+    m_originalTiles = tiles::style();
+    auto combo = [w](const QStringList& names, int current) {
+        auto* c = new QComboBox(w);
+        for (const QString& n : names) c->addItem(n);
+        c->setCurrentIndex(current);
+        return c;
+    };
+    const tiles::Style st = tiles::style();
+    m_tileShape = combo(tiles::shapeNames(), int(st.shape));
+    m_tileMark = combo(tiles::markNames(), int(st.mark));
+    m_tileFill = combo(tiles::fillNames(), int(st.fill));
+    m_tileComplete = combo(tiles::completeNames(), int(st.complete));
+    auto* preview = new TilePreview(w);
+    auto live = [this, preview] {
+        tiles::Style& cur = tiles::style();
+        cur.shape = tiles::Shape(m_tileShape->currentIndex());
+        cur.mark = tiles::Mark(m_tileMark->currentIndex());
+        cur.fill = tiles::Fill(m_tileFill->currentIndex());
+        cur.complete = tiles::Complete(m_tileComplete->currentIndex());
+        preview->update();
+        if (parentWidget()) parentWidget()->update();
+        for (QWidget* x : QApplication::allWidgets()) x->update();
+    };
+    for (QComboBox* c : {m_tileShape, m_tileMark, m_tileFill, m_tileComplete})
+        connect(c, &QComboBox::currentIndexChanged, this, live);
+
+    auto* form = new QFormLayout;
+    form->addRow(QStringLiteral("Forma"), m_tileShape);
+    form->addRow(QStringLiteral("Marca de hecho"), m_tileMark);
+    form->addRow(QStringLiteral("Llenado (el que corre)"), m_tileFill);
+    form->addRow(QStringLiteral("Al completarse"), m_tileComplete);
+
+    auto* lay = new QVBoxLayout(w);
+    lay->addWidget(heading(QStringLiteral("Cuadraditos"), w));
+    lay->addWidget(preview);
+    lay->addSpacing(6);
+    lay->addLayout(form);
+    lay->addWidget(note(QStringLiteral("La muestra repite el ciclo: el tercero se llena y se completa. "
+                                       "Inclinado = romboide apoyado sobre su base; Tarjeta = vertical, con la actividad "
+                                       "arriba y el tiempo abajo; Biselado = esquinas cortadas."), w));
+    lay->addStretch();
+    return w;
+}
+
 QWidget* SettingsDialog::pageSystem()
 {
     auto* w = new QWidget(this);
@@ -377,6 +437,10 @@ void SettingsDialog::accept()
     m_db->setSetting("group_by_activity", m_groupByActivity->isChecked() ? 1 : 0);
     m_db->setSetting("celebrations", m_celebrations->isChecked() ? 1 : 0);
 
+    m_db->setSetting("tile_shape", m_tileShape->currentIndex());
+    m_db->setSetting("tile_mark", m_tileMark->currentIndex());
+    m_db->setSetting("tile_fill", m_tileFill->currentIndex());
+    m_db->setSetting("tile_complete", m_tileComplete->currentIndex());
     m_db->setSetting("autostart", m_autostart->isChecked() ? 1 : 0);
     m_db->setSetting("greeting", m_greeting->isChecked() ? 1 : 0);
     m_db->setSetting("hotkey", m_hotkey->isChecked() ? 1 : 0);
@@ -389,5 +453,6 @@ void SettingsDialog::accept()
 void SettingsDialog::reject()
 {
     theme::apply(m_originalTheme);   // deshace la vista previa
+    tiles::style() = m_originalTiles;
     QDialog::reject();
 }
