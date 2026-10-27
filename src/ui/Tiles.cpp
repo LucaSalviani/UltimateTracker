@@ -20,9 +20,30 @@ QStringList completeNames() { return {"Rebote", "Sellado", "Destello", "Volteo"}
 QStringList paletteNames()  { return {"Del tema", "Naranja", "Rojo", "Azul", "Verde", "Papel (blanco)"}; }
 QStringList borderNames()   { return {"Fino", "Normal", "Grueso"}; }
 
+QString numberText(int n)
+{
+    return style().numberPrefix ? QStringLiteral("Nº%1").arg(n) : QString::number(n);
+}
+
+QFont font(qreal px, int weight)
+{
+    QFont f;
+    f.setFamilies({QStringLiteral("Bahnschrift"), QStringLiteral("DIN Alternate"), QStringLiteral("Inter"),
+                   QStringLiteral("Segoe UI"), QStringLiteral("sans-serif")});
+    f.setPixelSize(qMax(6, int(px)));
+    f.setWeight(QFont::Weight(weight));
+    f.setStretch(QFont::SemiCondensed);
+    return f;
+}
+
 namespace {
 qreal ease(qreal t, QEasingCurve::Type type) { return QEasingCurve(type).valueForProgress(qBound<qreal>(0, t, 1)); }
-QColor onColor(const QColor& bg) { return bg.lightness() < 140 ? QColor(255, 255, 255) : QColor(0x14, 0x14, 0x14); }
+QColor onColor(const QColor& bg)
+{
+    // Luminancia percibida: el rojo del pomodoro lleva texto blanco, el papel negro.
+    const double lum = 0.299 * bg.red() + 0.587 * bg.green() + 0.114 * bg.blue();
+    return lum < 165 ? QColor(255, 255, 255) : QColor(0x14, 0x14, 0x14);
+}
 
 // ---- Colores de los cuadraditos: los del tema o una paleta propia (M23)
 struct Colors { QColor done, doneEdge, final, fill, empty; };
@@ -66,20 +87,17 @@ void drawLabel(QPainter& p, const QRectF& r, const Tile& t, const QColor& color,
     const double s = qMin(r.width(), r.height());
     if (s < 15) return;
     const bool card = style().shape == Shape::Card;
-    const bool caption = !t.caption.isEmpty() && (style().caption || card) && s >= 34;
-    if (t.number > 0 && s >= 30) {
-        QFont nf = theme::uiFont(8, QFont::DemiBold);
-        nf.setPixelSize(qMax(8, int(s * 0.16)));
+    const bool caption = !t.caption.isEmpty() && style().caption && s >= 34;   // M29: solo si está elegido
+    if (t.number > 0 && s >= 30 && style().numberPos == 0) {
+        QFont nf = font(s * 0.17, QFont::DemiBold);
         p.setFont(nf);
         QColor nc = color;
         nc.setAlphaF(0.55);
         p.setPen(nc);
-        p.drawText(r.adjusted(0, s * 0.05, 0, 0), Qt::AlignHCenter | Qt::AlignTop,
-                   card ? QStringLiteral("Nº%1").arg(t.number) : QString::number(t.number));
+        p.drawText(r.adjusted(0, s * 0.05, 0, 0), Qt::AlignHCenter | Qt::AlignTop, numberText(t.number));
     }
     if (caption) {
-        QFont cf = theme::uiFont(7, QFont::DemiBold);
-        cf.setPixelSize(qMax(7, int(s * 0.12)));
+        QFont cf = font(s * 0.13, QFont::DemiBold);
         cf.setCapitalization(QFont::AllUppercase);
         p.setFont(cf);
         QColor cc = color;
@@ -90,9 +108,8 @@ void drawLabel(QPainter& p, const QRectF& r, const Tile& t, const QColor& color,
         p.drawText(cr, Qt::AlignHCenter | (card ? Qt::AlignTop : Qt::AlignBottom),
                    QFontMetrics(cf).elidedText(t.caption, Qt::ElideRight, int(cr.width())));
     }
-    QFont f = theme::uiFont(9, faint ? QFont::Medium : (card ? QFont::Bold : QFont::DemiBold));
-    double px = s * (faint ? 0.26 : 0.30);
-    f.setPixelSize(qMax(7, int(px)));
+    double px = s * (faint ? 0.28 : 0.33);
+    QFont f = font(px, faint ? QFont::Medium : (card ? QFont::Bold : QFont::DemiBold));
     QFontMetricsF fm(f);
     while (fm.horizontalAdvance(t.label) > r.width() * 0.80 && px > 7) {
         px -= 0.5;
@@ -170,16 +187,23 @@ void drawMark(QPainter& p, const QRectF& r, State st, double amount, const QColo
         const QPointF sc = card ? QPointF(c.x(), r.top() + r.height() * 0.50)
                                 : QPointF(r.right() - d * 0.66, r.top() + d * 0.66);
         p.translate(sc);
-        p.rotate(m == Mark::Stamp ? -14 : -8);
+        if (m == Mark::Stamp) p.rotate(-14);   // el cuadrado va derechito (M29)
         p.scale(0.6 + 0.4 * amount, 0.6 + 0.4 * amount);
         QColor fillc = col;
         fillc.setAlphaF(0.16 * amount);
         p.setBrush(fillc);
-        p.setPen(QPen(col, qMax(1.1, s * 0.03)));
-        if (m == Mark::Stamp) p.drawEllipse(QPointF(0, 0), d / 2, d / 2);
-        else p.drawRoundedRect(QRectF(-d / 2, -d / 2, d, d), d * 0.18, d * 0.18);
-        p.setPen(QPen(col, qMax(1.3, s * 0.04), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        p.drawPolyline(QPolygonF({QPointF(-d * 0.20, 0), QPointF(-d * 0.05, d * 0.15), QPointF(d * 0.22, -d * 0.14)}));
+        if (m == Mark::Stamp) {
+            p.setPen(QPen(col, qMax(1.1, s * 0.03)));
+            p.drawEllipse(QPointF(0, 0), d / 2, d / 2);
+            p.setPen(QPen(col, qMax(1.3, s * 0.04), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            p.drawPolyline(QPolygonF({QPointF(-d * 0.20, 0), QPointF(-d * 0.05, d * 0.15), QPointF(d * 0.22, -d * 0.14)}));
+        } else {
+            // Cuadrado recto con un tilde de ángulo recto (piernas perpendiculares, puntas rectas).
+            p.setPen(QPen(col, qMax(1.1, s * 0.03), Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
+            p.drawRect(QRectF(-d / 2, -d / 2, d, d));
+            p.setPen(QPen(col, qMax(1.3, s * 0.045), Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
+            p.drawPolyline(QPolygonF({QPointF(-d * 0.24, -d * 0.02), QPointF(-d * 0.08, d * 0.14), QPointF(d * 0.24, -d * 0.18)}));
+        }
         break;
     }
     case Mark::None:
@@ -189,11 +213,13 @@ void drawMark(QPainter& p, const QRectF& r, State st, double amount, const QColo
 }
 
 // ---- Llenado del que corre
-void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double progress, bool parked, qint64 now)
+void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double progress, bool parked, qint64 now,
+                 bool t_accent)
 {
     const Colors cs = colors();
-    // Invertido (por defecto): fondo gris que se llena del color de "terminado".
+    // Invertido (por defecto): fondo clarito que se llena oscuro, como si se cargara.
     QColor fillc = style().inverted ? cs.done : cs.fill;
+    if (t_accent) fillc = theme::pomoAccent;   // M29: el que está corriendo, con el color del pomodoro
     if (parked) fillc = theme::mix(fillc, style().inverted ? cs.fill : cs.empty, 0.45);
     p.save();
     p.setClipPath(path);
@@ -229,28 +255,28 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
         break;
     }
     case Fill::Segments: {
-        // Batería de 5 bloques bien marcados; el que se está llenando late.
+        // Como una batería: 5 bloques que ocupan todo el cuadradito; el que se está
+        // llenando late. Colores de siempre (gris sobre oscuro), sin invertir (M29).
         const int n = 5;
-        const double gap = qMax(2.0, r.width() * 0.05);
+        const QColor segFill = t_accent ? theme::pomoAccent : cs.fill;
+        const double gap = qMax(1.5, r.width() * 0.035);
         const double sw = (r.width() - gap * (n + 1)) / n;
         const double filled = pr * n;
-        const QColor emptySeg = theme::mix(style().inverted ? cs.fill : cs.empty, fillc, 0.18);
         for (int i = 0; i < n; ++i) {
-            const QRectF seg(r.left() + gap + i * (sw + gap), r.top() + gap * 1.4, sw, r.height() - 2.8 * gap);
-            if (i < int(filled)) {
-                p.setPen(Qt::NoPen);
-                p.setBrush(fillc);
-            } else if (i == int(filled) && !parked) {
-                const double frac = filled - int(filled);
-                QColor sc = fillc;
-                sc.setAlphaF(qBound(0.2, 0.35 + 0.5 * frac + 0.15 * std::sin(now / 240.0), 1.0));
-                p.setPen(QPen(fillc, 1));
-                p.setBrush(sc);
-            } else {
-                p.setPen(QPen(theme::mix(emptySeg, fillc, 0.35), 1));
-                p.setBrush(emptySeg);
+            const QRectF seg(r.left() + gap + i * (sw + gap), r.top() + gap, sw, r.height() - 2 * gap);
+            QColor sc = segFill;
+            if (parked) sc = sc.darker(160);
+            if (i >= int(filled)) {
+                if (i == int(filled) && !parked) {
+                    const double frac = filled - int(filled);
+                    sc.setAlphaF(0.25 + 0.55 * frac + 0.15 * std::sin(now / 260.0));
+                } else {
+                    sc = theme::mix(cs.empty, segFill, 0.12);
+                }
             }
-            p.drawRoundedRect(seg.adjusted(0.5, 0.5, -0.5, -0.5), 1.8, 1.8);
+            p.setPen(Qt::NoPen);
+            p.setBrush(sc);
+            p.drawRoundedRect(seg, 1.5, 1.5);
         }
         break;
     }
@@ -274,7 +300,9 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
 
 double aspect()
 {
-    return style().shape == Shape::Card ? 0.78 : 1.0;
+    if (style().shape == Shape::Card) return 0.78;
+    if (style().shape == Shape::Slant) return 1.10;   // apenas más ancho
+    return 1.0;
 }
 
 QPainterPath shapePath(const QRectF& r)
@@ -289,11 +317,11 @@ QPainterPath shapePath(const QRectF& r)
         path.addRoundedRect(r, qMax(1.0, s * 0.08), qMax(1.0, s * 0.08));
         break;
     case Shape::Slant: {
-        // Romboide apoyado sobre su base, apenas inclinado y con esquinas suaves.
-        const double k = r.height() * 0.09;
-        path = roundedPolygon({QPointF(r.left() + k, r.top()), QPointF(r.right(), r.top()),
-                               QPointF(r.right() - k, r.bottom()), QPointF(r.left(), r.bottom())},
-                              s * 0.11);
+        // Romboide apoyado sobre su base, apenas inclinado, con esquinas angulosas.
+        const double k = r.height() * 0.12;
+        path.addPolygon(QPolygonF({QPointF(r.left() + k, r.top()), QPointF(r.right(), r.top()),
+                                   QPointF(r.right() - k, r.bottom()), QPointF(r.left(), r.bottom())}));
+        path.closeSubpath();
         break;
     }
     case Shape::Bevel: {
@@ -404,11 +432,12 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
     case State::Running:
     case State::Parked: {
         const bool parked = st == State::Parked;
-        const QColor bg = style().inverted ? cs.fill : cs.empty;
+        // Los segmentos van siempre sobre oscuro (como les queda bien); el resto, invertido si se eligió.
+        const QColor bg = style().inverted && style().fill != Fill::Segments ? cs.fill : cs.empty;
         p.setBrush(bg);
         p.setPen(QPen(style().inverted ? bg.darker(118) : cs.fill.darker(150), bw, parked ? Qt::DashLine : Qt::SolidLine));
         p.drawPath(path);
-        fillRunning(p, r, path, t.completeT >= 0 ? 1.0 : t.progress, parked, now);
+        fillRunning(p, r, path, t.completeT >= 0 ? 1.0 : t.progress, parked, now, t.accent && !parked);
         if (parked && s >= 22) {
             const double g = s * 0.16, w = g * 0.32;
             const QPointF o(r.right() - s * 0.1 - g, r.top() + s * 0.1);
@@ -418,7 +447,8 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
             p.drawRect(QRectF(o.x() + g * 0.62, o.y(), w, g));
         }
         // El texto contrasta con lo que tenga detrás (mitad llena, mitad vacía).
-        const QColor under = style().inverted ? cs.done : cs.fill;
+        const QColor under = t.accent && !parked ? theme::pomoAccent
+                           : (style().inverted && style().fill != Fill::Segments ? cs.done : cs.fill);
         textColor = parked ? theme::mix(onColor(under), under, 0.4) : onColor(under);
         runningHalo = under;
         break;
@@ -508,11 +538,13 @@ void TilePreview::paintEvent(QPaintEvent*)
             if (cyc < 0.7) {
                 t.state = tiles::State::Running;
                 t.progress = cyc / 0.7;
+                t.accent = tiles::style().highlight == 1;
             } else {
                 t.completeT = qMin(1.0, (cyc - 0.7) * 4000.0 / tiles::kCompleteMs);
             }
         }
-        if (i == 3) t.state = tiles::State::Final;
+        if (i == 3 && tiles::style().highlight == 2) t.state = tiles::State::Final;
+        if (tiles::style().numberPos != 0) t.number = 0;
         const QRectF r(4 + i * (w + gap), 4, w, h);
         tiles::paint(p, r, t, now);
     }

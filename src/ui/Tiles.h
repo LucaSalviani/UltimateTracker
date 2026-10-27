@@ -30,7 +30,15 @@ struct Style {
     bool     caption = false;   // nombre de la actividad dentro del cuadradito
     int      border = 1;        // 0 fino · 1 normal · 2 grueso
     int      palette = 0;       // 0 = la del tema; ver paletteNames()
+    // M29
+    int      numberPos = 0;     // 0 adentro · 1 afuera (arriba) · 2 oculto
+    bool     numberPrefix = false;   // "Nº3" en vez de "3"
+    int      highlight = 1;     // 0 nada · 1 el que está corriendo (acento) · 2 el último del día (rojo, como antes)
 };
+// "3" o "Nº3" según el ajuste.
+QString numberText(int n);
+// La fuente de los números del cronómetro (Bahnschrift).
+QFont font(qreal px, int weight);
 Style& style();
 
 QStringList shapeNames();
@@ -50,6 +58,7 @@ struct Tile {
     int     number = 0;        // número del día (0 = no mostrar)
     QColor  stripe;            // color de la actividad
     double  completeT = -1;    // 0..1 mientras dura la animación de completado
+    bool    accent = false;    // M29: el que está corriendo, resaltado con el color del pomodoro
 };
 
 // Ancho / alto del cuadradito (la tarjeta es vertical).

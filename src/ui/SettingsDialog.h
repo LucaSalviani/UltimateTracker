@@ -89,6 +89,9 @@ private:
     QCheckBox* m_tileInverted;
     QCheckBox* m_tileStripe;
     QCheckBox* m_tileCaption;
+    QComboBox* m_tileNumberPos;   // M29
+    QComboBox* m_tileHighlight;
+    QCheckBox* m_tilePrefix;
     class QSpinBox* m_tileSize;
     int        m_originalTileSize = 100;
     tiles::Style m_originalTiles;

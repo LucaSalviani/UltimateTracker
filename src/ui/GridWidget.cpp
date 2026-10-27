@@ -174,6 +174,7 @@ void GridWidget::recomputeDayEnds()
 // pinta rojo mientras no haya nada en marcha (si volvés a estudiar, pasa a negro).
 bool GridWidget::isDayEnd(const Pomodoro& p) const
 {
+    if (tiles::style().highlight != 2) return false;   // M29: el rojo del último del día es opcional
     if (p.status == PomoStatus::Running || p.status == PomoStatus::Parked) return false;
     if (m_lastOfDay.value(p.day) != p.id) return false;
     return !(p.day == m_today && m_todayActive);
@@ -269,6 +270,8 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
                 const int idx = g[i];
                 const double s = k * w.value(idx);
                 const double sh = k * h.value(idx);
+                // M29: número afuera, arriba del cuadradito: se le hace lugar.
+                const double numH = (tiles::style().numberPos == 1 && !isGhost(m_pomos[idx])) ? qBound(9.0, k * 0.26, 15.0) : 0;
                 // Un pomodoro encadenado (sin recreo) va pegado al anterior.
                 if (i > 0 && m_pomos[idx].linked && x > area.left()) x -= gap - kLinkGap;
                 if (x + s > area.right() + 0.01 && x > area.left()) {
@@ -279,7 +282,7 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
                 }
                 if (lay) lay->placed.append({QRectF(x, y, qMin(s, area.width()), sh), idx});
                 x += s + gap;
-                rowH = qMax(rowH, sh);
+                rowH = qMax(rowH, sh + numH);
             }
         }
         closeRow();
@@ -323,8 +326,9 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
                                      : (pomo.plannedSec > 0 ? double(pomo.studiedSec) / pomo.plannedSec : 0.0);
     t.label = fmt::duration(pomo.representedSec());
     t.caption = m_names.value(pomo.folderId);
-    t.number = m_number.value(pomo.id);
+    t.number = tiles::style().numberPos == 0 ? m_number.value(pomo.id) : 0;   // afuera lo pinta la grilla
     t.stripe = m_colors.value(pomo.folderId);
+    t.accent = tiles::style().highlight == 1 && pomo.status == PomoStatus::Running;
     if (m_completeAt.contains(pomo.id)) {
         const qint64 dt = m_clock.elapsed() - m_completeAt.value(pomo.id);
         t.completeT = dt < 0 ? -1 : qMin(1.0, double(dt) / tiles::kCompleteMs);
@@ -427,6 +431,18 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         if ((pm.status == PomoStatus::Running || (pm.id == m_liveId)) && tiles::animatesWhileRunning())
             m_animating = true;
         if (scale <= 0.01) { m_placed.append(pl); continue; }
+        // M29: número afuera, arriba a la izquierda (como en los bocetos: "Nº1").
+        if (tiles::style().numberPos == 1 && !isGhost(pm) && m_number.value(pm.id) > 0 && pl.rect.width() >= 18) {
+            const double nh = qBound(9.0, pl.rect.height() * 0.24, 15.0);
+            QFont nf = tiles::font(nh * 0.85, QFont::Bold);
+            nf.setItalic(true);
+            p.setFont(nf);
+            p.setOpacity(opacity);
+            p.setPen(theme::textDim);
+            p.drawText(QRectF(pl.rect.left() + 1, pl.rect.top() - nh - 1, pl.rect.width() + 20, nh),
+                       Qt::AlignLeft | Qt::AlignBottom, tiles::numberText(m_number.value(pm.id)));
+            p.setOpacity(1.0);
+        }
         if (scale != 1.0 || opacity != 1.0) {
             p.save();
             p.setOpacity(opacity);

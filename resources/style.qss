@@ -364,3 +364,5 @@ QToolButton#MiniClose:hover { background: #2c2c2c; }
 /* Modo desarrollador (M20) */
 QToolButton#DevButton { background: transparent; border: 1px dashed @acc; border-radius: 6px; padding: 1px 5px; }
 QToolButton#DevButton:hover { background: @s4; }
+
+QScrollArea#SettingsScroll, QWidget#SettingsPage { background: transparent; }

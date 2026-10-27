@@ -20,6 +20,7 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QToolButton>
@@ -93,6 +94,9 @@ void SettingsDialog::loadTileStyle(Database* db)
     s.caption = db->setting("tile_caption", 0).toBool();
     s.border = qBound(0, db->setting("tile_border", 1).toInt(), 2);
     s.palette = qBound(0, db->setting("tile_palette", 0).toInt(), 5);
+    s.numberPos = qBound(0, db->setting("tile_number_pos", 0).toInt(), 2);
+    s.numberPrefix = db->setting("tile_number_prefix", 0).toBool();
+    s.highlight = qBound(0, db->setting("tile_highlight", 1).toInt(), 2);
 }
 
 QString SettingsDialog::themeKey(Database* db)
@@ -109,7 +113,7 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     , m_originalTheme(themeKey(db))
 {
     setWindowTitle(QStringLiteral("Ajustes"));
-    resize(620, 470);
+    resize(660, 560);
 
     m_nav = new QListWidget(this);
     m_nav->setObjectName("SettingsNav");
@@ -119,11 +123,22 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
         m_nav->addItem(s);
 
     m_pages = new QStackedWidget(this);
-    m_pages->addWidget(pageGeneral());
-    m_pages->addWidget(pageTimer());
-    m_pages->addWidget(pageAppearance());
-    m_pages->addWidget(pageTiles());
-    m_pages->addWidget(pageSystem());
+    // Cada página con scroll (Cuadraditos y Apariencia ya no entran enteras).
+    auto wrap = [this](QWidget* page) {
+        auto* sc = new QScrollArea(this);
+        sc->setObjectName("SettingsScroll");
+        sc->setWidgetResizable(true);
+        sc->setFrameShape(QFrame::NoFrame);
+        sc->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        page->setObjectName("SettingsPage");
+        sc->setWidget(page);
+        return sc;
+    };
+    m_pages->addWidget(wrap(pageGeneral()));
+    m_pages->addWidget(wrap(pageTimer()));
+    m_pages->addWidget(wrap(pageAppearance()));
+    m_pages->addWidget(wrap(pageTiles()));
+    m_pages->addWidget(wrap(pageSystem()));
     connect(m_nav, &QListWidget::currentRowChanged, m_pages, &QStackedWidget::setCurrentIndex);
     m_nav->setCurrentRow(0);
 
@@ -361,6 +376,11 @@ QWidget* SettingsDialog::pageTiles()
     m_tileFill = combo(tiles::fillNames(), int(st.fill));
     m_tileComplete = combo(tiles::completeNames(), int(st.complete));
     m_tilePalette = combo(tiles::paletteNames(), st.palette);
+    m_tileNumberPos = combo({QStringLiteral("Adentro, arriba"), QStringLiteral("Afuera, arriba"), QStringLiteral("Sin número")}, st.numberPos);
+    m_tileHighlight = combo({QStringLiteral("Nada"), QStringLiteral("El que está corriendo (color del pomodoro)"),
+                             QStringLiteral("El último del día (rojo, como antes)")}, st.highlight);
+    m_tilePrefix = new QCheckBox(QStringLiteral("Número con \"Nº\" (Nº3)"), w);
+    m_tilePrefix->setChecked(st.numberPrefix);
     m_tileBorder = combo(tiles::borderNames(), st.border);
     m_tileInverted = new QCheckBox(QStringLiteral("Invertidos: fondo gris que se va llenando del color de terminado"), w);
     m_tileInverted->setChecked(st.inverted);
@@ -386,14 +406,18 @@ QWidget* SettingsDialog::pageTiles()
         cur.inverted = m_tileInverted->isChecked();
         cur.stripe = m_tileStripe->isChecked();
         cur.caption = m_tileCaption->isChecked();
+        cur.numberPos = m_tileNumberPos->currentIndex();
+        cur.numberPrefix = m_tilePrefix->isChecked();
+        cur.highlight = m_tileHighlight->currentIndex();
         emit tileSizePreview(m_tileSize->value());
         preview->update();
         if (parentWidget()) parentWidget()->update();
         for (QWidget* x : QApplication::allWidgets()) x->update();
     };
-    for (QComboBox* c : {m_tileShape, m_tileMark, m_tileFill, m_tileComplete, m_tilePalette, m_tileBorder})
+    for (QComboBox* c : {m_tileShape, m_tileMark, m_tileFill, m_tileComplete, m_tilePalette, m_tileBorder,
+                         m_tileNumberPos, m_tileHighlight})
         connect(c, &QComboBox::currentIndexChanged, this, live);
-    for (QCheckBox* c : {m_tileInverted, m_tileStripe, m_tileCaption})
+    for (QCheckBox* c : {m_tileInverted, m_tileStripe, m_tileCaption, m_tilePrefix})
         connect(c, &QCheckBox::toggled, this, live);
     connect(m_tileSize, &QSpinBox::valueChanged, this, live);
 
@@ -405,6 +429,8 @@ QWidget* SettingsDialog::pageTiles()
     form->addRow(QStringLiteral("Colores"), m_tilePalette);
     form->addRow(QStringLiteral("Borde"), m_tileBorder);
     form->addRow(QStringLiteral("Tamaño base"), m_tileSize);
+    form->addRow(QStringLiteral("Número"), m_tileNumberPos);
+    form->addRow(QStringLiteral("Resaltar"), m_tileHighlight);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Cuadraditos"), w));
@@ -414,6 +440,7 @@ QWidget* SettingsDialog::pageTiles()
     lay->addWidget(m_tileInverted);
     lay->addWidget(m_tileStripe);
     lay->addWidget(m_tileCaption);
+    lay->addWidget(m_tilePrefix);
     lay->addWidget(note(QStringLiteral("La muestra repite el ciclo: el tercero se llena y se completa. "
                                        "Inclinado = romboide apoyado sobre su base; Tarjeta = vertical, con la actividad "
                                        "arriba y el tiempo abajo; Biselado = esquinas cortadas."), w));
@@ -511,6 +538,9 @@ void SettingsDialog::accept()
     m_db->setSetting("tile_stripe", m_tileStripe->isChecked() ? 1 : 0);
     m_db->setSetting("tile_caption", m_tileCaption->isChecked() ? 1 : 0);
     m_db->setSetting("tile_size", m_tileSize->value());
+    m_db->setSetting("tile_number_pos", m_tileNumberPos->currentIndex());
+    m_db->setSetting("tile_number_prefix", m_tilePrefix->isChecked() ? 1 : 0);
+    m_db->setSetting("tile_highlight", m_tileHighlight->currentIndex());
     m_db->setSetting("autostart", m_autostart->isChecked() ? 1 : 0);
     m_db->setSetting("greeting", m_greeting->isChecked() ? 1 : 0);
     m_db->setSetting("hotkey", m_hotkey->isChecked() ? 1 : 0);
