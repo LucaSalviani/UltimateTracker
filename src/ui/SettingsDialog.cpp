@@ -2,6 +2,7 @@
 #include "ui/Theme.h"
 #include "ui/Tiles.h"
 #include "ui/Celebration.h"
+#include "ui/Sounds.h"
 #include "ui/DevMode.h"
 #include <QMessageBox>
 #include <QApplication>
@@ -227,6 +228,39 @@ QWidget* SettingsDialog::pageTimer()
     lay->addLayout(form);
     lay->addWidget(note(QStringLiteral("Sin los botones de paso fino, el − / + de siempre va de a 5 minutos "
                                        "arriba de 10 y de a 1 por debajo."), w));
+
+    // M27: sonidos, con botón para escucharlos
+    lay->addSpacing(10);
+    lay->addWidget(heading(QStringLiteral("Sonidos"), w));
+    m_soundVolume = spin(0, 100, m_db->setting("sound_volume", 100).toInt(), QStringLiteral(" %"), w);
+    m_soundVolume->setSingleStep(10);
+    auto soundRow = [this, w](const QStringList& names, int current, int which) {
+        auto* combo = new QComboBox(w);
+        combo->addItems(names);
+        combo->setCurrentIndex(current);
+        auto* play = new QPushButton(QStringLiteral("▶"), w);
+        play->setFixedWidth(36);
+        play->setToolTip(QStringLiteral("Escuchar"));
+        connect(play, &QPushButton::clicked, this, [this, combo, which] {
+            emit soundPreview(which, combo->currentIndex(), m_soundVolume->value());
+        });
+        auto* row = new QHBoxLayout;
+        row->addWidget(combo, 1);
+        row->addWidget(play);
+        return std::make_pair(combo, row);
+    };
+    auto [chime, chimeRow] = soundRow(Sounds::chimeNames(), m_db->setting("sound_chime", 0).toInt(), 0);
+    auto [ach, achRow] = soundRow(Sounds::achievementNames(), m_db->setting("sound_achievement", 0).toInt(), 1);
+    auto [alarm, alarmRow] = soundRow(Sounds::alarmNames(), m_db->setting("sound_alarm", 0).toInt(), 2);
+    m_soundChime = chime;
+    m_soundAchievement = ach;
+    m_soundAlarm = alarm;
+    auto* sform = new QFormLayout;
+    sform->addRow(QStringLiteral("Fin de pomodoro"), chimeRow);
+    sform->addRow(QStringLiteral("Logro (objetivo, hito)"), achRow);
+    sform->addRow(QStringLiteral("Alarma del recreo"), alarmRow);
+    sform->addRow(QStringLiteral("Volumen"), m_soundVolume);
+    lay->addLayout(sform);
     lay->addStretch();
     return w;
 }
@@ -516,6 +550,10 @@ void SettingsDialog::accept()
     m_db->setSetting("timer_buttons", m_extraButtons->isChecked() ? 1 : 0);
     m_db->setSetting("timer_step_small", m_stepSmall->value());
     m_db->setSetting("timer_step_big", m_stepBig->value());
+    m_db->setSetting("sound_chime", m_soundChime->currentIndex());
+    m_db->setSetting("sound_achievement", m_soundAchievement->currentIndex());
+    m_db->setSetting("sound_alarm", m_soundAlarm->currentIndex());
+    m_db->setSetting("sound_volume", m_soundVolume->value());
 
     m_db->setSetting("accent_strong", m_strong->isChecked() ? 1 : 0);
     m_db->setSetting("theme_color", m_themeColor);

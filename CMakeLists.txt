@@ -56,6 +56,13 @@ qt_add_resources(UltimateTracker "assets"
         resources/sounds/chime.wav
         resources/sounds/alarm.wav
         resources/sounds/achievement.wav
+        resources/sounds/achievement_soft.wav
+        resources/sounds/chime_soft.wav
+        resources/sounds/chime_bell.wav
+        resources/sounds/chime_wood.wav
+        resources/sounds/chime_digital.wav
+        resources/sounds/alarm_soft.wav
+        resources/sounds/alarm_bells.wav
 )
 target_link_libraries(UltimateTracker PRIVATE constancia_core Qt6::Widgets Qt6::Multimedia Qt6::Network)
 if(WIN32)

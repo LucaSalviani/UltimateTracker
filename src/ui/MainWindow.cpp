@@ -221,6 +221,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_session = new SessionController(m_db, devmode::active() ? devmode::clock() : SessionController::Clock{}, true, this);
     m_session->recoverAfterRestart();
     m_sounds = new Sounds(this);
+    applySoundSettings();
     m_today = dayclock::today();
     m_jokers = m_db->setting("jokers_per_week", 2).toInt();
     m_resizable = m_db->setting("resizable", 1).toBool();
@@ -508,6 +509,7 @@ QWidget* MainWindow::buildTitleBar()
         SettingsDialog dlg(m_db, this);
         win::applyChrome(&dlg);
         connect(&dlg, &SettingsDialog::tileSizePreview, this, [this](int pct) { m_grid->setBaseScale(pct / 100.0); });
+        connect(&dlg, &SettingsDialog::soundPreview, m_sounds, &Sounds::preview);
         // La vista previa del tema repinta todo mientras el diálogo está abierto.
         if (dlg.exec() != QDialog::Accepted) return;
         m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
@@ -520,6 +522,7 @@ QWidget* MainWindow::buildTitleBar()
         applySizePreset();
         m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
         applySystemSettings();
+        applySoundSettings();
         reloadFolders();   // M25: colores por actividad prendidos/apagados
         applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
         if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
@@ -1661,6 +1664,12 @@ QToolButton* MainWindow::buildDevButton(QWidget* bar)
     });
     connect(b, &QToolButton::clicked, this, [b, menu] { menu->popup(b->mapToGlobal(QPoint(0, b->height()))); });
     return b;
+}
+
+void MainWindow::applySoundSettings()
+{
+    m_sounds->configure(m_db->setting("sound_chime", 0).toInt(), m_db->setting("sound_achievement", 0).toInt(),
+                        m_db->setting("sound_alarm", 0).toInt(), m_db->setting("sound_volume", 100).toInt());
 }
 
 void MainWindow::applySystemSettings()

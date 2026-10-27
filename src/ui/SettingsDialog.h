@@ -34,6 +34,7 @@ protected:
 
 signals:
     void tileSizePreview(int percent);   // M23: vista previa del tamaño base
+    void soundPreview(int which, int index, int volume);   // M27
 
 private:
     QWidget* pageGeneral();
@@ -63,6 +64,10 @@ private:
     QCheckBox* m_extraButtons;
     QSpinBox*  m_stepSmall;
     QSpinBox*  m_stepBig;
+    QComboBox* m_soundChime;        // M27
+    QComboBox* m_soundAchievement;
+    QComboBox* m_soundAlarm;
+    QSpinBox*  m_soundVolume;
 
     // Apariencia
     QButtonGroup* m_themes;
