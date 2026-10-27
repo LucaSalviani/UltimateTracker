@@ -102,16 +102,16 @@ void SettingsDialog::loadTileStyle(Database* db)
     }
     tiles::Style& s = tiles::style();
     s.shape = tiles::Shape(qBound(0, db->setting("tile_shape", 0).toInt(), 3));
-    s.mark = tiles::Mark(qBound(0, db->setting("tile_mark", 0).toInt(), 4));
+    s.mark = tiles::Mark(qBound(0, db->setting("tile_mark", 2).toInt(), 4));
     s.fill = tiles::Fill(qBound(0, db->setting("tile_fill", 0).toInt(), 3));
-    s.complete = tiles::Complete(qBound(0, db->setting("tile_complete", 0).toInt(), 3));
+    s.complete = tiles::Complete(qBound(0, db->setting("tile_complete", 2).toInt(), 3));
     s.inverted = db->setting("tile_inverted", 1).toBool();
-    s.stripe = db->setting("tile_stripe", 1).toBool();
+    s.stripe = db->setting("tile_stripe", 0).toBool();
     s.caption = db->setting("tile_caption", 0).toBool();
-    s.border = qBound(0, db->setting("tile_border", 1).toInt(), 2);
+    s.border = qBound(0, db->setting("tile_border", 0).toInt(), 2);
     s.palette = qBound(0, db->setting("tile_palette", 0).toInt(), 5);
-    s.numberPos = qBound(0, db->setting("tile_number_pos", 0).toInt(), 2);
-    s.numberPrefix = db->setting("tile_number_prefix", 0).toBool();
+    s.numberPos = qBound(0, db->setting("tile_number_pos", 1).toInt(), 2);
+    s.numberPrefix = db->setting("tile_number_prefix", 1).toBool();
     s.highlight = qBound(0, db->setting("tile_highlight", 1).toInt(), 2);
 }
 
@@ -222,7 +222,7 @@ QWidget* SettingsDialog::pageTimer()
     m_type = new QCheckBox(QStringLiteral("Click en el tiempo para escribir los minutos"), w);
     m_type->setChecked(m_db->setting("timer_type", 1).toBool());
     m_extraButtons = new QCheckBox(QStringLiteral("Botones de paso fino a los costados (− − / + +)"), w);
-    m_extraButtons->setChecked(m_db->setting("timer_buttons", 1).toBool());
+    m_extraButtons->setChecked(m_db->setting("timer_buttons", 0).toBool());
     m_stepSmall = spin(1, 30, m_db->setting("timer_step_small", 1).toInt(), QStringLiteral(" min"), w);
     m_stepBig = spin(1, 60, m_db->setting("timer_step_big", 5).toInt(), QStringLiteral(" min"), w);
     connect(m_wheel, &QCheckBox::toggled, m_wheelStep, &QWidget::setEnabled);
@@ -545,7 +545,7 @@ QWidget* SettingsDialog::pageSystem()
 {
     auto* w = new QWidget(this);
     m_autostart = new QCheckBox(QStringLiteral("Iniciar con Windows"), w);
-    m_autostart->setChecked(m_db->setting("autostart", 0).toBool());
+    m_autostart->setChecked(m_db->setting("autostart", 1).toBool());
     m_greeting = new QCheckBox(QStringLiteral("Saludarme al iniciar con Windows (una vez por día)"), w);
     m_greeting->setChecked(m_db->setting("greeting", 1).toBool());
     m_hotkey = new QCheckBox(QStringLiteral("Atajo global Ctrl + Alt + P (pausar / seguir)"), w);

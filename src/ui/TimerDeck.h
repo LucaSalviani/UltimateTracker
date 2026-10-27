@@ -40,7 +40,7 @@ public:
         bool wheel = true;       // rueda del mouse sobre el tiempo
         int  wheelStep = 1;      // minutos por paso de rueda
         bool type = true;        // click en el tiempo para escribirlo
-        bool buttons = true;     // botones de paso fino a los costados
+        bool buttons = false;    // botones de paso fino a los costados
         int  stepSmall = 1;      // botones de afuera
         int  stepBig = 5;        // botones de adentro
     };

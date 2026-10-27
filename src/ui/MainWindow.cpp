@@ -57,7 +57,7 @@ static TimerDeck::AdjustOptions deckAdjustFrom(Database* db)
     o.wheel = db->setting("timer_wheel", 1).toBool();
     o.wheelStep = db->setting("timer_wheel_step", 1).toInt();
     o.type = db->setting("timer_type", 1).toBool();
-    o.buttons = db->setting("timer_buttons", 1).toBool();
+    o.buttons = db->setting("timer_buttons", 0).toBool();
     o.stepSmall = db->setting("timer_step_small", 1).toInt();
     o.stepBig = db->setting("timer_step_big", 5).toInt();
     return o;
@@ -260,7 +260,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(&m_toastTimer, &QTimer::timeout, m_toast, &QLabel::hide);
 
     m_liveStats = new LiveStats(gridPage);
-    m_liveActivityScope = m_db->setting("live_scope", "activity").toString() == QLatin1String("activity");
+    m_liveActivityScope = m_db->setting("live_scope", "day").toString() == QLatin1String("activity");
     connect(m_liveStats, &LiveStats::scopeToggled, this, [this] {
         m_liveActivityScope = !m_liveActivityScope;
         m_db->setSetting("live_scope", m_liveActivityScope ? "activity" : "day");
@@ -1700,7 +1700,7 @@ void MainWindow::applySoundSettings()
 
 void MainWindow::applySystemSettings()
 {
-    sysint::setAutostart(m_db->setting("autostart", 0).toBool());
+    sysint::setAutostart(m_db->setting("autostart", 1).toBool());
     const bool wantHotkey = m_db->setting("hotkey", 1).toBool();
     const bool ok = m_hotkey->setEnabled(wantHotkey);
 #ifdef Q_OS_WIN

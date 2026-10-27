@@ -21,18 +21,18 @@ enum class Complete { Pop = 0, Seal = 1, Shine = 2, Flip = 3 };          // anim
 
 struct Style {
     Shape    shape = Shape::Classic;
-    Mark     mark = Mark::None;
+    Mark     mark = Mark::Cross;
     Fill     fill = Fill::Bar;
-    Complete complete = Complete::Pop;
+    Complete complete = Complete::Shine;
     // M23
     bool     inverted = true;   // fondo gris que se va llenando de negro
-    bool     stripe = true;     // rayita del color de la actividad
+    bool     stripe = false;    // rayita del color de la actividad
     bool     caption = false;   // nombre de la actividad dentro del cuadradito
-    int      border = 1;        // 0 fino · 1 normal · 2 grueso
+    int      border = 0;        // 0 fino · 1 normal · 2 grueso
     int      palette = 0;       // 0 = la del tema; ver paletteNames()
     // M29
-    int      numberPos = 0;     // 0 adentro · 1 afuera (arriba) · 2 oculto
-    bool     numberPrefix = false;   // "Nº3" en vez de "3"
+    int      numberPos = 1;     // 0 adentro · 1 afuera (arriba) · 2 oculto
+    bool     numberPrefix = true;    // "Nº3" en vez de "3"
     int      highlight = 1;     // 0 nada · 1 el que está corriendo (acento) · 2 el último del día (rojo, como antes)
 };
 // "3" o "Nº3" según el ajuste.
