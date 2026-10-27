@@ -1,5 +1,6 @@
 #include "ui/StatsWidget.h"
 #include "core/FolderTree.h"
+#include "core/DayClock.h"
 #include "core/Format.h"
 #include "ui/Icons.h"
 #include "ui/Theme.h"
@@ -150,7 +151,7 @@ private:
         p.setBrush(theme::surface);
         p.drawRoundedRect(bar, 5, 5);
 
-        const qint64 dayStart = QDateTime(data.from, QTime(0, 0)).toSecsSinceEpoch();
+        const qint64 dayStart = dayclock::dayStart(data.from).toSecsSinceEpoch();
         auto xAt = [&](qint64 t) { return bar.left() + qBound(0.0, double(t - dayStart) / 86400.0, 1.0) * bar.width(); };
         auto block = [&](qint64 a, qint64 b, const QColor& c) {
             const double x0 = xAt(a), x1 = qMax(x0 + 1.5, xAt(b));
@@ -169,7 +170,8 @@ private:
         p.setPen(theme::textFaint);
         for (int h = 0; h <= 24; h += 3) {
             const double x = bar.left() + bar.width() * h / 24.0;
-            p.drawText(QRectF(x - 20, bar.bottom() + 4, 40, 14), Qt::AlignCenter, QStringLiteral("%1h").arg(h));
+            p.drawText(QRectF(x - 20, bar.bottom() + 4, 40, 14), Qt::AlignCenter,
+                       QStringLiteral("%1h").arg((h + dayclock::startHour()) % 24));
         }
         // Leyenda
         const QPair<QString, QColor> legend[3] = {
@@ -332,7 +334,7 @@ private:
 StatsWidget::StatsWidget(Database* db, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
-    , m_anchor(QDate::currentDate())
+    , m_anchor(dayclock::today())
 {
     auto* back = new QToolButton(this);
     back->setIcon(icons::get(icons::Id::Back));
@@ -402,7 +404,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
 
 void StatsWidget::resetToToday()
 {
-    m_anchor = QDate::currentDate();
+    m_anchor = dayclock::today();
 }
 
 QDate StatsWidget::periodStart() const
@@ -482,7 +484,7 @@ void StatsWidget::refresh()
     d.period = m_period;
     d.from = periodStart();
     d.to = periodEnd();
-    d.today = now.date();
+    d.today = dayclock::logicalDate(now);
     d.jokers = m_jokers;
     if (filterId) {
         d.filterSet = tree.subtree(filterId);

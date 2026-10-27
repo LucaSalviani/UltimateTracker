@@ -1,4 +1,5 @@
 #include "ui/MainWindow.h"
+#include "core/DayClock.h"
 #include "core/Format.h"
 #include "core/Stats.h"
 #include "ui/ActivitiesWidget.h"
@@ -170,11 +171,11 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_session = new SessionController(m_db, {}, true, this);
     m_session->recoverAfterRestart();
     m_sounds = new Sounds(this);
-    m_today = QDate::currentDate();
+    m_today = dayclock::today();
     m_jokers = m_db->setting("jokers_per_week", 2).toInt();
     m_resizable = m_db->setting("resizable", 1).toBool();
     m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
-    m_sessionDay = QDate::currentDate();
+    m_sessionDay = dayclock::today();
 
     m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
     m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -1046,7 +1047,7 @@ void MainWindow::deletePomodoro(qint64 id)
 // marcha, se cierra sola y lo que quedó pendiente pasa a ser tiempo inactivo.
 void MainWindow::checkDayRollover()
 {
-    const QDate now = QDate::currentDate();
+    const QDate now = dayclock::today();
     // Si hay algo en marcha se espera a que termine (el pomodoro cuenta para el día en que empezó).
     if (m_sessionDay < now && !m_session->inProgress()) {
         m_session->closeDay(true);
@@ -1077,7 +1078,7 @@ void MainWindow::maybeShowDaySummary()
     if (shown.isValid() && shown >= last) return;
     m_db->setSetting("summary/last_shown", last.toString(Qt::ISODate));
 
-    const auto t = stats::totals(*m_db, last, last, nullptr, QDateTime(last, QTime(23, 59, 59)));
+    const auto t = stats::totals(*m_db, last, last, nullptr, dayclock::dayStart(last).addSecs(86399));
     QMessageBox box(this);
     box.setWindowTitle(QStringLiteral("Resumen del día"));
     box.setText(QStringLiteral("<b>Resumen del %1</b>").arg(fmt::longDate(last)));

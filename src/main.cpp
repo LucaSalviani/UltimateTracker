@@ -1,4 +1,5 @@
 #include "core/Database.h"
+#include "core/DayClock.h"
 #include "ui/MainWindow.h"
 
 #include <QApplication>
@@ -92,6 +93,7 @@ int main(int argc, char* argv[])
                               QStringLiteral("No pude abrir la base de datos:\n%1").arg(db.lastError()));
         return 1;
     }
+    dayclock::setStartHour(db.setting("day_start_hour", 4).toInt());
 
     QFile qss(QStringLiteral(":/style.qss"));
     if (qss.open(QIODevice::ReadOnly)) app.setStyleSheet(QString::fromUtf8(qss.readAll()));

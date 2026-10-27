@@ -1,5 +1,6 @@
 // Tests del núcleo con reloj simulado: no hace falta esperar 25 minutos reales.
 #include "core/Database.h"
+#include "core/DayClock.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
 #include "core/Stats.h"
@@ -35,6 +36,7 @@ class CoreTest : public QObject {
 private slots:
     void init()
     {
+        dayclock::setStartHour(4);
         // Lunes 26/10/2026 10:00 hora local
         m_now = QDateTime(QDate(2026, 10, 26), QTime(10, 0)).toMSecsSinceEpoch();
     }
@@ -315,6 +317,20 @@ private slots:
         s->deleteParked(parkedId);
         QVERIFY(s->parkedSeconds().isEmpty());
         QCOMPARE(db.pomodorosBetween(d, d).size(), 0);
+    }
+
+    void nightSessionBelongsToPreviousDay()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        auto* s = make(db);
+        m_now = QDateTime(QDate(2026, 10, 27), QTime(2, 30)).toMSecsSinceEpoch();  // 02:30 del 27
+        s->start();
+        advance(db, *s, 25 * 60);
+        const auto pomos = db.pomodorosBetween(QDate(2026, 10, 26), QDate(2026, 10, 27));
+        QCOMPARE(pomos.size(), 1);
+        QCOMPARE(pomos[0].day, QDate(2026, 10, 26));   // antes de las 4 AM: cuenta para el 26
+        QCOMPARE(dayclock::logicalDate(QDateTime(QDate(2026, 10, 27), QTime(4, 0))), QDate(2026, 10, 27));
     }
 
     void crashRecovery()

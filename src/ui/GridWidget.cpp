@@ -1,4 +1,5 @@
 #include "ui/GridWidget.h"
+#include "core/DayClock.h"
 #include "core/Format.h"
 #include "ui/Theme.h"
 
@@ -20,7 +21,7 @@ GridWidget::GridWidget(QWidget* parent)
 {
     setMouseTracking(true);
     setAttribute(Qt::WA_OpaquePaintEvent);
-    m_today = m_anchor = QDate::currentDate();
+    m_today = m_anchor = dayclock::today();
 }
 
 // ---------------------------------------------------------------------------

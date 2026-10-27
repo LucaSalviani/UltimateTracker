@@ -13,6 +13,7 @@ qt_standard_project_setup()
 add_library(constancia_core STATIC
     src/core/Types.h
     src/core/Format.h          src/core/Format.cpp
+    src/core/DayClock.h        src/core/DayClock.cpp
     src/core/FolderTree.h      src/core/FolderTree.cpp
     src/core/Database.h        src/core/Database.cpp
     src/core/Stats.h           src/core/Stats.cpp

@@ -1,4 +1,5 @@
 #include "core/Stats.h"
+#include "core/DayClock.h"
 #include "core/Format.h"
 
 namespace stats {
@@ -20,11 +21,11 @@ Totals totals(const Database& db, const QDate& from, const QDate& to,
     // Horas inactivas = tiempo transcurrido del período − lo usado en la app.
     // Con filtro de carpeta, lo que se estudió en otras carpetas no es "inactivo",
     // así que se calcula siempre contra el estudio total.
-    const QDate today = now.date();
+    const QDate today = dayclock::logicalDate(now);
     const QDate last = qMin(to, today);
     if (from <= last) {
         qint64 elapsed = qint64(from.daysTo(last)) * 86400;           // días completos
-        elapsed += (last == today) ? QTime(0, 0).secsTo(now.time())   // hoy: hasta ahora
+        elapsed += (last == today) ? dayclock::dayStart(today).secsTo(now)   // hoy: hasta ahora
                                    : 86400;
         qint64 allStudy = t.study;
         if (folders) {

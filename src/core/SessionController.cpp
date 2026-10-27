@@ -1,4 +1,5 @@
 #include "core/SessionController.h"
+#include "core/DayClock.h"
 
 #include <QDateTime>
 
@@ -24,7 +25,7 @@ SessionController::SessionController(Database* db, Clock clock, bool autoTick, Q
 
 QDate SessionController::today() const
 {
-    return QDateTime::fromMSecsSinceEpoch(now()).date();
+    return dayclock::logicalDate(QDateTime::fromMSecsSinceEpoch(now()));
 }
 
 bool SessionController::inProgress() const
