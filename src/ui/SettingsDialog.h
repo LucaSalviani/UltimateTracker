@@ -78,6 +78,7 @@ private:
     QComboBox*    m_sizeDefault;
     QCheckBox*    m_celebrations;      // M8
     QCheckBox*    m_activityColors;    // M25
+    QComboBox*    m_celebrationStyle;  // M26
 
     // Cuadraditos (M18)
     QComboBox* m_tileShape;

@@ -1,6 +1,7 @@
 #include "ui/SettingsDialog.h"
 #include "ui/Theme.h"
 #include "ui/Tiles.h"
+#include "ui/Celebration.h"
 #include "ui/DevMode.h"
 #include <QMessageBox>
 #include <QApplication>
@@ -84,6 +85,7 @@ void SettingsDialog::currentTheme(Database* db, QString* color, QString* mode)
 
 void SettingsDialog::loadTileStyle(Database* db)
 {
+    Celebration::setStyle(Celebration::Style(qBound(0, db->setting("celebration_style", 0).toInt(), 4)));   // M26
     tiles::Style& s = tiles::style();
     s.shape = tiles::Shape(qBound(0, db->setting("tile_shape", 0).toInt(), 3));
     s.mark = tiles::Mark(qBound(0, db->setting("tile_mark", 0).toInt(), 4));
@@ -314,6 +316,9 @@ QWidget* SettingsDialog::pageAppearance()
     m_groupStyle->addItem(QStringLiteral("Por actividad, con títulos"));
     m_groupStyle->addItem(QStringLiteral("Por actividad, en línea y recuadrados"));
     m_groupStyle->setCurrentIndex(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt());
+    m_celebrationStyle = new QComboBox(w);
+    for (const QString& n : Celebration::styleNames()) m_celebrationStyle->addItem(n);
+    m_celebrationStyle->setCurrentIndex(m_db->setting("celebration_style", 0).toInt());
     m_activityColors = new QCheckBox(QStringLiteral("Colores por actividad (se eligen en Actividades → click derecho → Color)"), w);
     m_activityColors->setChecked(m_db->setting("activity_colors", 1).toBool());
     m_celebrations = new QCheckBox(QStringLiteral("Animación al terminar un pomodoro, cumplir el objetivo o llegar a un hito"), w);
@@ -339,6 +344,7 @@ QWidget* SettingsDialog::pageAppearance()
     form->addRow(QStringLiteral("Tamaño de la ventana"), m_size);
     form->addRow(QStringLiteral("Cuadraditos por defecto"), m_sizeDefault);
     form->addRow(QStringLiteral("Agrupar"), m_groupStyle);
+    form->addRow(QStringLiteral("Festejo"), m_celebrationStyle);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Apariencia"), w));
@@ -527,6 +533,8 @@ void SettingsDialog::accept()
     m_db->setSetting("group_style", m_groupStyle->currentIndex());
     m_db->setSetting("celebrations", m_celebrations->isChecked() ? 1 : 0);
     m_db->setSetting("activity_colors", m_activityColors->isChecked() ? 1 : 0);
+    m_db->setSetting("celebration_style", m_celebrationStyle->currentIndex());
+    Celebration::setStyle(Celebration::Style(m_celebrationStyle->currentIndex()));
 
     m_db->setSetting("tile_shape", m_tileShape->currentIndex());
     m_db->setSetting("tile_mark", m_tileMark->currentIndex());

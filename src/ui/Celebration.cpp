@@ -13,6 +13,15 @@ qreal stage(qreal ms, qreal a, qreal b) { return clamp01((ms - a) / (b - a)); }
 qreal ease(qreal t, QEasingCurve::Type type) { return QEasingCurve(type).valueForProgress(t); }
 } // namespace
 
+namespace { Celebration::Style g_style = Celebration::Style::Visor; }
+void Celebration::setStyle(Style s) { g_style = s; }
+Celebration::Style Celebration::style() { return g_style; }
+QStringList Celebration::styleNames()
+{
+    return {QStringLiteral("Visor (anillo y emblema)"), QStringLiteral("Línea"), QStringLiteral("Borde"),
+            QStringLiteral("Tilde"), QStringLiteral("Cifra")};
+}
+
 Celebration::Celebration(QWidget* parent)
     : QWidget(parent)
 {
@@ -33,7 +42,9 @@ void Celebration::play(Kind kind, const QString& kicker, const QString& title, c
     m_accent = kind == Kind::Milestone ? QColor(0xe2, 0xb0, 0x4a)                 // dorado
              : kind == Kind::Goal      ? theme::breakAccent
                                        : theme::pomoAccent;
-    m_duration = kind == Kind::Pomodoro ? 2300 : 3000;
+    m_duration = g_style == Style::Visor ? (kind == Kind::Pomodoro ? 2300 : 3000) : (kind == Kind::Pomodoro ? 1700 : 2300);
+    // Los minimalistas no bloquean: se puede seguir usando la app mientras pasan.
+    setAttribute(Qt::WA_TransparentForMouseEvents, g_style != Style::Visor);
     setGeometry(parentWidget()->rect());
     raise();
     show();
@@ -54,13 +65,149 @@ void Celebration::mousePressEvent(QMouseEvent*)
 
 void Celebration::paintEvent(QPaintEvent*)
 {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
     const qreal ms = elapsed();
+    switch (g_style) {
+    case Style::Visor:  paintVisor(p, ms); break;
+    case Style::Line:   paintLine(p, ms); break;
+    case Style::Border: paintBorder(p, ms); break;
+    case Style::Tick:   paintTick(p, ms); break;
+    case Style::Figure: paintFigure(p, ms); break;
+    }
+}
+
+namespace {
+// Texto chico: "POMODORO 08 COMPLETO · 25m"
+void smallCaption(QPainter& p, const QRectF& r, const QString& kicker, const QString& title, const QColor& accent, qreal alpha)
+{
+    p.setOpacity(alpha);
+    QFont kf = theme::uiFont(8, QFont::DemiBold);
+    kf.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);
+    QFont tf = theme::uiFont(9.5, QFont::DemiBold);
+    const QString k = kicker.toUpper();
+    const qreal kw = QFontMetricsF(kf).horizontalAdvance(k), tw = QFontMetricsF(tf).horizontalAdvance(title);
+    const qreal total = kw + 14 + tw;
+    qreal x = r.center().x() - total / 2;
+    // Pastilla con fondo: se lee aunque detrás haya texto o cuadraditos.
+    const QRectF pill(x - 12, r.top(), total + 24, r.height());
+    p.setPen(QPen(theme::mix(theme::bg, theme::text, 0.16), 1));
+    p.setBrush(theme::mix(theme::bg, theme::text, 0.05));
+    p.drawRoundedRect(pill, r.height() / 2, r.height() / 2);
+    p.setFont(kf);
+    p.setPen(accent);
+    p.drawText(QRectF(x, r.top(), kw + 2, r.height()), Qt::AlignLeft | Qt::AlignVCenter, k);
+    x += kw + 14;
+    p.setFont(tf);
+    p.setPen(theme::text);
+    p.drawText(QRectF(x, r.top(), tw + 4, r.height()), Qt::AlignLeft | Qt::AlignVCenter, title);
+    p.setOpacity(1);
+}
+} // namespace
+
+// Línea: un trazo fino del acento que se abre desde el centro, arriba, y un texto chico.
+void Celebration::paintLine(QPainter& p, qreal ms)
+{
+    const qreal grow = ease(stage(ms, 0, 520), QEasingCurve::OutCubic);
+    const qreal fade = 1.0 - stage(ms, m_duration - 450, m_duration);
+    const qreal y = 1.5;   // el borde de arriba de la ventana
+    const qreal half = width() * 0.5 * grow;
+    QColor c = m_accent;
+    c.setAlphaF(fade);
+    p.setPen(QPen(c, 2.0, Qt::SolidLine, Qt::FlatCap));
+    p.drawLine(QPointF(width() / 2.0 - half, y), QPointF(width() / 2.0 + half, y));
+    smallCaption(p, QRectF(0, 44, width(), 26), m_kicker, m_title, m_accent,
+                 ease(stage(ms, 200, 500), QEasingCurve::OutCubic) * fade);
+}
+
+// Borde: el contorno de la ventana se dibuja una vez con el acento y se apaga.
+void Celebration::paintBorder(QPainter& p, qreal ms)
+{
+    const qreal draw = ease(stage(ms, 0, 900), QEasingCurve::InOutCubic);
+    const qreal fade = 1.0 - stage(ms, m_duration - 500, m_duration);
+    const QRectF r = QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5);
+    QPainterPath path;
+    path.addRoundedRect(r, 8, 8);
+    QPainterPath part;
+    const int steps = 120;
+    const int upto = int(steps * draw);
+    for (int i = 0; i <= upto; ++i) {
+        const QPointF pt = path.pointAtPercent(qreal(i) / steps);
+        if (i == 0) part.moveTo(pt); else part.lineTo(pt);
+    }
+    QColor c = m_accent;
+    c.setAlphaF(0.9 * fade);
+    p.setPen(QPen(c, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(part);
+    smallCaption(p, QRectF(0, height() - 40, width(), 26), m_kicker, m_title, m_accent,
+                 ease(stage(ms, 300, 650), QEasingCurve::OutCubic) * fade);
+}
+
+// Tilde: un círculo chico con tilde al centro, apenas oscurecido alrededor.
+void Celebration::paintTick(QPainter& p, qreal ms)
+{
+    const qreal fade = 1.0 - stage(ms, m_duration - 400, m_duration);
+    const qreal in = ease(stage(ms, 0, 260), QEasingCurve::OutCubic);
+    p.fillRect(rect(), QColor(0, 0, 0, int(55 * in * fade)));
+    const QPointF c(width() / 2.0, height() / 2.0 - 10);
+    const qreal R = 22 * (0.85 + 0.15 * ease(stage(ms, 0, 420), QEasingCurve::OutBack));
+    QColor ring = m_accent;
+    ring.setAlphaF(fade);
+    p.setPen(QPen(ring, 2.0));
+    p.setBrush(Qt::NoBrush);
+    p.drawArc(QRectF(c.x() - R, c.y() - R, 2 * R, 2 * R), 90 * 16, int(-360 * 16 * ease(stage(ms, 0, 500), QEasingCurve::OutCubic)));
+    const qreal draw = ease(stage(ms, 350, 700), QEasingCurve::OutCubic);
+    QPainterPath check;
+    check.moveTo(c + QPointF(-R * 0.40, R * 0.02));
+    check.lineTo(c + QPointF(-R * 0.10, R * 0.32));
+    check.lineTo(c + QPointF(R * 0.44, -R * 0.28));
+    QPainterPath part;
+    for (int i = 0; i <= int(24 * draw); ++i) {
+        const QPointF pt = check.pointAtPercent(i / 24.0);
+        if (i == 0) part.moveTo(pt); else part.lineTo(pt);
+    }
+    QColor ink = theme::text;
+    ink.setAlphaF(fade);
+    p.setPen(QPen(ink, 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.drawPath(part);
+    smallCaption(p, QRectF(0, c.y() + R + 12, width(), 26), m_kicker, m_title, m_accent,
+                 ease(stage(ms, 300, 600), QEasingCurve::OutCubic) * fade);
+}
+
+// Cifra: el tiempo ganado en grande y finito ("+25m"), que sube un poco y se va.
+void Celebration::paintFigure(QPainter& p, qreal ms)
+{
+    const qreal in = ease(stage(ms, 0, 420), QEasingCurve::OutCubic);
+    const qreal fade = 1.0 - stage(ms, m_duration - 500, m_duration);
+    const qreal rise = -14 * ease(stage(ms, 0, m_duration), QEasingCurve::OutCubic);
+    const QPointF c(width() / 2.0, height() / 2.0 - 12 + rise);
+    QFont f;
+    f.setFamilies({QStringLiteral("Bahnschrift"), QStringLiteral("Inter"), QStringLiteral("Segoe UI")});
+    f.setPixelSize(int(qMin(height() * 0.22, 96.0)));
+    f.setWeight(QFont::Light);
+    f.setStretch(QFont::SemiCondensed);
+    const QString big = m_kind == Kind::Pomodoro ? QStringLiteral("+") + m_title : m_title;
+    p.fillRect(rect(), QColor(0, 0, 0, int(70 * in * fade)));   // apenas, para que la cifra se lea
+    p.setOpacity(in * fade);
+    p.setFont(f);
+    QColor ink = theme::text;
+    p.setPen(ink);
+    const QRectF br(0, c.y() - f.pixelSize() * 0.7, width(), f.pixelSize() * 1.2);
+    p.drawText(br, Qt::AlignCenter, big);
+    QFont kf = theme::uiFont(8, QFont::DemiBold);
+    kf.setLetterSpacing(QFont::AbsoluteSpacing, 2.4);
+    p.setFont(kf);
+    p.setPen(m_accent);
+    p.drawText(QRectF(0, br.top() - 18, width(), 16), Qt::AlignHCenter | Qt::AlignBottom, m_kicker.toUpper());
+    p.setOpacity(1);
+}
+
+void Celebration::paintVisor(QPainter& p, qreal ms)
+{
     const qreal fadeOut = 1.0 - stage(ms, m_duration - 380, m_duration);
     const qreal fadeIn = ease(stage(ms, 0, 220), QEasingCurve::OutCubic);
     const qreal alpha = fadeIn * fadeOut;
-
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
 
     // Fondo: oscurece todo con una viñeta (el centro un poco más claro).
     const QPointF c(width() / 2.0, height() / 2.0 - height() * 0.06);
