@@ -46,6 +46,8 @@ public:
     // M18: arranca la animación de completado de ese cuadradito (con demora,
     // para que no quede tapada por el festejo grande).
     void markCompleted(qint64 id, int delayMs);
+    // M23: tamaño base de los cuadraditos (1.0 = el de siempre).
+    void setBaseScale(double k) { m_baseScale = k; update(); }
     // Si hay algo en marcha hoy (pomodoro, pausa o recreo), el último pomodoro
     // de hoy todavía no es "el final del día" y no se pinta rojo.
     void setTodayActive(bool active) { m_todayActive = active; update(); }
@@ -106,6 +108,7 @@ private:
     QHash<qint64, QString>       m_names;       // nombre corto de cada actividad
     QHash<qint64, QColor>        m_colors;      // color de cada actividad
     bool                         m_grouping = true;
+    double                       m_baseScale = 1.0;
     // Animación de entrada
     QElapsedTimer m_clock;
     QTimer        m_animTimer;

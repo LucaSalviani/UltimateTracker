@@ -29,6 +29,9 @@ public:
     void accept() override;
     void reject() override;
 
+signals:
+    void tileSizePreview(int percent);   // M23: vista previa del tamaño base
+
 private:
     QWidget* pageGeneral();
     QWidget* pageTimer();
@@ -77,6 +80,13 @@ private:
     QComboBox* m_tileMark;
     QComboBox* m_tileFill;
     QComboBox* m_tileComplete;
+    QComboBox* m_tilePalette;   // M23
+    QComboBox* m_tileBorder;
+    QCheckBox* m_tileInverted;
+    QCheckBox* m_tileStripe;
+    QCheckBox* m_tileCaption;
+    class QSpinBox* m_tileSize;
+    int        m_originalTileSize = 100;
     tiles::Style m_originalTiles;
 
     // Sistema

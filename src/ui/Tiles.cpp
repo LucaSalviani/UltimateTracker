@@ -14,64 +14,83 @@ Style& style()
 }
 
 QStringList shapeNames()    { return {"Clásico", "Inclinado", "Tarjeta", "Biselado"}; }
-QStringList markNames()     { return {"Sin marca", "Diagonal cortada", "Mira", "Sello"}; }
+QStringList markNames()     { return {"Sin marca", "Diagonal", "Cruz", "Tilde redondo", "Tilde cuadrado"}; }
 QStringList fillNames()     { return {"Barra", "Líquido", "Segmentos", "Reloj"}; }
 QStringList completeNames() { return {"Rebote", "Sellado", "Destello", "Volteo"}; }
+QStringList paletteNames()  { return {"Del tema", "Naranja", "Rojo", "Azul", "Verde", "Papel (blanco)"}; }
+QStringList borderNames()   { return {"Fino", "Normal", "Grueso"}; }
 
 namespace {
 qreal ease(qreal t, QEasingCurve::Type type) { return QEasingCurve(type).valueForProgress(qBound<qreal>(0, t, 1)); }
+QColor onColor(const QColor& bg) { return bg.lightness() < 140 ? QColor(255, 255, 255) : QColor(0x14, 0x14, 0x14); }
 
-QColor onColor(const QColor& bg) { return bg.lightness() < 128 ? QColor(255, 255, 255) : QColor(0, 0, 0); }
-
-// Color de la marca de "hecho": el acento (como la rayita roja del boceto);
-// sobre el rojo del último del día, blanco.
-QColor markColor(State s)
+// ---- Colores de los cuadraditos: los del tema o una paleta propia (M23)
+struct Colors { QColor done, doneEdge, final, fill, empty; };
+Colors colors()
 {
-    if (s == State::Final) return QColor(255, 255, 255, 230);
-    QColor c = theme::squareFinal;
-    c.setAlphaF(0.95);
+    Colors c{theme::squareDone, theme::squareDoneEdge, theme::squareFinal, theme::squareFill, theme::squareEmpty};
+    switch (style().palette) {
+    case 1: c.done = {0xff, 0x8a, 0x00}; c.doneEdge = {0xc8, 0x6a, 0x00}; break;                       // naranja
+    case 2: c.done = {0xd8, 0x2a, 0x20}; c.doneEdge = {0x9a, 0x18, 0x12}; c.final = {0x14, 0x14, 0x14}; break;  // rojo
+    case 3: c.done = {0x2f, 0x6f, 0xe8}; c.doneEdge = {0x1d, 0x4c, 0xa8}; break;                       // azul
+    case 4: c.done = {0x22, 0xa0, 0x6b}; c.doneEdge = {0x16, 0x72, 0x4c}; break;                       // verde
+    case 5: c.done = {0xf4, 0xf4, 0xf2}; c.doneEdge = {0xc8, 0xc8, 0xc4}; break;                       // papel
+    default: break;
+    }
+    if (style().palette != 0) c.fill = theme::mix(c.done, QColor(0x80, 0x80, 0x80), 0.35);
     return c;
 }
+double borderWidth() { return style().border == 0 ? 0.7 : style().border == 2 ? 2.2 : 1.0; }
 
-void drawLabel(QPainter& p, const QRectF& r, const Tile& t, const QColor& color, bool faint)
+// Polígono con las esquinas redondeadas (para inclinado y biselado "amigables").
+QPainterPath roundedPolygon(const QVector<QPointF>& pts, double radius)
+{
+    QPainterPath path;
+    const int n = int(pts.size());
+    for (int i = 0; i < n; ++i) {
+        const QPointF prev = pts[(i + n - 1) % n], cur = pts[i], next = pts[(i + 1) % n];
+        const QPointF v1 = prev - cur, v2 = next - cur;
+        const double l1 = std::hypot(v1.x(), v1.y()), l2 = std::hypot(v2.x(), v2.y());
+        const double r = qMin(radius, qMin(l1, l2) / 2);
+        const QPointF a = cur + v1 / l1 * r, b = cur + v2 / l2 * r;
+        if (i == 0) path.moveTo(a); else path.lineTo(a);
+        path.quadTo(cur, b);
+    }
+    path.closeSubpath();
+    return path;
+}
+
+// ---- Textos: número arriba al centro, tiempo al medio, actividad abajo
+void drawLabel(QPainter& p, const QRectF& r, const Tile& t, const QColor& color, bool faint, const QColor& halo = {})
 {
     const double s = qMin(r.width(), r.height());
     if (s < 15) return;
     const bool card = style().shape == Shape::Card;
-    // Número del día arriba a la izquierda (todas las formas).
+    const bool caption = !t.caption.isEmpty() && (style().caption || card) && s >= 34;
     if (t.number > 0 && s >= 30) {
         QFont nf = theme::uiFont(8, QFont::DemiBold);
-        nf.setPixelSize(qMax(8, int(s * 0.17)));
+        nf.setPixelSize(qMax(8, int(s * 0.16)));
         p.setFont(nf);
         QColor nc = color;
         nc.setAlphaF(0.55);
         p.setPen(nc);
-        const double inset = style().shape == Shape::Slant ? r.height() * 0.16 : 0;   // la punta inclinada
-        p.drawText(r.adjusted(s * 0.09 + inset * 0.6, s * 0.05, 0, 0), Qt::AlignLeft | Qt::AlignTop,
+        p.drawText(r.adjusted(0, s * 0.05, 0, 0), Qt::AlignHCenter | Qt::AlignTop,
                    card ? QStringLiteral("Nº%1").arg(t.number) : QString::number(t.number));
     }
-    if (card) {
-        // Tarjeta: tiempo grande abajo, actividad chiquita arriba a la derecha.
-        if (!t.caption.isEmpty() && s >= 34) {
-            QFont cf = theme::uiFont(7, QFont::DemiBold);
-            cf.setPixelSize(qMax(7, int(s * 0.13)));
-            cf.setCapitalization(QFont::AllUppercase);
-            p.setFont(cf);
-            QColor cc = color;
-            cc.setAlphaF(faint ? 0.5 : 0.75);
-            p.setPen(cc);
-            const QRectF cr = r.adjusted(s * 0.46, s * 0.06, -s * 0.08, 0);
-            p.drawText(cr, Qt::AlignRight | Qt::AlignTop,
-                       QFontMetrics(cf).elidedText(t.caption, Qt::ElideRight, int(cr.width())));
-        }
-        QFont f = theme::uiFont(9, QFont::Bold);
-        f.setPixelSize(qMax(7, int(s * 0.30)));
-        p.setFont(f);
-        p.setPen(color);
-        p.drawText(r.adjusted(0, 0, -s * 0.09, -s * 0.10), Qt::AlignRight | Qt::AlignBottom, t.label);
-        return;
+    if (caption) {
+        QFont cf = theme::uiFont(7, QFont::DemiBold);
+        cf.setPixelSize(qMax(7, int(s * 0.12)));
+        cf.setCapitalization(QFont::AllUppercase);
+        p.setFont(cf);
+        QColor cc = color;
+        cc.setAlphaF(faint ? 0.45 : 0.65);
+        p.setPen(cc);
+        const QRectF cr = card ? r.adjusted(s * 0.08, s * 0.25, -s * 0.08, 0)
+                               : r.adjusted(s * 0.08, 0, -s * 0.08, -s * 0.11);
+        p.drawText(cr, Qt::AlignHCenter | (card ? Qt::AlignTop : Qt::AlignBottom),
+                   QFontMetrics(cf).elidedText(t.caption, Qt::ElideRight, int(cr.width())));
     }
-    QFont f = theme::uiFont(9, faint ? QFont::Medium : QFont::DemiBold);
+    QFont f = theme::uiFont(9, faint ? QFont::Medium : (card ? QFont::Bold : QFont::DemiBold));
     double px = s * (faint ? 0.26 : 0.30);
     f.setPixelSize(qMax(7, int(px)));
     QFontMetricsF fm(f);
@@ -81,72 +100,85 @@ void drawLabel(QPainter& p, const QRectF& r, const Tile& t, const QColor& color,
         fm = QFontMetricsF(f);
     }
     p.setFont(f);
+    const QRectF lr = card ? r.adjusted(0, 0, 0, -s * 0.12)
+                           : r.adjusted(0, caption ? -s * 0.04 : 0, 0, caption ? -s * 0.04 : 0);
+    const Qt::Alignment al = card ? (Qt::AlignHCenter | Qt::AlignBottom) : Qt::AlignCenter;
+    if (halo.isValid()) {
+        // Halo: el texto se lee aunque quede mitad sobre lleno y mitad sobre vacío.
+        const QRectF br = fm.boundingRect(lr, al, t.label);
+        QPainterPath tp;
+        tp.addText(br.left(), br.top() + fm.ascent(), f, t.label);
+        p.save();
+        p.setPen(QPen(halo, qMax(2.0, f.pixelSize() * 0.16), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setBrush(color);
+        p.drawPath(tp);
+        p.setPen(Qt::NoPen);
+        p.drawPath(tp);
+        p.restore();
+        return;
+    }
     p.setPen(color);
-    p.drawText(r, Qt::AlignCenter, t.label);
+    p.drawText(lr, al, t.label);
 }
 
-// Marca de "hecho". `amount` 0..1 la dibuja de a poco (animación de completado).
-void drawMark(QPainter& p, const QRectF& r, State st, double amount)
+// ---- Marca de "hecho". `amount` 0..1 la dibuja de a poco (completado).
+void drawMark(QPainter& p, const QRectF& r, State st, double amount, const QColor& numberColor)
 {
     const Mark m = style().mark;
     if (m == Mark::None || amount <= 0) return;
     const double s = qMin(r.width(), r.height());
     if (s < 14) return;
     const QPointF c = r.center();
-    const QColor col = markColor(st);
-    const double pw = qMax(1.4, s * 0.045);
+    const bool card = style().shape == Shape::Card;
+    // Delicadas: del color del número (no colorinche). Los tildes sí van con acento.
+    QColor soft = numberColor;
+    soft.setAlphaF(0.60);
+    const double thin = qMax(1.0, s * 0.022);
     p.save();
     p.setBrush(Qt::NoBrush);
-    p.setPen(QPen(col, pw, Qt::SolidLine, Qt::RoundCap));
-    const bool card = style().shape == Shape::Card;
-    switch (m) {
-    case Mark::Diagonal: {
-        // De esquina a esquina, cortada en el medio para no tapar el tiempo.
-        const QPointF a(r.left() + r.width() * 0.16, r.bottom() - r.height() * (card ? 0.30 : 0.16));
-        const QPointF b(r.right() - r.width() * 0.16, r.top() + r.height() * (card ? 0.30 : 0.16));
-        const double gap = card ? 0.0 : 0.26;   // en la tarjeta el centro está libre
+    // Línea de a a b cortada en el medio (para no tapar el tiempo).
+    auto cutLine = [&](QPointF a, QPointF b, double gap, double amt) {
         auto at = [&](double u) { return a + (b - a) * u; };
         const double g1 = 0.5 - gap;
-        const double f1 = qMin(1.0, amount * 2), f2 = qBound(0.0, amount * 2 - 1, 1.0);
+        const double f1 = qMin(1.0, amt * 2), f2 = qBound(0.0, amt * 2 - 1, 1.0);
         p.drawLine(at(0), at(g1 * f1));
         if (f2 > 0) p.drawLine(at(0.5 + gap), at(0.5 + gap + g1 * f2));
+    };
+    const double inset = 0.20;
+    const QPointF tl(r.left() + r.width() * inset, r.top() + r.height() * inset);
+    const QPointF br(r.right() - r.width() * inset, r.bottom() - r.height() * inset);
+    const QPointF tr(r.right() - r.width() * inset, r.top() + r.height() * inset);
+    const QPointF bl(r.left() + r.width() * inset, r.bottom() - r.height() * inset);
+    const double gap = card ? 0.14 : 0.24;
+    switch (m) {
+    case Mark::Diagonal:   // de arriba-izquierda a abajo-derecha, finita
+        p.setPen(QPen(soft, thin, Qt::SolidLine, Qt::RoundCap));
+        cutLine(tl, br, gap, amount);
         break;
-    }
-    case Mark::Reticle: {
-        // Mira: cuatro arcos y cuatro marcas hacia el centro, con el centro libre.
-        const double R = s * 0.42;
-        const QRectF ring(c.x() - R, c.y() - R, 2 * R, 2 * R);
-        QPen thin(col, qMax(1.0, pw * 0.7), Qt::SolidLine, Qt::FlatCap);
-        p.setPen(thin);
-        for (int i = 0; i < 4; ++i) {
-            const int start = (i * 90 + 14) * 16;
-            p.drawArc(ring, start, int(62 * 16 * amount));
-        }
-        p.setPen(QPen(col, pw, Qt::SolidLine, Qt::RoundCap));
-        // verticales hacia adentro; horizontales cortitas y por fuera del tiempo
-        const double v0 = R * 0.72, v1 = R * (0.72 + 0.42 * amount);
-        const double h0 = R * 0.94, h1 = R * (0.94 + 0.22 * amount);
-        p.drawLine(QPointF(c.x(), c.y() - v1), QPointF(c.x(), c.y() - v0));
-        p.drawLine(QPointF(c.x(), c.y() + v0), QPointF(c.x(), c.y() + v1));
-        p.drawLine(QPointF(c.x() - h1, c.y()), QPointF(c.x() - h0, c.y()));
-        p.drawLine(QPointF(c.x() + h0, c.y()), QPointF(c.x() + h1, c.y()));
+    case Mark::Cross:      // cruz delicada (las dos diagonales, centro libre)
+        p.setPen(QPen(soft, thin, Qt::SolidLine, Qt::RoundCap));
+        cutLine(tl, br, gap, amount);
+        cutLine(tr, bl, gap, amount);
         break;
-    }
-    case Mark::Stamp: {
-        // Sello: un círculo con tilde, torcido, en la esquina de arriba a la derecha.
-        // En la tarjeta va grande en el medio (como un "DONE!" estampado).
-        const double d = card ? s * 0.56 : s * 0.34;
-        const QPointF sc = card ? QPointF(c.x(), r.top() + r.height() * 0.46)
-                                : QPointF(r.right() - d * 0.62, r.top() + d * 0.62);
+    case Mark::Stamp:
+    case Mark::SquareTick: {
+        // Tilde en un círculo o en un cuadradito, torcido, arriba a la derecha
+        // (en la tarjeta, grande al medio).
+        QColor col = st == State::Final ? QColor(255, 255, 255, 230) : colors().final;
+        if (style().palette == 2 && st != State::Final) col = QColor(255, 255, 255, 230);
+        const double d = card ? s * 0.50 : s * 0.30;
+        const QPointF sc = card ? QPointF(c.x(), r.top() + r.height() * 0.50)
+                                : QPointF(r.right() - d * 0.66, r.top() + d * 0.66);
         p.translate(sc);
-        p.rotate(-14);
+        p.rotate(m == Mark::Stamp ? -14 : -8);
         p.scale(0.6 + 0.4 * amount, 0.6 + 0.4 * amount);
         QColor fillc = col;
         fillc.setAlphaF(0.16 * amount);
         p.setBrush(fillc);
-        p.setPen(QPen(col, qMax(1.2, pw * 0.8)));
-        p.drawEllipse(QPointF(0, 0), d / 2, d / 2);
-        p.setPen(QPen(col, qMax(1.4, pw), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setPen(QPen(col, qMax(1.1, s * 0.03)));
+        if (m == Mark::Stamp) p.drawEllipse(QPointF(0, 0), d / 2, d / 2);
+        else p.drawRoundedRect(QRectF(-d / 2, -d / 2, d, d), d * 0.18, d * 0.18);
+        p.setPen(QPen(col, qMax(1.3, s * 0.04), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         p.drawPolyline(QPolygonF({QPointF(-d * 0.20, 0), QPointF(-d * 0.05, d * 0.15), QPointF(d * 0.22, -d * 0.14)}));
         break;
     }
@@ -156,9 +188,13 @@ void drawMark(QPainter& p, const QRectF& r, State st, double amount)
     p.restore();
 }
 
+// ---- Llenado del que corre
 void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double progress, bool parked, qint64 now)
 {
-    const QColor fillc = parked ? theme::squareFill.darker(160) : theme::squareFill;
+    const Colors cs = colors();
+    // Invertido (por defecto): fondo gris que se llena del color de "terminado".
+    QColor fillc = style().inverted ? cs.done : cs.fill;
+    if (parked) fillc = theme::mix(fillc, style().inverted ? cs.fill : cs.empty, 0.45);
     p.save();
     p.setClipPath(path);
     p.setPen(Qt::NoPen);
@@ -169,18 +205,21 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
         p.drawRect(QRectF(r.left(), r.top(), r.width() * pr, r.height()));
         break;
     case Fill::Liquid: {
-        // Sube desde abajo con una ola suave (dos capas desfasadas).
-        const double level = r.bottom() - r.height() * pr;
-        const double amp = parked ? 0 : r.height() * 0.035;
+        // Avanza de izquierda a derecha con el frente ondulado (dos capas que se mueven).
+        const double front = r.left() + r.width() * pr;
+        const double amp = parked ? 0 : qMax(1.5, r.width() * 0.05);
         for (int layer = 0; layer < 2; ++layer) {
             QPainterPath wave;
-            wave.moveTo(r.left(), r.bottom());
-            const double phase = now / (layer ? 520.0 : 760.0) + layer * 1.7;
-            for (int i = 0; i <= 24; ++i) {
-                const double x = r.left() + r.width() * i / 24.0;
-                wave.lineTo(x, level + amp * std::sin(phase + i / 24.0 * 2 * M_PI) * (layer ? 0.8 : 1.0));
+            wave.moveTo(r.left(), r.top());
+            const double phase = now / (layer ? 330.0 : 470.0) + layer * 2.1;
+            const int steps = 28;
+            for (int i = 0; i <= steps; ++i) {
+                const double y = r.top() + r.height() * i / double(steps);
+                const double x = front + amp * std::sin(phase + i / double(steps) * 2.4 * M_PI) * (layer ? 0.7 : 1.0)
+                                       - (layer ? amp * 0.6 : 0);
+                wave.lineTo(qMax(r.left(), x), y);
             }
-            wave.lineTo(r.right(), r.bottom());
+            wave.lineTo(r.left(), r.bottom());
             wave.closeSubpath();
             QColor lc = fillc;
             if (layer == 0) lc.setAlphaF(0.45);
@@ -190,36 +229,38 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
         break;
     }
     case Fill::Segments: {
-        // Como una batería: 5 bloques; el que se está llenando late.
+        // Batería de 5 bloques bien marcados; el que se está llenando late.
         const int n = 5;
-        const double gap = qMax(1.5, r.width() * 0.04);
+        const double gap = qMax(2.0, r.width() * 0.05);
         const double sw = (r.width() - gap * (n + 1)) / n;
         const double filled = pr * n;
+        const QColor emptySeg = theme::mix(style().inverted ? cs.fill : cs.empty, fillc, 0.18);
         for (int i = 0; i < n; ++i) {
-            const QRectF seg(r.left() + gap + i * (sw + gap), r.top() + gap, sw, r.height() - 2 * gap);
-            QColor sc = fillc;
-            if (i >= int(filled)) {
-                if (i == int(filled) && !parked) {
-                    const double frac = filled - int(filled);
-                    sc.setAlphaF(0.25 + 0.55 * frac + 0.15 * std::sin(now / 260.0));
-                } else {
-                    sc = theme::mix(theme::squareEmpty, fillc, 0.12);
-                }
+            const QRectF seg(r.left() + gap + i * (sw + gap), r.top() + gap * 1.4, sw, r.height() - 2.8 * gap);
+            if (i < int(filled)) {
+                p.setPen(Qt::NoPen);
+                p.setBrush(fillc);
+            } else if (i == int(filled) && !parked) {
+                const double frac = filled - int(filled);
+                QColor sc = fillc;
+                sc.setAlphaF(qBound(0.2, 0.35 + 0.5 * frac + 0.15 * std::sin(now / 240.0), 1.0));
+                p.setPen(QPen(fillc, 1));
+                p.setBrush(sc);
+            } else {
+                p.setPen(QPen(theme::mix(emptySeg, fillc, 0.35), 1));
+                p.setBrush(emptySeg);
             }
-            p.setBrush(sc);
-            p.drawRoundedRect(seg, 1.5, 1.5);
+            p.drawRoundedRect(seg.adjusted(0.5, 0.5, -0.5, -0.5), 1.8, 1.8);
         }
         break;
     }
     case Fill::Clock: {
-        // Barrido de reloj desde las 12.
         const double R = std::hypot(r.width(), r.height());
         const QRectF big(r.center().x() - R, r.center().y() - R, 2 * R, 2 * R);
         p.drawPie(big, 90 * 16, int(-360 * 16 * pr));
-        // aguja fina
         if (!parked) {
             const double a = qDegreesToRadians(-90 + 360 * pr);
-            QColor hand = theme::text;
+            QColor hand = onColor(style().inverted ? cs.fill : cs.empty);
             hand.setAlphaF(0.55);
             p.setPen(QPen(hand, 1.2));
             p.drawLine(r.center(), r.center() + QPointF(std::cos(a), std::sin(a)) * R);
@@ -248,22 +289,20 @@ QPainterPath shapePath(const QRectF& r)
         path.addRoundedRect(r, qMax(1.0, s * 0.08), qMax(1.0, s * 0.08));
         break;
     case Shape::Slant: {
-        // Romboide apoyado sobre su base, apenas inclinado hacia la derecha.
-        const double k = r.height() * 0.16;
-        QPolygonF poly({QPointF(r.left() + k, r.top()), QPointF(r.right(), r.top()),
-                        QPointF(r.right() - k, r.bottom()), QPointF(r.left(), r.bottom())});
-        path.addPolygon(poly);
-        path.closeSubpath();
+        // Romboide apoyado sobre su base, apenas inclinado y con esquinas suaves.
+        const double k = r.height() * 0.09;
+        path = roundedPolygon({QPointF(r.left() + k, r.top()), QPointF(r.right(), r.top()),
+                               QPointF(r.right() - k, r.bottom()), QPointF(r.left(), r.bottom())},
+                              s * 0.11);
         break;
     }
     case Shape::Bevel: {
-        // Esquinas de arriba-izquierda y abajo-derecha cortadas: aire de HUD.
-        const double c = s * 0.20;
-        QPolygonF poly({QPointF(r.left() + c, r.top()), QPointF(r.right(), r.top()),
-                        QPointF(r.right(), r.bottom() - c), QPointF(r.right() - c, r.bottom()),
-                        QPointF(r.left(), r.bottom()), QPointF(r.left(), r.top() + c)});
-        path.addPolygon(poly);
-        path.closeSubpath();
+        // Dos esquinas cortadas (arriba-izquierda y abajo-derecha), suavizadas.
+        const double c = s * 0.15;
+        path = roundedPolygon({QPointF(r.left() + c, r.top()), QPointF(r.right(), r.top()),
+                               QPointF(r.right(), r.bottom() - c), QPointF(r.right() - c, r.bottom()),
+                               QPointF(r.left(), r.bottom()), QPointF(r.left(), r.top() + c)},
+                              s * 0.07);
         break;
     }
     }
@@ -279,6 +318,8 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
 {
     const QRectF r = rIn.adjusted(0.5, 0.5, -0.5, -0.5);
     const double s = qMin(r.width(), r.height());
+    const Colors cs = colors();
+    const double bw = borderWidth();
     State st = t.state;
 
     // ---- Animación de completado: transforma el cuadradito entero
@@ -295,7 +336,6 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
             break;
         }
         case Complete::Seal: {
-            // Cae como un sello: grande → tamaño normal con rebote.
             const double k = 1.35 - 0.35 * ease(u * 1.8, QEasingCurve::OutBack);
             p.translate(c); p.scale(k, k); p.translate(-c);
             markAmount = ease((u - 0.35) / 0.5, QEasingCurve::OutCubic);
@@ -305,7 +345,6 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
             markAmount = ease((u - 0.2) / 0.6, QEasingCurve::OutCubic);
             break;
         case Complete::Flip: {
-            // Se da vuelta: primera mitad la cara "llena", segunda la de terminado.
             const double sx = std::abs(std::cos(M_PI * u));
             p.translate(c); p.scale(qMax(0.02, sx), 1.0); p.translate(-c);
             if (u < 0.5) st = State::Running;
@@ -317,18 +356,19 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
 
     const QPainterPath path = shapePath(r);
     QColor textColor;
+    QColor runningHalo;
     switch (st) {
     case State::Ghost: {
         QColor edge = theme::textFaint;
         edge.setAlphaF(0.7);
-        QPen pen(edge, 1, Qt::DashLine);
+        QPen pen(edge, bw, Qt::DashLine);
         pen.setDashPattern({3, 3});
         p.setPen(pen);
         QColor fill = theme::text;
         fill.setAlphaF(0.025);
         p.setBrush(fill);
         p.drawPath(path);
-        if (t.progress > 0) {   // M21: bloque del objetivo empezado (por tiempo acumulado)
+        if (t.progress > 0) {   // bloque del objetivo empezado (por tiempo acumulado)
             p.save();
             p.setClipPath(path);
             QColor pf = theme::textFaint;
@@ -345,54 +385,52 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
     case State::Done:
     case State::Final: {
         const bool fin = st == State::Final;
+        const QColor base = fin ? cs.final : cs.done;
         if (s >= 12) {
             p.setPen(Qt::NoPen);
             p.setBrush(QColor(0, 0, 0, 70));
             p.drawPath(path.translated(0, qMax(1.0, s * 0.035)));
         }
         QLinearGradient body(r.topLeft(), r.bottomLeft());
-        if (fin) {
-            body.setColorAt(0, theme::squareFinal.lighter(122));
-            body.setColorAt(1, theme::squareFinal.darker(108));
-        } else {
-            body.setColorAt(0, theme::mix(theme::squareDone, theme::squareDoneEdge, 0.30));
-            body.setColorAt(0.45, theme::squareDone);
-            body.setColorAt(1, theme::squareDone);
-        }
+        body.setColorAt(0, fin || style().palette != 0 ? base.lighter(116) : theme::mix(base, cs.doneEdge, 0.30));
+        body.setColorAt(0.45, base);
+        body.setColorAt(1, fin ? base.darker(108) : base);
         p.setBrush(body);
-        p.setPen(fin ? QPen(Qt::NoPen) : QPen(theme::squareDoneEdge, 1));
+        p.setPen(fin ? QPen(base.darker(125), bw) : QPen(cs.doneEdge, bw));
         p.drawPath(path);
-        textColor = fin ? QColor(255, 255, 255)
-                        : theme::mix(theme::squareDone, onColor(theme::squareDone), 0.6);
+        textColor = fin ? onColor(base) : theme::mix(base, onColor(base), style().palette == 0 ? 0.6 : 0.92);
         break;
     }
     case State::Running:
     case State::Parked: {
         const bool parked = st == State::Parked;
-        p.setBrush(theme::squareEmpty);
-        p.setPen(QPen(theme::squareFill.darker(150), 1, parked ? Qt::DashLine : Qt::SolidLine));
+        const QColor bg = style().inverted ? cs.fill : cs.empty;
+        p.setBrush(bg);
+        p.setPen(QPen(style().inverted ? bg.darker(118) : cs.fill.darker(150), bw, parked ? Qt::DashLine : Qt::SolidLine));
         p.drawPath(path);
-        // Durante el volteo, la cara de atrás se ve llena.
         fillRunning(p, r, path, t.completeT >= 0 ? 1.0 : t.progress, parked, now);
         if (parked && s >= 22) {
-            const double g = s * 0.16, bw = g * 0.32;
+            const double g = s * 0.16, w = g * 0.32;
             const QPointF o(r.right() - s * 0.1 - g, r.top() + s * 0.1);
             p.setPen(Qt::NoPen);
-            p.setBrush(theme::text);
-            p.drawRect(QRectF(o.x(), o.y(), bw, g));
-            p.drawRect(QRectF(o.x() + g * 0.62, o.y(), bw, g));
+            p.setBrush(onColor(bg));
+            p.drawRect(QRectF(o.x(), o.y(), w, g));
+            p.drawRect(QRectF(o.x() + g * 0.62, o.y(), w, g));
         }
-        textColor = parked ? theme::textDim : theme::text;
+        // El texto contrasta con lo que tenga detrás (mitad llena, mitad vacía).
+        const QColor under = style().inverted ? cs.done : cs.fill;
+        textColor = parked ? theme::mix(onColor(under), under, 0.4) : onColor(under);
+        runningHalo = under;
         break;
     }
     }
 
-    // Rayita del color de la actividad abajo + filo de luz arriba.
+    // Rayita del color de la actividad abajo (se puede apagar) + filo de luz arriba.
     if (s >= 12) {
         p.save();
         p.setClipPath(path);
         p.setPen(Qt::NoPen);
-        if (t.stripe.isValid()) {
+        if (style().stripe && t.stripe.isValid()) {
             QColor stripe = t.stripe;
             stripe.setAlphaF(st == State::Final ? 0.55 : 0.9);
             p.setBrush(stripe);
@@ -404,10 +442,9 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
         p.restore();
     }
 
-    if (st == State::Done || st == State::Final) drawMark(p, r, st, markAmount);
-    drawLabel(p, r, t, textColor, false);
+    if (st == State::Done || st == State::Final) drawMark(p, r, st, markAmount, textColor);
+    drawLabel(p, r, t, textColor, false, runningHalo);
 
-    // Destello: un reflejo que cruza y un anillo que se abre.
     if (t.completeT >= 0 && t.completeT < 1 && style().complete == Complete::Shine) {
         const double u = t.completeT;
         p.save();
@@ -421,14 +458,13 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
         p.setBrush(shine);
         p.drawRect(r);
         p.restore();
-        QColor ring = theme::squareFinal;
+        QColor ring = cs.final;
         ring.setAlphaF(0.6 * (1 - u));
         p.setPen(QPen(ring, 1.5));
         p.setBrush(Qt::NoBrush);
         const double grow = s * 0.25 * ease(u, QEasingCurve::OutCubic);
         p.drawPath(shapePath(r.adjusted(-grow, -grow, grow, grow)));
     }
-    // Sellado: un fogonazo blanco que se apaga.
     if (t.completeT >= 0 && t.completeT < 0.5 && style().complete == Complete::Seal) {
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(255, 255, 255, int(150 * (1 - t.completeT * 2))));

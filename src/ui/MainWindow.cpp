@@ -241,6 +241,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     if (m_db->setting("size_mode").toString().isEmpty())
         m_db->setSetting("size_mode", m_db->setting("proportional", 0).toBool() ? 2 : 0);
     m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
+    m_grid->setBaseScale(m_db->setting("tile_size", 100).toInt() / 100.0);
     m_toast = new QLabel(gridPage);
     m_toast->setProperty("role", "toast");
     m_toast->setAlignment(Qt::AlignCenter);
@@ -506,6 +507,7 @@ QWidget* MainWindow::buildTitleBar()
     menu->addAction(QStringLiteral("Ajustes…"), this, [this] {
         SettingsDialog dlg(m_db, this);
         win::applyChrome(&dlg);
+        connect(&dlg, &SettingsDialog::tileSizePreview, this, [this](int pct) { m_grid->setBaseScale(pct / 100.0); });
         // La vista previa del tema repinta todo mientras el diálogo está abierto.
         if (dlg.exec() != QDialog::Accepted) return;
         m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");

@@ -281,6 +281,7 @@ GridWidget::Layout GridWidget::layoutGroups(const QRectF& area, const QVector<QV
         return y + rowH <= area.bottom() + 0.01;
     };
 
+    maxSide *= m_baseScale;   // M23: tamaño base elegido en Ajustes
     double hi = maxSide / (m_sizeMode == SizeMode::Width ? maxH : maxW);
     double lo = minSide;
     double best = lo;

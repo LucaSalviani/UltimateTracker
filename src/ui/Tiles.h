@@ -15,7 +15,7 @@ class QPainter;
 namespace tiles {
 
 enum class Shape    { Classic = 0, Slant = 1, Card = 2, Bevel = 3 };     // forma
-enum class Mark     { None = 0, Diagonal = 1, Reticle = 2, Stamp = 3 };  // marca de "hecho"
+enum class Mark     { None = 0, Diagonal = 1, Cross = 2, Stamp = 3, SquareTick = 4 };  // marca de "hecho"
 enum class Fill     { Bar = 0, Liquid = 1, Segments = 2, Clock = 3 };    // cómo se llena el que corre
 enum class Complete { Pop = 0, Seal = 1, Shine = 2, Flip = 3 };          // animación al completarse
 
@@ -24,6 +24,12 @@ struct Style {
     Mark     mark = Mark::None;
     Fill     fill = Fill::Bar;
     Complete complete = Complete::Pop;
+    // M23
+    bool     inverted = true;   // fondo gris que se va llenando de negro
+    bool     stripe = true;     // rayita del color de la actividad
+    bool     caption = false;   // nombre de la actividad dentro del cuadradito
+    int      border = 1;        // 0 fino · 1 normal · 2 grueso
+    int      palette = 0;       // 0 = la del tema; ver paletteNames()
 };
 Style& style();
 
@@ -31,6 +37,8 @@ QStringList shapeNames();
 QStringList markNames();
 QStringList fillNames();
 QStringList completeNames();
+QStringList paletteNames();   // M23: colores solo para los cuadraditos
+QStringList borderNames();
 
 enum class State { Done, Final, Running, Parked, Ghost };
 
@@ -38,7 +46,7 @@ struct Tile {
     State   state = State::Done;
     double  progress = 0;      // 0..1 (los que corren)
     QString label;             // "25m"
-    QString caption;           // nombre corto de la actividad (solo la tarjeta)
+    QString caption;           // nombre corto de la actividad
     int     number = 0;        // número del día (0 = no mostrar)
     QColor  stripe;            // color de la actividad
     double  completeT = -1;    // 0..1 mientras dura la animación de completado

@@ -84,9 +84,14 @@ void SettingsDialog::loadTileStyle(Database* db)
 {
     tiles::Style& s = tiles::style();
     s.shape = tiles::Shape(qBound(0, db->setting("tile_shape", 0).toInt(), 3));
-    s.mark = tiles::Mark(qBound(0, db->setting("tile_mark", 0).toInt(), 3));
+    s.mark = tiles::Mark(qBound(0, db->setting("tile_mark", 0).toInt(), 4));
     s.fill = tiles::Fill(qBound(0, db->setting("tile_fill", 0).toInt(), 3));
     s.complete = tiles::Complete(qBound(0, db->setting("tile_complete", 0).toInt(), 3));
+    s.inverted = db->setting("tile_inverted", 1).toBool();
+    s.stripe = db->setting("tile_stripe", 1).toBool();
+    s.caption = db->setting("tile_caption", 0).toBool();
+    s.border = qBound(0, db->setting("tile_border", 1).toInt(), 2);
+    s.palette = qBound(0, db->setting("tile_palette", 0).toInt(), 5);
 }
 
 QString SettingsDialog::themeKey(Database* db)
@@ -345,6 +350,20 @@ QWidget* SettingsDialog::pageTiles()
     m_tileMark = combo(tiles::markNames(), int(st.mark));
     m_tileFill = combo(tiles::fillNames(), int(st.fill));
     m_tileComplete = combo(tiles::completeNames(), int(st.complete));
+    m_tilePalette = combo(tiles::paletteNames(), st.palette);
+    m_tileBorder = combo(tiles::borderNames(), st.border);
+    m_tileInverted = new QCheckBox(QStringLiteral("Invertidos: fondo gris que se va llenando del color de terminado"), w);
+    m_tileInverted->setChecked(st.inverted);
+    m_tileStripe = new QCheckBox(QStringLiteral("Rayita del color de la actividad abajo"), w);
+    m_tileStripe->setChecked(st.stripe);
+    m_tileCaption = new QCheckBox(QStringLiteral("Mostrar la actividad dentro del cuadradito"), w);
+    m_tileCaption->setChecked(st.caption);
+    m_tileSize = new QSpinBox(w);
+    m_tileSize->setRange(60, 170);
+    m_tileSize->setSingleStep(10);
+    m_tileSize->setSuffix(QStringLiteral(" %"));
+    m_tileSize->setValue(m_db->setting("tile_size", 100).toInt());
+    m_originalTileSize = m_tileSize->value();
     auto* preview = new TilePreview(w);
     auto live = [this, preview] {
         tiles::Style& cur = tiles::style();
@@ -352,24 +371,39 @@ QWidget* SettingsDialog::pageTiles()
         cur.mark = tiles::Mark(m_tileMark->currentIndex());
         cur.fill = tiles::Fill(m_tileFill->currentIndex());
         cur.complete = tiles::Complete(m_tileComplete->currentIndex());
+        cur.palette = m_tilePalette->currentIndex();
+        cur.border = m_tileBorder->currentIndex();
+        cur.inverted = m_tileInverted->isChecked();
+        cur.stripe = m_tileStripe->isChecked();
+        cur.caption = m_tileCaption->isChecked();
+        emit tileSizePreview(m_tileSize->value());
         preview->update();
         if (parentWidget()) parentWidget()->update();
         for (QWidget* x : QApplication::allWidgets()) x->update();
     };
-    for (QComboBox* c : {m_tileShape, m_tileMark, m_tileFill, m_tileComplete})
+    for (QComboBox* c : {m_tileShape, m_tileMark, m_tileFill, m_tileComplete, m_tilePalette, m_tileBorder})
         connect(c, &QComboBox::currentIndexChanged, this, live);
+    for (QCheckBox* c : {m_tileInverted, m_tileStripe, m_tileCaption})
+        connect(c, &QCheckBox::toggled, this, live);
+    connect(m_tileSize, &QSpinBox::valueChanged, this, live);
 
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Forma"), m_tileShape);
     form->addRow(QStringLiteral("Marca de hecho"), m_tileMark);
     form->addRow(QStringLiteral("Llenado (el que corre)"), m_tileFill);
     form->addRow(QStringLiteral("Al completarse"), m_tileComplete);
+    form->addRow(QStringLiteral("Colores"), m_tilePalette);
+    form->addRow(QStringLiteral("Borde"), m_tileBorder);
+    form->addRow(QStringLiteral("Tamaño base"), m_tileSize);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Cuadraditos"), w));
     lay->addWidget(preview);
     lay->addSpacing(6);
     lay->addLayout(form);
+    lay->addWidget(m_tileInverted);
+    lay->addWidget(m_tileStripe);
+    lay->addWidget(m_tileCaption);
     lay->addWidget(note(QStringLiteral("La muestra repite el ciclo: el tercero se llena y se completa. "
                                        "Inclinado = romboide apoyado sobre su base; Tarjeta = vertical, con la actividad "
                                        "arriba y el tiempo abajo; Biselado = esquinas cortadas."), w));
@@ -460,6 +494,12 @@ void SettingsDialog::accept()
     m_db->setSetting("tile_mark", m_tileMark->currentIndex());
     m_db->setSetting("tile_fill", m_tileFill->currentIndex());
     m_db->setSetting("tile_complete", m_tileComplete->currentIndex());
+    m_db->setSetting("tile_palette", m_tilePalette->currentIndex());
+    m_db->setSetting("tile_border", m_tileBorder->currentIndex());
+    m_db->setSetting("tile_inverted", m_tileInverted->isChecked() ? 1 : 0);
+    m_db->setSetting("tile_stripe", m_tileStripe->isChecked() ? 1 : 0);
+    m_db->setSetting("tile_caption", m_tileCaption->isChecked() ? 1 : 0);
+    m_db->setSetting("tile_size", m_tileSize->value());
     m_db->setSetting("autostart", m_autostart->isChecked() ? 1 : 0);
     m_db->setSetting("greeting", m_greeting->isChecked() ? 1 : 0);
     m_db->setSetting("hotkey", m_hotkey->isChecked() ? 1 : 0);
@@ -484,5 +524,6 @@ void SettingsDialog::reject()
     theme::setStrongAccents(m_originalStrong);
     theme::apply(m_originalTheme);   // deshace la vista previa
     tiles::style() = m_originalTiles;
+    emit tileSizePreview(m_originalTileSize);
     QDialog::reject();
 }
