@@ -112,6 +112,9 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Por día, semana, mes y año, filtrables por actividad, con los cuatro contadores.
 - **Mapa de calor** anual (una celda por día, más intensa cuanto más se estudió).
 - **Racha**: día estudiado = al menos 1 pomodoro iniciado. 1 o 2 comodines por semana (configurable) que no la rompen.
+- **Colores**: barras y mapa de calor en el acento del tema (monocromo en Gris); cada actividad con su color en las filas, la línea del día y el menú de actividades.
+- **Exportar a CSV** (botón ⤓): lo que estás viendo (período + actividad) o todo el historial. Separador `;`, coma decimal, UTF-8: abre directo en Excel en español.
+- Cambiar de período o actividad hace un fundido corto; los períodos vacíos lo dicen ("Sin horas esta semana").
 
 ## Hitos
 - Aviso al llegar a 1, 2, …, 10 h y luego cada 25 h, en cada actividad.
@@ -132,13 +135,17 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - **Visor del cronómetro**: del color del acento (por defecto, con tinta negra), oscuro siempre o siguiendo al tema.
 - **Formato de tiempo** único en toda la app: "25m", "1h40".
 - **Temas de color**: color (Gris por defecto, Ultra, Rosa, Rojo, Azul, Mostaza) + modo Oscuro / Claro / Seguir a Windows, con vista previa en vivo. Los claros, estilo MKBHD. Opción de acentos fuertes.
+- **Atajos**: Espacio play/pausa · ← → día o período · T hoy · Ctrl −/+ zoom · G objetivo · N nota del último pomodoro · S estadísticas · A actividades · M mini · F11 pantalla completa · Esc volver · Ctrl+, ajustes · Ctrl+Z deshacer · ? (o F1) panel con todos.
+- **Deshacer**: borrar o mover pomodoros, borrar actividades (sin pregunta: vuelven con subactividades, colores y pomodoros), guardar o quitar objetivos, corregir duración. El aviso de abajo ofrece "Deshacer" (o Ctrl+Z).
+- **Estados vacíos**: un cuadradito punteado y dos líneas que dicen qué pasa y qué hacer (primer uso, hoy en blanco, día que no llegó, día sin pomodoros).
+- **Ajustes**: "Restablecer esta sección" vuelve la sección visible a los valores por defecto (se guarda con Guardar).
 - **Mini reproductor flotante** (M): ventanita siempre visible con pomodoro, actividad, tiempo, play/pausa, terminar y saltear recreo.
 
 ## Sistema
 - **Iniciar con Windows** (entrada en `HKCU\…\Run` con `--autostart`).
 - **Saludo**: al iniciar con Windows, una vez por día: "Buen día, ¿estás listo para ser productivo?" con una frase, la racha, lo de ayer y la meta. "A trabajar" se expande hasta la ventana y abre la meta del día; "Por ahora no" cierra el programa. Para verlo a mano: `UltimateTracker.exe --greeting`.
 - **Atajo global Ctrl + Alt + P**: pausar / seguir desde cualquier lado.
-- **Modo desarrollador**: trabaja sobre una copia de la base; botón 🧪 para completar ya, acelerar el tiempo y ver festejos, sonidos y saludo.
+- **Modo desarrollador**: trabaja sobre una copia de la base (al prenderlo o apagarlo en Ajustes la app se reinicia sola); botón 🧪 para completar ya, acelerar el tiempo y ver festejos, sonidos y saludo.
 - **Copia de seguridad diaria**: `%APPDATA%\UltimateTracker\backups` (o la carpeta que elijas), se guardan las últimas 7.
 
 ## Fuera de la v1

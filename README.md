@@ -153,7 +153,15 @@ Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert
 | `056cca6` | M30 · proporcional completo como rompecabezas |
 | `8771c40` | M31 · texto negro sobre el resaltado, visor del acento, festejo por cosa, arreglo del tema |
 | `e0a88e6` | M32 · segmentos "contorno", formato de tiempo único, Ajustes reordenado, barra liviana |
+| `9f6a70a` | M33 · tus ajustes actuales como valores por defecto |
+| `8a1b9e9` | M34 · reinicio del modo de pruebas dentro del mismo proceso, visor y agrupado en vivo |
+| `4896d09` | M35 · colores en Estadísticas y en el menú de actividades |
+| `cb70d32` | M36 · transiciones suaves y estados vacíos |
+| `c7f2b30` | M37 · atajos de teclado (panel con ?) y Ajustes reinicia de verdad al cambiar el modo de pruebas |
+| `8e511c1` | M38 · «Restablecer esta sección» en Ajustes |
+| `44066c8` | M39 · exportar a CSV |
+| `63767c9` | M40 · deshacer en todo |
 
 ## Modo desarrollador
 
-*Ajustes → Sistema → Modo desarrollador* y reiniciar. La app abre una **copia** de tu base (`ultimatetracker-pruebas.db`, se rehace en cada arranque) y aparece el botón 🧪: completar ya, acelerar el tiempo (×10, ×60, ×300), ver los festejos, la animación de completado, los sonidos y el saludo. Tus datos reales no se tocan. Para salir: 🧪 → Salir del modo desarrollador.
+*Ajustes → Sistema → Modo desarrollador* y Guardar (se reinicia sola). La app abre una **copia** de tu base (`ultimatetracker-pruebas.db`, se rehace en cada arranque) y aparece el botón 🧪: completar ya, acelerar el tiempo (×10, ×60, ×300), ver los festejos, la animación de completado, los sonidos y el saludo. Tus datos reales no se tocan. Para salir: 🧪 → Salir del modo desarrollador.
