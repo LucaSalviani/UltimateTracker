@@ -42,6 +42,8 @@ public:
     void   updatePomodoro(const Pomodoro& p);
     void   deletePomodoro(qint64 id);
     void   setPomodoroFolder(qint64 id, qint64 folderId);
+    void   setPomodoroNote(qint64 id, const QString& note);
+    void   setPomodoroDuration(qint64 id, int studiedSec);   // solo terminados
     std::optional<Pomodoro> pomodoro(qint64 id) const;
     QVector<Pomodoro> pomodorosBetween(const QDate& from, const QDate& to) const; // inclusivo
     QVector<Pomodoro> pomodorosWithStatus(PomoStatus st) const;
@@ -66,6 +68,7 @@ public:
 private:
     bool exec(const QString& sql);
     bool migrate();
+    void addColumnIfMissing(const QString& table, const QString& column, const QString& decl);
     static Pomodoro readPomodoro(const class QSqlQuery& q);
 
     QString      m_conn;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "core/Database.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
@@ -87,6 +89,7 @@ private:
     void undock();
     QRect offscreenRect(const QRect& r, EdgeTab::Edge edge, const QRect& screen) const;
     void toast(const QString& text);
+    void toastAction(const QString& text, const QString& action, std::function<void()> fn);
     void quitApp();
 
     // ---- jornada
@@ -118,6 +121,7 @@ private:
     QToolButton* m_btnProportional = nullptr;
     QToolButton* m_btnPin = nullptr;
     QToolButton* m_btnFull = nullptr;
+    qint64       m_noteTarget = 0;        // pomodoro al que va la nota del reproductor
 
     // Banda de fecha
     QWidget*     m_band = nullptr;
@@ -128,6 +132,7 @@ private:
     GridWidget* m_grid = nullptr;
     QLabel*     m_toast = nullptr;
     QTimer      m_toastTimer;
+    std::function<void()> m_toastAction;
 
     // Reproductor y stats en vivo
     TimerDeck*  m_deck = nullptr;

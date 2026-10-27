@@ -455,12 +455,12 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         else                                        status = QStringLiteral("cortado antes");
         if (isDayEnd(pm)) status += QStringLiteral(" · último del día");
         if (pm.linked) status += QStringLiteral(" · sin recreo antes");
-        QToolTip::showText(e->globalPosition().toPoint(),
-                           QString("#%1  %2\n%3 · %4 de %5 · %6")
-                               .arg(m_number.value(pm.id))
-                               .arg(m_paths.value(pm.folderId, QStringLiteral("Sin actividad")), start,
-                                    fmt::duration(pm.studiedSec), fmt::duration(pm.plannedSec), status),
-                           this);
+        QString tip = QString("#%1  %2\n%3 · %4 de %5 · %6")
+                          .arg(m_number.value(pm.id))
+                          .arg(m_paths.value(pm.folderId, QStringLiteral("Sin actividad")), start,
+                               fmt::duration(pm.studiedSec), fmt::duration(pm.plannedSec), status);
+        if (!pm.note.isEmpty()) tip += QStringLiteral("\n✎ ") + pm.note;
+        QToolTip::showText(e->globalPosition().toPoint(), tip, this);
         return;
     }
     QToolTip::hideText();

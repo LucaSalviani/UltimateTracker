@@ -48,6 +48,9 @@ public:
     explicit TimerDeck(QWidget* parent = nullptr);
     void setModel(const Model& m);
     void setAdjustOptions(const AdjustOptions& o);
+    // Nota del pomodoro que acaba de terminar (se muestra en "¿recreo?").
+    void setNoteEnabled(bool on);
+    void clearNote(const QString& placeholderHint = {});
     void setActivityMenu(QMenu* menu);
 
 signals:
@@ -60,6 +63,7 @@ signals:
     void silenceClicked();
     void durationChanged(int minutes);
     void goTodayClicked();
+    void noteEdited(const QString& text);   // Enter o al salir de "¿recreo?"
 
 protected:
     bool eventFilter(QObject* o, QEvent* e) override;
@@ -84,6 +88,9 @@ private:
     QToolButton* m_plusFine;
     QLabel*      m_stepLabel;
     QLineEdit*   m_editor;      // escribir los minutos sobre el visor
+    QLineEdit*   m_note;        // ¿en qué trabajaste?
+    bool         m_noteEnabled = true;
+    QString      m_noteSaved;
     int          m_wheelAccum = 0;
     QPushButton* m_secondary;
     QToolButton* m_primary;

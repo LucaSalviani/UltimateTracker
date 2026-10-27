@@ -16,6 +16,7 @@
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -215,6 +216,15 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_toast = new QLabel(gridPage);
     m_toast->setProperty("role", "toast");
     m_toast->setAlignment(Qt::AlignCenter);
+    m_toast->setTextFormat(Qt::RichText);
+    m_toast->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+    m_toast->setCursor(Qt::ArrowCursor);
+    connect(m_toast, &QLabel::linkActivated, this, [this] {
+        auto fn = std::move(m_toastAction);
+        m_toastAction = nullptr;
+        m_toast->hide();
+        if (fn) fn();
+    });
     m_toast->hide();
     m_toastTimer.setSingleShot(true);
     connect(&m_toastTimer, &QTimer::timeout, m_toast, &QLabel::hide);
@@ -283,6 +293,21 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         reloadGrid();
     });
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::reloadGrid);
+    // M6: nota del pomodoro que terminó. Como pista, la última nota de esa actividad hoy.
+    connect(m_session, &SessionController::pomodoroSaved, this, [this](qint64 id) {
+        m_noteTarget = id;
+        if (id <= 0) return;
+        QString hint;
+        const auto saved = m_db->pomodoro(id);
+        for (const Pomodoro& p : m_db->pomodorosBetween(m_today, m_today))
+            if (saved && p.id != id && p.folderId == saved->folderId && !p.note.isEmpty()) hint = p.note;
+        m_deck->clearNote(hint);
+    });
+    connect(m_deck, &TimerDeck::noteEdited, this, [this](const QString& text) {
+        if (m_noteTarget <= 0) return;
+        m_db->setPomodoroNote(m_noteTarget, text);
+        reloadGrid();
+    });
     connect(m_session, &SessionController::pomodoroChanged, this, [this] {
         rebuildFolderMenu();
         reloadGrid();
@@ -1080,8 +1105,47 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
     });
     connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
     menu.addMenu(move);
+    // M6: nota y duración
+    menu.addAction(p->note.isEmpty() ? QStringLiteral("Agregar nota…") : QStringLiteral("Editar nota…"), this, [this, id] {
+        const auto cur = m_db->pomodoro(id);
+        if (!cur) return;
+        QInputDialog dlg(this);
+        dlg.setWindowTitle(QStringLiteral("Nota del pomodoro"));
+        dlg.setLabelText(QStringLiteral("¿En qué trabajaste?"));
+        dlg.setTextValue(cur->note);
+        dlg.resize(380, dlg.sizeHint().height());
+        win::applyChrome(&dlg);
+        if (dlg.exec() != QDialog::Accepted) return;
+        m_db->setPomodoroNote(id, dlg.textValue());
+        reloadGrid();
+    });
+    if (!running && !parked) {
+        menu.addAction(QStringLiteral("Corregir duración…"), this, [this, id] {
+            const auto cur = m_db->pomodoro(id);
+            if (!cur) return;
+            QInputDialog dlg(this);
+            dlg.setWindowTitle(QStringLiteral("Corregir duración"));
+            dlg.setLabelText(QStringLiteral("¿Cuántos minutos duró en realidad?"));
+            dlg.setInputMode(QInputDialog::IntInput);
+            dlg.setIntRange(1, 600);
+            dlg.setIntValue(qMax(1, (cur->studiedSec + 30) / 60));
+            win::applyChrome(&dlg);
+            if (dlg.exec() != QDialog::Accepted) return;
+            const int before = cur->studiedSec;
+            m_db->setPomodoroDuration(id, dlg.intValue() * 60);
+            reloadGrid();
+            toastAction(QStringLiteral("Duración corregida a %1").arg(fmt::duration(dlg.intValue() * 60)),
+                        QStringLiteral("Deshacer"), [this, id, before, planned = cur->plannedSec, ended = cur->endedAt] {
+                            auto p = m_db->pomodoro(id);
+                            if (!p) return;
+                            p->studiedSec = before; p->plannedSec = planned; p->endedAt = ended;
+                            m_db->updatePomodoro(*p);
+                            reloadGrid();
+                        });
+        });
+    }
     menu.addSeparator();
-    QAction* del = menu.addAction(QStringLiteral("Borrar pomodoro…"));
+    QAction* del = menu.addAction(running || parked ? QStringLiteral("Borrar pomodoro…") : QStringLiteral("Borrar pomodoro"));
     connect(del, &QAction::triggered, this, [this, id] { deletePomodoro(id); });
     menu.exec(globalPos);
 }
@@ -1093,15 +1157,29 @@ void MainWindow::deletePomodoro(qint64 id)
     const bool running = p->status == PomoStatus::Running;
     const bool parked = p->status == PomoStatus::Parked;
 
+    // Uno terminado se borra al toque y se puede deshacer (M6). El que está en
+    // marcha o en pausa es estado vivo: ese sí pide confirmación.
+    if (!running && !parked) {
+        const Pomodoro copy = *p;
+        m_db->deletePomodoro(id);
+        reloadGrid();
+        toastAction(QStringLiteral("Pomodoro borrado"), QStringLiteral("Deshacer"), [this, copy] {
+            m_db->insertPomodoro(copy);   // vuelve con el mismo id
+            reloadGrid();
+        });
+        return;
+    }
+
     QMessageBox box(this);
     box.setIcon(QMessageBox::Warning);
     box.setWindowTitle(QStringLiteral("Borrar pomodoro"));
     box.setText(QStringLiteral("¿Borrar este pomodoro?"));
     box.setInformativeText(
         QStringLiteral("%1 · %2, empezado el %3 a las %4.\n\n"
-                       "Se descuenta de tus horas y de las estadísticas. No se puede deshacer.")
+                       "Está %5: se descarta y no se puede deshacer.")
             .arg(m_tree.path(p->folderId), fmt::duration(p->studiedSec), fmt::shortDate(p->day),
-                 QDateTime::fromSecsSinceEpoch(p->startedAt).time().toString("HH:mm")));
+                 QDateTime::fromSecsSinceEpoch(p->startedAt).time().toString("HH:mm"),
+                 running ? QStringLiteral("en curso") : QStringLiteral("en pausa")));
     QPushButton* del = box.addButton(QStringLiteral("Borrar"), QMessageBox::DestructiveRole);
     box.addButton(QStringLiteral("Cancelar"), QMessageBox::RejectRole);
     win::applyChrome(&box);
@@ -1109,8 +1187,7 @@ void MainWindow::deletePomodoro(qint64 id)
     if (box.clickedButton() != del) return;
 
     if (running) m_session->discardCurrent();        // el actual (corriendo o pausado)
-    else if (parked) m_session->deleteParked(id);     // en pausa por cambio de actividad
-    else m_db->deletePomodoro(id);
+    else m_session->deleteParked(id);                 // en pausa por cambio de actividad
     reloadGrid();
     toast(QStringLiteral("Pomodoro borrado"));
 }
@@ -1334,7 +1411,19 @@ void MainWindow::togglePin(bool on)
 
 void MainWindow::toast(const QString& text)
 {
-    m_toast->setText(text);
+    m_toastAction = nullptr;
+    m_toast->setText(text.toHtmlEscaped());
+    m_toast->adjustSize();
+    m_toast->show();
+    m_toastTimer.start(8000);
+}
+
+void MainWindow::toastAction(const QString& text, const QString& action, std::function<void()> fn)
+{
+    m_toastAction = std::move(fn);
+    m_toast->setText(QStringLiteral("%1 &nbsp;·&nbsp; <a href=\"act\" style=\"color:%2; text-decoration:none; font-weight:600\">%3</a>")
+                         .arg(text.toHtmlEscaped(), theme::text.name(), action.toHtmlEscaped()));
+    m_toast->adjustSize();
     m_toast->show();
     m_toastTimer.start(8000);
 }

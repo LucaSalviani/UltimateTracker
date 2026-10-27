@@ -139,6 +139,22 @@ TimerDeck::TimerDeck(QWidget* parent)
     connect(m_editor, &QLineEdit::returnPressed, this, [this] { finishTyping(true); });
     connect(m_editor, &QLineEdit::editingFinished, this, [this] { if (m_editor->isVisible()) finishTyping(true); });
 
+    // ¿En qué trabajaste? (aparece al terminar el pomodoro)
+    m_note = new QLineEdit(this);
+    m_note->setObjectName("DeckNote");
+    m_note->setPlaceholderText(QStringLiteral("¿En qué trabajaste? (opcional)"));
+    m_note->setMaxLength(200);
+    m_note->setClearButtonEnabled(true);
+    m_note->hide();
+    auto commitNote = [this] {
+        const QString t = m_note->text().trimmed();
+        if (t == m_noteSaved) return;
+        m_noteSaved = t;
+        emit noteEdited(t);
+    };
+    connect(m_note, &QLineEdit::returnPressed, this, [this, commitNote] { commitNote(); m_note->clearFocus(); });
+    connect(m_note, &QLineEdit::editingFinished, this, commitNote);
+
     // Transporte: acción secundaria "hefty" + botón grande
     m_secondary = new QPushButton(this);
     m_secondary->setObjectName("DeckAction");
@@ -186,6 +202,7 @@ TimerDeck::TimerDeck(QWidget* parent)
     lay->setSpacing(8);
     lay->addWidget(m_activity);
     lay->addWidget(m_display, 1);
+    lay->addWidget(m_note);
     lay->addWidget(m_stepper);
     lay->addLayout(transport);
 
@@ -205,6 +222,21 @@ void TimerDeck::setAdjustOptions(const AdjustOptions& o)
     m_minusFine->setVisible(o.buttons);
     m_plusFine->setVisible(o.buttons);
     applyMode();
+}
+
+void TimerDeck::setNoteEnabled(bool on)
+{
+    m_noteEnabled = on;
+    applyMode();
+}
+
+void TimerDeck::clearNote(const QString& placeholderHint)
+{
+    m_note->clear();
+    m_noteSaved.clear();
+    m_note->setPlaceholderText(placeholderHint.isEmpty()
+                                   ? QStringLiteral("¿En qué trabajaste? (opcional)")
+                                   : QStringLiteral("¿En qué trabajaste? (antes: %1)").arg(placeholderHint));
 }
 
 bool TimerDeck::editable() const
@@ -355,6 +387,13 @@ void TimerDeck::applyMode()
     m_stepper->setToolTip(m == Mode::Ready ? QStringLiteral("Duración del pomodoro")
                                            : QStringLiteral("Duración del recreo"));
     if (!editable()) finishTyping(false);
+    // Nota: visible mientras se decide el recreo; al salir se guarda lo escrito.
+    const bool showNote = m_noteEnabled && m == Mode::BreakReady;
+    if (!showNote && m_note->isVisible()) {
+        const QString t = m_note->text().trimmed();
+        if (t != m_noteSaved) { m_noteSaved = t; emit noteEdited(t); }
+    }
+    m_note->setVisible(showNote);
     QStringList hints;
     if (editable() && m_adjust.wheel) hints << QStringLiteral("rueda para ajustar");
     if (editable() && m_adjust.type) hints << QStringLiteral("click para escribir los minutos");

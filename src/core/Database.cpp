@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 2;
+constexpr int kSchemaVersion = 3;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -110,17 +110,22 @@ bool Database::migrate()
         c.finish();
         if (empty) addFolder(0, QStringLiteral("General"));
     }
-    if (version < 2) {
-        // v2: pomodoros "encadenados" (arrancados salteando el recreo).
-        QSqlQuery info(m_db);
-        info.exec("PRAGMA table_info(pomodoros)");
-        bool has = false;
-        while (info.next()) has |= info.value(1).toString() == QLatin1String("linked");
-        info.finish();
-        if (!has) exec("ALTER TABLE pomodoros ADD COLUMN linked INTEGER NOT NULL DEFAULT 0");
-    }
+    // Cada módulo agrega sus columnas solo si faltan: así sacar un módulo no
+    // rompe la base (la columna queda ahí, sin usar).
+    if (version < 2) addColumnIfMissing("pomodoros", "linked", "INTEGER NOT NULL DEFAULT 0");  // encadenados
+    if (version < 3) addColumnIfMissing("pomodoros", "note", "TEXT NOT NULL DEFAULT ''");      // M6: nota
     if (version < kSchemaVersion) exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
     return true;
+}
+
+void Database::addColumnIfMissing(const QString& table, const QString& column, const QString& decl)
+{
+    QSqlQuery info(m_db);
+    info.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table));
+    bool has = false;
+    while (info.next()) has |= info.value(1).toString() == column;
+    info.finish();
+    if (!has) exec(QStringLiteral("ALTER TABLE %1 ADD COLUMN %2 %3").arg(table, column, decl));
 }
 
 // ---------------------------------------------------------------------------
@@ -237,16 +242,20 @@ Pomodoro Database::readPomodoro(const QSqlQuery& q)
     p.studiedSec = q.value(6).toInt();
     p.status     = PomoStatus(q.value(7).toInt());
     p.linked     = q.value(8).toInt() != 0;
+    p.note       = q.value(9).toString();
     return p;
 }
 
-#define POMO_COLUMNS "id, COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked"
+#define POMO_COLUMNS "id, COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked, note"
 
 qint64 Database::insertPomodoro(const Pomodoro& p)
 {
     QSqlQuery q(m_db);
-    q.prepare("INSERT INTO pomodoros(folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked) "
-              "VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
+    // Con id > 0 se reinserta con el mismo id (deshacer un borrado).
+    q.prepare(QStringLiteral("INSERT INTO pomodoros(%1folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked, note) "
+                             "VALUES(%2?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                  .arg(p.id > 0 ? QStringLiteral("id, ") : QString(), p.id > 0 ? QStringLiteral("?, ") : QString()));
+    if (p.id > 0) q.addBindValue(p.id);
     q.addBindValue(p.folderId > 0 ? QVariant(p.folderId) : QVariant(QMetaType(QMetaType::LongLong)));
     q.addBindValue(fmt::dayKey(p.day));
     q.addBindValue(p.startedAt);
@@ -255,6 +264,7 @@ qint64 Database::insertPomodoro(const Pomodoro& p)
     q.addBindValue(p.studiedSec);
     q.addBindValue(int(p.status));
     q.addBindValue(p.linked ? 1 : 0);
+    q.addBindValue(p.note.isNull() ? QStringLiteral("") : p.note);   // NULL no entra en NOT NULL
     if (!q.exec()) {
         m_error = q.lastError().text();
         return 0;
@@ -281,6 +291,29 @@ void Database::setPomodoroFolder(qint64 id, qint64 folderId)
     QSqlQuery q(m_db);
     q.prepare("UPDATE pomodoros SET folder_id = ? WHERE id = ?");
     q.addBindValue(folderId > 0 ? QVariant(folderId) : QVariant(QMetaType(QMetaType::LongLong)));
+    q.addBindValue(id);
+    q.exec();
+}
+
+void Database::setPomodoroNote(qint64 id, const QString& note)
+{
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE pomodoros SET note = ? WHERE id = ?");
+    q.addBindValue(note.isNull() ? QStringLiteral("") : note.trimmed());
+    q.addBindValue(id);
+    q.exec();
+}
+
+void Database::setPomodoroDuration(qint64 id, int studiedSec)
+{
+    // Corregir cuánto duró uno terminado: si fue más largo que lo pactado, se
+    // agranda también lo pactado (así se ve completo).
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE pomodoros SET studied_sec = ?, planned_sec = MAX(planned_sec, ?), ended_at = started_at + ? "
+              "WHERE id = ?");
+    q.addBindValue(studiedSec);
+    q.addBindValue(studiedSec);
+    q.addBindValue(studiedSec);
     q.addBindValue(id);
     q.exec();
 }

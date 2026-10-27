@@ -38,6 +38,7 @@ struct Pomodoro {
     int        studiedSec = 0;
     PomoStatus status     = PomoStatus::Running;
     bool       linked     = false; // arrancó salteando el recreo: va "pegado" al anterior
+    QString    note;               // "¿en qué trabajaste?" (opcional)
 
     // Minutos que "representa" el cuadradito.
     int representedSec() const

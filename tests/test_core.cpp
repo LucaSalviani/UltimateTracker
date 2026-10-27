@@ -423,6 +423,32 @@ private slots:
         QCOMPARE(t.study, 3600);
         QCOMPARE(t.inactive, 86400 - 3600 - 600 - 300);
     }
+
+    // M6: nota, corregir duración y deshacer un borrado (mismo id)
+    void noteDurationAndUndo()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        Pomodoro p; p.day = QDate(2026, 10, 26); p.startedAt = 1000; p.endedAt = 2500;
+        p.plannedSec = 1500; p.studiedSec = 1500; p.status = PomoStatus::Completed;
+        const qint64 id = db.insertPomodoro(p);
+        db.setPomodoroNote(id, "  ejercicios de paginación ");
+        QCOMPARE(db.pomodoro(id)->note, QString("ejercicios de paginación"));
+
+        db.setPomodoroDuration(id, 2400);   // en realidad fueron 40 min
+        auto q = db.pomodoro(id);
+        QCOMPARE(q->studiedSec, 2400);
+        QCOMPARE(q->plannedSec, 2400);
+        QCOMPARE(q->endedAt, qint64(3400));
+        db.setPomodoroDuration(id, 600);    // y si fueron 10: lo pactado no se achica
+        QCOMPARE(db.pomodoro(id)->plannedSec, 2400);
+
+        const Pomodoro copy = *db.pomodoro(id);
+        db.deletePomodoro(id);
+        QVERIFY(!db.pomodoro(id));
+        QCOMPARE(db.insertPomodoro(copy), id);
+        QCOMPARE(db.pomodoro(id)->note, copy.note);
+    }
 };
 
 QTEST_GUILESS_MAIN(CoreTest)

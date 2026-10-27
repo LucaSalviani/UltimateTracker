@@ -302,3 +302,10 @@ QListWidget#SettingsNav::item:selected { background: @s5; color: @t1; }
 QToolButton#ThemeChoice { background: @s2; border: 1px solid @s4; border-radius: 8px; padding: 8px 6px 6px 6px; color: @t2; }
 QToolButton#ThemeChoice:hover { background: @s4; border-color: @s7; }
 QToolButton#ThemeChoice:checked { background: @s5; border: 1px solid @t3; color: @t1; }
+
+/* Nota del pomodoro en el reproductor */
+QLineEdit#DeckNote {
+    background: @s1; border: 1px solid @s4; border-radius: 8px;
+    padding: 6px 9px; color: @t1; font-size: 9.5pt;
+}
+QLineEdit#DeckNote:focus { border-color: @s8; }
