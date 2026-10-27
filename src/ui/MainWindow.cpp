@@ -5,6 +5,7 @@
 #include "ui/ActivitiesWidget.h"
 #include "ui/FolderMenu.h"
 #include "ui/GoalPanel.h"
+#include "ui/MiniPlayer.h"
 #include "ui/Celebration.h"
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
@@ -408,6 +409,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     });
     applySystemSettings();
     QTimer::singleShot(8000, this, &MainWindow::runDailyBackup);
+    if (m_db->setting("mini_open", 0).toBool()) QTimer::singleShot(300, this, &MainWindow::toggleMini);
 
     // ---- Pantalla completa: F11 alterna, Esc sale
     auto* f11 = new QShortcut(QKeySequence(Qt::Key_F11), this);
@@ -417,6 +419,8 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
         else if (isFullScreen()) toggleFullScreen();
     });
+    auto* mKey = new QShortcut(QKeySequence(Qt::Key_M), this);
+    connect(mKey, &QShortcut::activated, this, &MainWindow::toggleMini);
     auto* gKey = new QShortcut(QKeySequence(Qt::Key_G), this);
     connect(gKey, &QShortcut::activated, this, [this] {
         if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel(); else openGoalPanel(m_grid->anchor());
@@ -493,6 +497,7 @@ QWidget* MainWindow::buildTitleBar()
     auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: actividades, ajustes, salir"));
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
+    menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
     menu->addAction(QStringLiteral("Ajustes…"), this, [this] {
         SettingsDialog dlg(m_db, this);
         win::applyChrome(&dlg);
@@ -652,6 +657,7 @@ void MainWindow::buildTray()
     m_tray->setToolTip(QStringLiteral("UltimateTracker"));
     auto* menu = new QMenu(this);
     menu->addAction(QStringLiteral("Mostrar"), this, &MainWindow::bringToFront);
+    menu->addAction(QStringLiteral("Mini reproductor"), this, &MainWindow::toggleMini);
     menu->addSeparator();
     menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
     m_tray->setContextMenu(menu);
@@ -1094,6 +1100,7 @@ void MainWindow::refreshDeck()
     // Los pomodoros se registran solo hoy: viendo otro día, el reproductor ofrece volver.
     m.canStart = m_grid->zoom() != GridWidget::Zoom::Day || m_grid->anchor() == m_today;
     m_deck->setModel(m);
+    if (m_mini) m_mini->setModel(m);
 }
 
 void MainWindow::refreshLiveStats()
@@ -1538,6 +1545,45 @@ void MainWindow::applySizeMode(GridWidget::SizeMode mode, bool announce)
     m_btnProportional->setChecked(mode != GridWidget::SizeMode::Uniform);
     m_btnProportional->setToolTip(QString::fromUtf8(names[int(mode)]) + QStringLiteral(" (click para cambiar)"));
     if (announce) toast(QString::fromUtf8(names[int(mode)]));
+}
+
+// M19: mini reproductor flotante (recuerda dónde lo dejaste y si estaba abierto).
+void MainWindow::toggleMini()
+{
+    if (!m_mini) {
+        m_mini = new MiniPlayer(nullptr);
+        connect(this, &QObject::destroyed, m_mini, &QObject::deleteLater);
+        connect(m_mini, &MiniPlayer::playClicked, this, [this] {
+            if (m_session->state() == SessionController::State::Paused) m_session->resume();
+            else m_session->start();
+        });
+        connect(m_mini, &MiniPlayer::pauseClicked, m_session, &SessionController::pause);
+        connect(m_mini, &MiniPlayer::endPomodoroClicked, m_session, &SessionController::endPomodoro);
+        connect(m_mini, &MiniPlayer::startBreakClicked, m_session, &SessionController::startBreak);
+        connect(m_mini, &MiniPlayer::skipBreakClicked, m_session, &SessionController::skipBreak);
+        connect(m_mini, &MiniPlayer::endBreakClicked, m_session, &SessionController::endBreakEarly);
+        connect(m_mini, &MiniPlayer::silenceClicked, m_session, &SessionController::silenceAlarm);
+        connect(m_mini, &MiniPlayer::openAppClicked, this, &MainWindow::bringToFront);
+        connect(m_mini, &MiniPlayer::moved, this, [this](const QPoint& pos) { m_db->setSetting("mini_pos", pos); });
+        connect(m_mini, &MiniPlayer::closed, this, [this] { m_db->setSetting("mini_open", 0); });
+        const QPoint saved = m_db->setting("mini_pos").toPoint();
+        if (!saved.isNull() && QGuiApplication::screenAt(saved + QPoint(20, 20))) {
+            m_mini->move(saved);
+        } else {
+            QScreen* scr = screen() ? screen() : QGuiApplication::primaryScreen();
+            const QRect a = scr->availableGeometry();
+            m_mini->move(a.right() - m_mini->width() - 24, a.bottom() - m_mini->height() - 24);
+        }
+    }
+    if (m_mini->isVisible()) {
+        m_mini->hide();
+        m_db->setSetting("mini_open", 0);
+        return;
+    }
+    refreshDeck();
+    m_mini->show();
+    m_mini->raise();
+    m_db->setSetting("mini_open", 1);
 }
 
 void MainWindow::applySystemSettings()

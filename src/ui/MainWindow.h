@@ -106,6 +106,7 @@ private:
     void celebrate(int kind, const QString& kicker, const QString& title, const QString& subtitle);
 
     void applySizeMode(GridWidget::SizeMode mode, bool announce);   // M16
+    void toggleMini();   // M19
     void applySystemSettings();   // M9: atajo global, inicio con Windows
     void runDailyBackup();
 
@@ -147,6 +148,7 @@ private:
     class GoalPanel* m_goalPanel = nullptr;
     class Celebration* m_celebration = nullptr;
     class GlobalHotkey* m_hotkey = nullptr;   // M9
+    class MiniPlayer* m_mini = nullptr;       // M19
     struct PendingCelebration { int kind = -1; QString kicker, title, subtitle; } m_pendingCelebration;
     QWidget*     m_titleBar = nullptr;
     QPointer<QPropertyAnimation> m_goalAnim;        // pomodoro al que va la nota del reproductor

@@ -350,3 +350,13 @@ QToolButton#GoalRowDelete { background: transparent; border: none; color: @t3; p
 QToolButton#GoalRowDelete:hover { background: @s4; color: @t1; }
 QPushButton#GoalAdd { background: transparent; border: 1px dashed @s7; border-radius: 7px; padding: 5px 10px; color: @t2; }
 QPushButton#GoalAdd:hover { border-color: @t3; color: @t1; }
+
+/* ---- Mini reproductor (M19) ---- */
+QToolButton#MiniPlay { border: none; border-radius: 18px; background: @acc; }
+QToolButton#MiniPlay:hover { background: @accHi; }
+QToolButton#MiniPlay[accent="break"] { background: @brk; }
+QToolButton#MiniPlay[accent="break"]:hover { background: @brkHi; }
+QToolButton#MiniAction { border: 1px solid #3a3a3a; border-radius: 14px; background: #202020; }
+QToolButton#MiniAction:hover { background: #2c2c2c; }
+QToolButton#MiniClose { border: none; border-radius: 9px; background: transparent; }
+QToolButton#MiniClose:hover { background: #2c2c2c; }
