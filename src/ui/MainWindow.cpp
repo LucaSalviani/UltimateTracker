@@ -317,22 +317,9 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         reloadGrid();
     });
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::reloadGrid);
-    // M6: nota del pomodoro que terminó. Como pista, la última nota de esa actividad hoy.
-    connect(m_session, &SessionController::pomodoroSaved, this, [this](qint64 id) {
-        m_noteTarget = id;
-        if (id <= 0) return;
-        QString hint;
-        const auto saved = m_db->pomodoro(id);
-        for (const Pomodoro& p : m_db->pomodorosBetween(m_today, m_today))
-            if (saved && p.id != id && p.folderId == saved->folderId && !p.note.isEmpty()) hint = p.note;
-        m_deck->clearNote(hint);
-    });
+    // M13: sin "¿En qué trabajaste?" en el reproductor; la nota queda en el click derecho.
+    m_deck->setNoteEnabled(false);
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::checkGoalReached);
-    connect(m_deck, &TimerDeck::noteEdited, this, [this](const QString& text) {
-        if (m_noteTarget <= 0) return;
-        m_db->setPomodoroNote(m_noteTarget, text);
-        reloadGrid();
-    });
     connect(m_session, &SessionController::pomodoroChanged, this, [this] {
         rebuildFolderMenu();
         reloadGrid();
