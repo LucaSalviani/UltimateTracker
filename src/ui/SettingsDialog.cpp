@@ -331,6 +331,9 @@ QWidget* SettingsDialog::pageAppearance()
     m_visorStyle->addItem(QStringLiteral("Oscuro siempre"));
     m_visorStyle->addItem(QStringLiteral("Sigue al tema (claro u oscuro)"));
     m_visorStyle->setCurrentIndex(m_db->setting("visor_style", 0).toInt());
+    m_originalVisor = m_visorStyle->currentIndex();
+    // M34: vista previa en vivo (si cancelás, vuelve al de antes).
+    connect(m_visorStyle, &QComboBox::currentIndexChanged, this, &SettingsDialog::visorPreview);
 
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Visor del cronómetro"), m_visorStyle);
@@ -468,6 +471,8 @@ QWidget* SettingsDialog::pageTiles()
     m_groupStyle = combo({QStringLiteral("Todos juntos, sin agrupar"), QStringLiteral("Por actividad, con títulos"),
                           QStringLiteral("Por actividad, en línea y recuadrados")},
                          m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt());
+    m_originalGroup = m_groupStyle->currentIndex();
+    connect(m_groupStyle, &QComboBox::currentIndexChanged, this, &SettingsDialog::groupPreview);   // en vivo
     m_activityColors = new QCheckBox(QStringLiteral("Colores por actividad"), w);
     m_activityColors->setChecked(m_db->setting("activity_colors", 1).toBool());
 
@@ -676,6 +681,8 @@ void SettingsDialog::reject()
     theme::setStrongAccents(m_originalStrong);
     theme::apply(m_originalTheme);   // deshace la vista previa
     tiles::style() = m_originalTiles;
+    emit visorPreview(m_originalVisor);
+    emit groupPreview(m_originalGroup);
     emit tileSizePreview(m_originalTileSize);
     QDialog::reject();
 }

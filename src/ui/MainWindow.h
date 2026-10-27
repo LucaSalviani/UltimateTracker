@@ -39,6 +39,7 @@ public:
     // M10: después del saludo: abrir con el panel de la meta, o salir.
     void openFromGreeting();
     void quitApp();
+    void restartInPlace();   // M34
 
 protected:
     void mousePressEvent(QMouseEvent*) override;
@@ -148,6 +149,7 @@ private:
     qint64       m_noteTarget = 0;
     qint64       m_lastCompletedId = 0;   // M18
     bool         m_settingsOpen = false;  // M31
+    bool         m_firstShow = true;      // M34 (antes era static: no servía con dos ventanas seguidas)
     class GoalPanel* m_goalPanel = nullptr;
     class Celebration* m_celebration = nullptr;
     class GlobalHotkey* m_hotkey = nullptr;   // M9

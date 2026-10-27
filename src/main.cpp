@@ -78,45 +78,56 @@ int main(int argc, char* argv[])
     migrateOldData(dataDir, dbPath);
     app.setProperty("dataDir", dataDir);   // para las copias de seguridad (M9)
 
-    // M20: en modo desarrollador se trabaja sobre una copia de la base.
-    QString openPath = dbPath;
-    if (devmode::enabledFlag(dataDir)) {
-        const QString sandbox = devmode::prepareSandbox(dbPath, dataDir);
-        if (!sandbox.isEmpty()) {
-            openPath = sandbox;
-            devmode::setActive(true);
+    // M34: bucle de "reinicio por dentro": al entrar o salir del modo de pruebas la
+    // ventana pide salir con kRestartCode, se cierra la base y se vuelve a abrir todo
+    // en el mismo proceso (sin depender de lanzar otro .exe).
+    int exitCode = 0;
+    for (bool first = true;; first = false) {
+        // M20: en modo desarrollador se trabaja sobre una copia de la base.
+        devmode::setActive(false);
+        QString openPath = dbPath;
+        if (devmode::enabledFlag(dataDir)) {
+            const QString sandbox = devmode::prepareSandbox(dbPath, dataDir);
+            if (!sandbox.isEmpty()) {
+                openPath = sandbox;
+                devmode::setActive(true);
+            }
         }
-    }
 
-    Database db;
-    if (!db.open(openPath)) {
-        QMessageBox::critical(nullptr, QStringLiteral("UltimateTracker"),
-                              QStringLiteral("No pude abrir la base de datos:\n%1").arg(db.lastError()));
-        return 1;
-    }
-    dayclock::setStartHour(db.setting("day_start_hour", 4).toInt());
-
-    // Tema de colores (paleta + hoja de estilos)
-    theme::apply(SettingsDialog::themeKey(&db));
-    SettingsDialog::loadTileStyle(&db);
-
-    MainWindow w(&db);
-    QObject::connect(&server, &QLocalServer::newConnection, &w, [&] {
-        while (QLocalSocket* s = server.nextPendingConnection()) {
-            s->deleteLater();
-            w.bringToFront();
+        Database db;
+        if (!db.open(openPath)) {
+            QMessageBox::critical(nullptr, QStringLiteral("UltimateTracker"),
+                                  QStringLiteral("No pude abrir la base de datos:\n%1").arg(db.lastError()));
+            return 1;
         }
-    });
-    // M10: al iniciar con Windows (o con --greeting), una vez por día, saludo primero.
-    const QStringList args = QCoreApplication::arguments();
-    const bool forceGreeting = args.contains(QStringLiteral("--greeting"));
-    if (forceGreeting || (args.contains(QStringLiteral("--autostart")) && Greeting::shouldShow(db))) {
-        auto* g = new Greeting(&db, w.geometry());
-        QObject::connect(g, &Greeting::accepted, &w, &MainWindow::openFromGreeting);
-        QObject::connect(g, &Greeting::declined, &w, &MainWindow::quitApp);
-        g->show();
-    } else {
-        w.show();
+        dayclock::setStartHour(db.setting("day_start_hour", 4).toInt());
+
+        // Tema de colores (paleta + hoja de estilos)
+        theme::apply(SettingsDialog::themeKey(&db));
+        SettingsDialog::loadTileStyle(&db);
+
+        MainWindow w(&db);
+        const QRect keep = app.property("restartGeometry").toRect();
+        if (!first && keep.isValid()) w.setGeometry(keep);   // misma posición que antes del reinicio
+        QObject::connect(&server, &QLocalServer::newConnection, &w, [&] {
+            while (QLocalSocket* s = server.nextPendingConnection()) {
+                s->deleteLater();
+                w.bringToFront();
+            }
+        });
+        // M10: al iniciar con Windows (o con --greeting), una vez por día, saludo primero.
+        const QStringList args = QCoreApplication::arguments();
+        const bool forceGreeting = args.contains(QStringLiteral("--greeting"));
+        if (first && (forceGreeting || (args.contains(QStringLiteral("--autostart")) && Greeting::shouldShow(db)))) {
+            auto* g = new Greeting(&db, w.geometry());
+            QObject::connect(g, &Greeting::accepted, &w, &MainWindow::openFromGreeting);
+            QObject::connect(g, &Greeting::declined, &w, &MainWindow::quitApp);
+            g->show();
+        } else {
+            w.show();
+        }
+        exitCode = app.exec();
+        if (exitCode != devmode::kRestartCode) break;
     }
-    return app.exec();
+    return exitCode;
 }

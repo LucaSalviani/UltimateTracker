@@ -35,6 +35,8 @@ protected:
 signals:
     void tileSizePreview(int percent);   // M23: vista previa del tamaño base
     void soundPreview(int which, int index, int volume);   // M27
+    void visorPreview(int style);                          // M34
+    void groupPreview(int style);
 
 private:
     QWidget* pageGeneral();
@@ -86,6 +88,8 @@ private:
     QCheckBox*    m_activityColors;    // M25
     QComboBox*    m_celebrationStyles[3];  // M26 → M31: pomodoro, objetivo, hito
     QComboBox*    m_visorStyle;        // M31
+    int           m_originalVisor = 0;
+    int           m_originalGroup = 1;
 
     // Cuadraditos (M18)
     QComboBox* m_tileShape;

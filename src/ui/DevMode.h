@@ -25,7 +25,9 @@ std::function<qint64()> clock();
 // Adelanta el reloj de golpe ("completar ya").
 void jump(qint64 ms);
 
-// Reinicia la app (para entrar o salir del modo).
+// M34: código de salida del bucle de eventos que pide reabrir todo en el mismo proceso.
+constexpr int kRestartCode = 7531;
+// (viejo) Reinicio lanzando otro proceso.
 void restartApp();
 
 } // namespace devmode

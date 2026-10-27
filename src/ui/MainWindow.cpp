@@ -449,6 +449,9 @@ MainWindow::~MainWindow()
 {
     qApp->removeEventFilter(this);
     if (m_cursorOverridden) QApplication::restoreOverrideCursor();
+    // M34: con el reinicio "por dentro" puede haber otra ventana después: no dejar huérfanos.
+    delete m_edgeTab;
+    if (m_mini) m_mini->deleteLater();
 }
 
 // ===========================================================================
@@ -513,6 +516,8 @@ QWidget* MainWindow::buildTitleBar()
         win::applyChrome(&dlg);
         connect(&dlg, &SettingsDialog::tileSizePreview, this, [this](int pct) { m_grid->setBaseScale(pct / 100.0); });
         connect(&dlg, &SettingsDialog::soundPreview, m_sounds, &Sounds::preview);
+        connect(&dlg, &SettingsDialog::visorPreview, m_deck, &TimerDeck::setVisorStyle);
+        connect(&dlg, &SettingsDialog::groupPreview, this, [this](int g) { m_grid->setGroupStyle(GridWidget::GroupStyle(g)); });
         // La vista previa del tema repinta todo mientras el diálogo está abierto.
         if (dlg.exec() != QDialog::Accepted) return;
         m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
@@ -1679,14 +1684,10 @@ QToolButton* MainWindow::buildDevButton(QWidget* bar)
         g->show();
     });
     menu->addSeparator();
-    menu->addAction(QStringLiteral("Volver a copiar mis datos reales (reinicia)"), this, [this] {
-        devmode::restartApp();
-        quitApp();
-    });
+    menu->addAction(QStringLiteral("Volver a copiar mis datos reales (reinicia)"), this, &MainWindow::restartInPlace);
     menu->addAction(QStringLiteral("Salir del modo desarrollador (reinicia)"), this, [this] {
         devmode::setEnabledFlag(qApp->property("dataDir").toString(), false);
-        devmode::restartApp();
-        quitApp();
+        restartInPlace();
     });
     connect(b, &QToolButton::clicked, this, [b, menu] { menu->popup(b->mapToGlobal(QPoint(0, b->height()))); });
     return b;
@@ -1950,9 +1951,8 @@ void MainWindow::toastAction(const QString& text, const QString& action, std::fu
 void MainWindow::showEvent(QShowEvent* e)
 {
     QWidget::showEvent(e);
-    static bool first = true;
-    if (first) {
-        first = false;
+    if (m_firstShow) {
+        m_firstShow = false;
         win::applyChrome(this);
         win::enableMinimize(this);
         if (m_db->setting("pinned", 0).toBool()) m_btnPin->setChecked(true);
@@ -1978,6 +1978,20 @@ void MainWindow::closeEvent(QCloseEvent* e)
     m_db->setSetting("window_pos", pos());
     e->accept();
     quitApp();
+}
+
+// M34: reinicio dentro del mismo proceso (entrar o salir del modo de pruebas).
+// main() vuelve a abrir la base (la copia o la real) y arma una ventana nueva.
+void MainWindow::restartInPlace()
+{
+    m_session->closeDay(false);
+    m_sounds->stopAlarm();
+    if (m_tray) m_tray->hide();
+    m_edgeTab->close();
+    if (m_mini) m_mini->hide();
+    qApp->setProperty("restartGeometry", geometry());
+    hide();
+    qApp->exit(devmode::kRestartCode);
 }
 
 void MainWindow::quitApp()
