@@ -53,6 +53,8 @@ public:
     // Si hay algo en marcha hoy (pomodoro, pausa o recreo), el último pomodoro
     // de hoy todavía no es "el final del día" y no se pinta rojo.
     void setTodayActive(bool active) { m_todayActive = active; update(); }
+    // M36: todavía no hay ni un pomodoro en toda la historia (mensaje de bienvenida).
+    void setFirstUse(bool on) { m_firstUse = on; update(); }
 
 signals:
     void dayActivated(const QDate& day);
@@ -89,6 +91,7 @@ private:
     void startIntro();
     void paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo) const;
     void paintDay(QPainter& p);
+    void paintEmptyDay(QPainter& p, const QRectF& area);   // M36
     void paintWeek(QPainter& p);
     void paintMonth(QPainter& p);
     qint64 studyOn(const QDate& d) const;
@@ -101,6 +104,7 @@ private:
     Zoom  m_zoom = Zoom::Day;
     QDate m_anchor;
     QDate m_today;
+    bool  m_firstUse = false;
     SizeMode m_sizeMode = SizeMode::Uniform;
 
     QVector<Pomodoro>            m_real;        // lo que viene de la base

@@ -42,6 +42,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/SystemIntegration.h src/ui/SystemIntegration.cpp
     src/ui/Greeting.h          src/ui/Greeting.cpp
     src/ui/Tiles.h             src/ui/Tiles.cpp
+    src/ui/Fade.h              src/ui/Fade.cpp
     src/ui/MiniPlayer.h        src/ui/MiniPlayer.cpp
     src/ui/DevMode.h           src/ui/DevMode.cpp
     src/ui/SettingsDialog.h    src/ui/SettingsDialog.cpp

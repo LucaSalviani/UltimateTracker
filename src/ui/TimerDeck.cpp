@@ -1,4 +1,5 @@
 #include "ui/TimerDeck.h"
+#include "ui/Fade.h"
 #include "core/Format.h"
 #include "ui/Icons.h"
 #include "ui/Theme.h"
@@ -345,6 +346,9 @@ void TimerDeck::setActivityMenu(QMenu* menu)
 void TimerDeck::setModel(const Model& m)
 {
     const bool modeChanged = m_first || m.mode != m_model.mode || m.canStart != m_model.canStart;
+    // M36: pasar de pomodoro a recreo (y vuelta) con un fundido corto
+    const bool sideChanged = !m_first && isBreakMode(m.mode) != isBreakMode(m_model.mode);
+    if (sideChanged) fade::cross(this, 240);
     m_first = false;
     m_model = m;
     m_display->setModel(m);

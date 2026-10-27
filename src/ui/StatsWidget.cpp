@@ -3,6 +3,7 @@
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "ui/ActivitiesWidget.h"
+#include "ui/Fade.h"
 #include "ui/Icons.h"
 #include "ui/Theme.h"
 
@@ -192,6 +193,8 @@ private:
             {QStringLiteral("indebido"), theme::squareFinal.darker(140)},
         };
         double lx = L;
+        if (data.totals.study <= 0)
+            emptyNote(p, bar, emptyText());
         const double ly = bar.bottom() + 24;
         for (const auto& [name, c] : legend) {
             p.setPen(Qt::NoPen);
@@ -240,6 +243,8 @@ private:
             if (data.period == StatsWidget::Period::Week || slot > 16 || d.day() % 2 == 1)
                 p.drawText(QRectF(L + i * slot - 6, y + chartH + 4, slot + 12, 14), Qt::AlignCenter, lab);
         }
+        if (data.totals.study <= 0)   // M36: estado vacío
+            emptyNote(p, QRectF(L, y, W, chartH - 10), emptyText());
         return y + chartH + 22;
     }
 
@@ -291,7 +296,34 @@ private:
                 }
             }
         }
+        if (data.totals.study <= 0)
+            emptyNote(p, QRectF(left, y, 53 * step, 7 * step), emptyText());
         return y + 7 * step + 18;
+    }
+
+    // M36: texto de "no hay nada" centrado sobre una pastilla, sin tapar el gráfico.
+    QString emptyText() const
+    {
+        if (data.from > data.today) return QStringLiteral("Este período todavía no llegó");
+        if (data.filter) return QStringLiteral("Sin horas de esta actividad en este período");
+        switch (data.period) {
+        case StatsWidget::Period::Day:  return data.from == data.today ? QStringLiteral("Hoy todavía no hay pomodoros") : QStringLiteral("Sin pomodoros este día");
+        case StatsWidget::Period::Week: return QStringLiteral("Sin horas esta semana");
+        case StatsWidget::Period::Month: return QStringLiteral("Sin horas este mes");
+        default:                        return QStringLiteral("Sin horas este año");
+        }
+    }
+    void emptyNote(QPainter& p, const QRectF& area, const QString& text)
+    {
+        p.setFont(theme::uiFont(9));
+        const QFontMetricsF fm(p.font());
+        const double w = fm.horizontalAdvance(text) + 28, h = 26;
+        const QRectF pill(area.center().x() - w / 2, area.center().y() - h / 2, w, h);
+        p.setPen(QPen(theme::line, 1));
+        p.setBrush(theme::bg);
+        p.drawRoundedRect(pill, h / 2, h / 2);
+        p.setPen(theme::textDim);
+        p.drawText(pill, Qt::AlignCenter, text);
     }
 
     void paintFolders(QPainter& p, double L, double y, double W)
@@ -308,7 +340,7 @@ private:
         if (data.rows.isEmpty()) {
             p.setPen(theme::textFaint);
             p.setFont(theme::uiFont(9));
-            p.drawText(QPointF(L, y + 14), QStringLiteral("Todavía no hay horas registradas."));
+            p.drawText(QPointF(L, y + 14), QStringLiteral("Todavía no hay actividades: creá una desde ⋯ › Actividades…"));
             return;
         }
         for (const auto& row : data.rows) {
@@ -379,6 +411,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     }
     m_periodGroup->button(int(m_period))->setChecked(true);
     connect(m_periodGroup, &QButtonGroup::idClicked, this, [this](int id) {
+        fade::cross(m_canvas);   // M36
         m_period = Period(id);
         refresh();
     });
@@ -387,15 +420,15 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     prev->setIcon(icons::get(icons::Id::ChevronLeft));
     auto* next = new QToolButton(this);
     next->setIcon(icons::get(icons::Id::ChevronRight));
-    connect(prev, &QToolButton::clicked, this, [this] { shift(-1); });
-    connect(next, &QToolButton::clicked, this, [this] { shift(+1); });
+    connect(prev, &QToolButton::clicked, this, [this] { fade::cross(m_canvas, 150); shift(-1); });
+    connect(next, &QToolButton::clicked, this, [this] { fade::cross(m_canvas, 150); shift(+1); });
     m_label = new QLabel(this);
     m_label->setMinimumWidth(170);
     m_label->setAlignment(Qt::AlignCenter);
 
     m_folder = new QComboBox(this);
     m_folder->setMinimumWidth(180);
-    connect(m_folder, &QComboBox::currentIndexChanged, this, [this](int) { refresh(); });
+    connect(m_folder, &QComboBox::currentIndexChanged, this, [this](int) { fade::cross(m_canvas, 150); refresh(); });
 
     auto* top = new QHBoxLayout;
     top->setContentsMargins(10, 8, 12, 4);

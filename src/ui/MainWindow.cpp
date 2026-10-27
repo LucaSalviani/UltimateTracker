@@ -3,6 +3,7 @@
 #include "core/Format.h"
 #include "core/Stats.h"
 #include "ui/ActivitiesWidget.h"
+#include "ui/Fade.h"
 #include "ui/FolderMenu.h"
 #include "ui/GoalPanel.h"
 #include "ui/MiniPlayer.h"
@@ -955,6 +956,7 @@ void MainWindow::setZoom(GridWidget::Zoom z)
 void MainWindow::showOverlay(Overlay o)
 {
     if (o == m_overlay) return;
+    fade::cross(m_pages);   // M36
     m_overlay = o;
     switch (o) {
     case Overlay::Stats:
@@ -1027,6 +1029,7 @@ void MainWindow::reloadGrid()
         if (!m_liveActivityScope || scope.contains(p.folderId)) pomos.append(p);
     m_grid->setData(pomos, m_db->dayTitles(m_grid->rangeStart(), m_grid->rangeEnd()));
     m_grid->setLive(m_session->currentPomodoro(), m_session->progress());
+    m_grid->setFirstUse(pomos.isEmpty() && !m_session->currentPomodoro() && m_db->studiedDays().isEmpty());   // M36
     refreshGoals();
 
     // Pomodoros de hoy ya guardados (para numerar y para las stats en vivo).

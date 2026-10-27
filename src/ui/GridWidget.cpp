@@ -643,15 +643,46 @@ void GridWidget::paintEvent(QPaintEvent*)
     }
 }
 
+// M36: estado vacío del día. Un cuadradito punteado (lo que va a aparecer) y
+// dos líneas: qué pasa acá y qué hacer. Mismo tono en todos los casos.
+void GridWidget::paintEmptyDay(QPainter& p, const QRectF& area)
+{
+    QString title, hint;
+    if (m_anchor == m_today && m_firstUse) {
+        title = QStringLiteral("Cada pomodoro se vuelve un cuadradito");
+        hint = QStringLiteral("Elegí una actividad abajo y dale play (Espacio). A las 10.000 h, experto.");
+    } else if (m_anchor == m_today) {
+        title = QStringLiteral("Hoy todavía está en blanco");
+        hint = QStringLiteral("Dale play (Espacio) para sumar el primer cuadradito");
+    } else if (m_anchor > m_today) {
+        title = QStringLiteral("Este día todavía no llegó");
+        hint = QStringLiteral("Podés dejarle un objetivo (tecla G)");
+    } else {
+        title = QStringLiteral("Día sin pomodoros");
+        hint = QStringLiteral("Descansar también es parte");
+    }
+    const double s = 34 * m_baseScale;
+    const QRectF tile(area.center().x() - s / 2, area.center().y() - s - 18, s, s);
+    p.setBrush(Qt::NoBrush);
+    QPen dash(theme::textFaint, 1.3, Qt::DashLine);
+    dash.setDashPattern({3, 3});
+    p.setPen(dash);
+    p.drawRoundedRect(tile, s * 0.18, s * 0.18);
+
+    p.setPen(theme::textDim);
+    p.setFont(theme::uiFont(10.5, QFont::DemiBold));
+    const QRectF t(area.left(), tile.bottom() + 12, area.width(), 20);
+    p.drawText(t, Qt::AlignCenter, title);
+    p.setPen(theme::textFaint);
+    p.setFont(theme::uiFont(9));
+    p.drawText(QRectF(area.left() + 10, t.bottom() + 2, area.width() - 20, 34), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, hint);
+}
+
 void GridWidget::paintDay(QPainter& p)
 {
     const QRectF area = QRectF(rect()).adjusted(14, 10, -14, -8);
     if (!m_byDay.contains(m_anchor)) {
-        p.setPen(theme::textFaint);
-        p.setFont(theme::uiFont(9));
-        p.drawText(area, Qt::AlignCenter,
-                   m_anchor == m_today ? QStringLiteral("Dale play para sumar el primer cuadradito")
-                                       : QStringLiteral("Sin pomodoros este día"));
+        paintEmptyDay(p, area);
         return;
     }
     paintSquares(p, area, m_anchor, 58, 10, 20, true);
