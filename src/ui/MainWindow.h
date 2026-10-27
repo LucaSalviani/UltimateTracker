@@ -99,6 +99,7 @@ private:
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel
     void updateObjectiveBand();
     void checkGoalReached();
+    void preloadFromGoal();   // M17
     void showDayMenu(const QDate& day, const QPoint& globalPos);
 
     // ---- festejos (M8): si en el mismo momento pasan varias cosas, gana la más importante

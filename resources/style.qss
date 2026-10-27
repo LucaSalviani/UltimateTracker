@@ -341,3 +341,12 @@ QPushButton#GreetGo { background: @acc; color: #ffffff; border: none; border-rad
 QPushButton#GreetGo:hover { background: @accHi; }
 QPushButton#GreetLater { background: transparent; color: @t3; border: 1px solid @s5; border-radius: 9px; padding: 9px 16px; }
 QPushButton#GreetLater:hover { color: @t1; border-color: @s8; }
+
+/* Objetivo por pomodoros con botones (M17) */
+QToolButton#GoalStep { background: @s3; border: 1px solid @s5; border-radius: 12px; min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; color: @t2; font-weight: 600; }
+QToolButton#GoalStep:hover { background: @s5; color: @t1; }
+QLabel#GoalRowValue { color: @t1; font-weight: 600; font-family: "Bahnschrift", "Inter", "Segoe UI"; font-size: 10.5pt; }
+QToolButton#GoalRowDelete { background: transparent; border: none; color: @t3; padding: 2px 6px; border-radius: 6px; }
+QToolButton#GoalRowDelete:hover { background: @s4; color: @t1; }
+QPushButton#GoalAdd { background: transparent; border: 1px dashed @s7; border-radius: 7px; padding: 5px 10px; color: @t2; }
+QPushButton#GoalAdd:hover { border-color: @t3; color: @t1; }

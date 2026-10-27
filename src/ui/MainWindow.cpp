@@ -312,6 +312,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     buildTray();
     reloadFolders();   // ahora que existen la grilla y el menú de actividades
     applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
+    preloadFromGoal();
 
     // ---- Señales del motor
     connect(m_session, &SessionController::stateChanged, this, &MainWindow::onStateChanged);
@@ -323,6 +324,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     // M13: sin "¿En qué trabajaste?" en el reproductor; la nota queda en el click derecho.
     m_deck->setNoteEnabled(false);
     connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::checkGoalReached);
+    connect(m_session, &SessionController::pomodoroSaved, this, &MainWindow::preloadFromGoal);
     connect(m_session, &SessionController::pomodoroChanged, this, [this] {
         rebuildFolderMenu();
         reloadGrid();
@@ -497,6 +499,7 @@ QWidget* MainWindow::buildTitleBar()
         m_grid->setGrouping(m_db->setting("group_by_activity", 1).toBool());
         applySystemSettings();
         applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
+        if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
         if (!m_session->inProgress()) {
             m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
             m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -1567,6 +1570,7 @@ void MainWindow::openGoalPanel(const QDate& day)
     if (!m_goalPanel) {
         m_goalPanel = new GoalPanel(this);
         m_goalPanel->hide();
+        m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
         connect(m_goalPanel, &GoalPanel::closeRequested, this, &MainWindow::closeGoalPanel);
         connect(m_goalPanel, &GoalPanel::dayTitleEdited, this, [this](const QDate& d, const QString& t) {
             m_db->setDayTitle(d, t);
@@ -1577,6 +1581,7 @@ void MainWindow::openGoalPanel(const QDate& day)
                 [this](const QDate& d, const QString& title, const QString& spec, int weekdays) {
             goals::save(*m_db, d, title, spec, weekdays);
             if (d == m_today) m_db->setSetting("goal_done/" + fmt::dayKey(d), QString());
+            preloadFromGoal();
             reloadGrid();
             openGoalPanel(d);   // recarga el panel con lo guardado
             toast(weekdays ? QStringLiteral("Objetivo guardado (se repite)") : QStringLiteral("Objetivo guardado"));
@@ -1713,6 +1718,22 @@ void MainWindow::checkGoalReached()
     toast(QStringLiteral("🎯 ¡Objetivo del día cumplido! %1").arg(fmt::duration(int(sec))));
     celebrate(int(Celebration::Kind::Goal), QStringLiteral("Objetivo del día"), QStringLiteral("¡Cumplido!"),
               QStringLiteral("%1 estudiadas hoy").arg(fmt::duration(int(sec))));
+}
+
+// M17: el próximo pomodoro viene cargado con la duración que pide el objetivo
+// ("3x30 + 2x50" → los tres primeros de 30, después de 50).
+void MainWindow::preloadFromGoal()
+{
+    if (m_session->state() == SessionController::State::Running ||
+        m_session->state() == SessionController::State::Paused) return;
+    const auto r = goals::resolve(m_db->goals(), m_today);
+    if (!r) return;
+    const auto parsed = goals::parse(r->spec, m_db->setting("work_min", 25).toInt());
+    if (!parsed.ok || parsed.timeMode) return;   // por tiempo: queda la duración que uses
+    const int done = int(m_db->pomodorosBetween(m_today, m_today).size());
+    if (done >= parsed.blocks.size()) return;
+    m_session->setWorkSec(parsed.blocks[done] * 60);
+    refreshDeck();
 }
 
 void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)

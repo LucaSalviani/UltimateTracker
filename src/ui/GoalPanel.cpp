@@ -11,6 +11,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -103,6 +104,13 @@ GoalPanel::GoalPanel(QWidget* parent)
     auto* cl = new QVBoxLayout(comboPage);
     cl->setContentsMargins(0, 0, 0, 0);
     cl->setSpacing(4);
+    m_rows = new ComboRows(comboPage);
+    connect(m_rows, &ComboRows::changed, this, [this] {
+        // Las filas escriben en el mismo spec de texto (así el resto no cambia).
+        m_combo->setText(m_rows->spec());
+        if (m_mode->checkedId() == 1) showModePage(1);
+    });
+    cl->addWidget(m_rows);
     cl->addWidget(m_combo);
     cl->addWidget(m_comboHint);
     m_modePages->addWidget(timePage);
@@ -113,6 +121,7 @@ GoalPanel::GoalPanel(QWidget* parent)
         if (id == 1 && m_combo->text().trimmed().isEmpty()) {
             const auto p = goals::parse(QStringLiteral("t:%1").arg(m_hours->value() * 60 + m_minutes->value()), m_pomoMin);
             if (p.ok) m_combo->setText(QStringLiteral("%1x%2").arg(p.blocks.size()).arg(m_pomoMin));
+            m_rows->setSpec(goals::normalizeCombo(m_combo->text()), m_pomoMin);
         }
         refreshPreview();
     });
@@ -248,6 +257,10 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
     m_combo->blockSignals(true);
     m_combo->setText(has && !timeMode ? goals::describe(spec).replace(QChar(0x00d7), 'x') : QString());
     m_combo->blockSignals(false);
+    {
+        QSignalBlocker b(m_rows);
+        m_rows->setSpec(has && !timeMode ? spec : QString(), pomodoroMin);
+    }
 
     const int wd = rule ? rule->weekdays : 0;
     int repeatIdx = 0;
@@ -270,12 +283,22 @@ void GoalPanel::setProgress(const Progress& p)
     refreshPreview();
 }
 
+void GoalPanel::setComboStyle(const QString& style)
+{
+    m_buttonsStyle = style != QLatin1String("text");
+    m_rows->setVisible(m_buttonsStyle);
+    m_combo->setVisible(!m_buttonsStyle);
+    m_comboHint->setVisible(!m_buttonsStyle);
+    if (m_mode->checkedId() == 1) showModePage(1);
+}
+
 // La pila mide lo que mide la página visible (no la más alta de las dos).
 void GoalPanel::showModePage(int id)
 {
     m_modePages->setCurrentIndex(id);
     for (int i = 0; i < m_modePages->count(); ++i)
         m_modePages->widget(i)->setSizePolicy(QSizePolicy::Preferred, i == id ? QSizePolicy::Preferred : QSizePolicy::Ignored);
+    m_modePages->widget(id)->adjustSize();
     m_modePages->setFixedHeight(m_modePages->widget(id)->sizeHint().height());
 }
 
@@ -285,7 +308,7 @@ QString GoalPanel::currentSpec() const
         const int total = m_hours->value() * 60 + m_minutes->value();
         return total > 0 ? QStringLiteral("t:%1").arg(total) : QString();
     }
-    return goals::normalizeCombo(m_combo->text());
+    return m_buttonsStyle ? m_rows->spec() : goals::normalizeCombo(m_combo->text());
 }
 
 int GoalPanel::currentWeekdays() const
@@ -383,4 +406,166 @@ void GoalPreview::paintEvent(QPaintEvent*)
         p.setPen(i < m_done ? theme::textDim : theme::textFaint);
         p.drawText(r, Qt::AlignCenter, QString::number(m_blocks[i]));
     }
+}
+
+// ===========================================================================
+// ComboRows (M17)
+// ===========================================================================
+namespace {
+QToolButton* stepButton(const QString& text, QWidget* parent)
+{
+    auto* b = new QToolButton(parent);
+    b->setObjectName("GoalStep");
+    b->setText(text);
+    b->setAutoRepeat(true);
+    b->setAutoRepeatDelay(350);
+    b->setAutoRepeatInterval(90);
+    b->setCursor(Qt::PointingHandCursor);
+    b->setFocusPolicy(Qt::NoFocus);
+    return b;
+}
+} // namespace
+
+ComboRows::ComboRows(QWidget* parent)
+    : QWidget(parent)
+{
+    m_scroll = new QScrollArea(this);
+    m_scroll->setObjectName("GoalScroll");
+    m_scroll->setFrameShape(QFrame::NoFrame);
+    m_scroll->setWidgetResizable(true);
+    m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* inner = new QWidget(m_scroll);
+    inner->setObjectName("GoalContent");
+    m_list = new QVBoxLayout(inner);
+    m_list->setContentsMargins(0, 0, 0, 0);
+    m_list->setSpacing(4);
+    m_list->addStretch();
+    m_scroll->setWidget(inner);
+
+    auto* add = new QPushButton(QStringLiteral("+  Agregar pomodoros"), this);
+    add->setObjectName("GoalAdd");
+    add->setCursor(Qt::PointingHandCursor);
+    connect(add, &QPushButton::clicked, this, [this] {
+        // La fila nueva arranca igual a la última (lo más común es repetir).
+        const int min = m_rows.isEmpty() ? m_defaultMin : m_rows.last().minutes;
+        addRow(1, min);
+        relayout();
+        emit changed();
+    });
+
+    auto* lay = new QVBoxLayout(this);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(4);
+    lay->addWidget(m_scroll);
+    lay->addWidget(add, 0, Qt::AlignLeft);
+}
+
+void ComboRows::setSpec(const QString& spec, int defaultMin)
+{
+    m_defaultMin = defaultMin;
+    for (const Row& r : m_rows) r.w->deleteLater();
+    m_rows.clear();
+    for (const QString& part : spec.split('+', Qt::SkipEmptyParts)) {
+        const QStringList nx = part.split('x');
+        if (nx.size() == 2 && nx[0].toInt() > 0 && nx[1].toInt() > 0) addRow(nx[0].toInt(), nx[1].toInt());
+    }
+    if (m_rows.isEmpty()) addRow(4, defaultMin);   // un punto de partida razonable
+    relayout();
+    emit changed();
+}
+
+QString ComboRows::spec() const
+{
+    QStringList parts;
+    for (const Row& r : m_rows) parts << QStringLiteral("%1x%2").arg(r.count).arg(r.minutes);
+    return parts.join('+');
+}
+
+void ComboRows::addRow(int count, int minutes)
+{
+    auto* w = new QWidget(this);
+    w->setObjectName("GoalRow");
+    auto* cm = stepButton(QStringLiteral("−"), w);
+    auto* cp = stepButton(QStringLiteral("+"), w);
+    auto* cnt = new QLabel(w);
+    cnt->setObjectName("GoalRowValue");
+    cnt->setAlignment(Qt::AlignCenter);
+    cnt->setMinimumWidth(18);
+    auto* x = new QLabel(QStringLiteral("×"), w);
+    x->setProperty("dim", true);
+    auto* mm = stepButton(QStringLiteral("−"), w);
+    auto* mp = stepButton(QStringLiteral("+"), w);
+    auto* min = new QLabel(w);
+    min->setObjectName("GoalRowValue");
+    min->setAlignment(Qt::AlignCenter);
+    min->setMinimumWidth(40);
+    auto* del = new QToolButton(w);
+    del->setObjectName("GoalRowDelete");
+    del->setText(QStringLiteral("✕"));
+    del->setToolTip(QStringLiteral("Quitar esta fila"));
+    del->setCursor(Qt::PointingHandCursor);
+    del->setFocusPolicy(Qt::NoFocus);
+
+    auto* l = new QHBoxLayout(w);
+    l->setContentsMargins(0, 0, 0, 0);
+    l->setSpacing(3);
+    l->addWidget(cm);
+    l->addWidget(cnt);
+    l->addWidget(cp);
+    l->addSpacing(4);
+    l->addWidget(x);
+    l->addSpacing(4);
+    l->addWidget(mm);
+    l->addWidget(min);
+    l->addWidget(mp);
+    l->addStretch();
+    l->addWidget(del);
+
+    m_rows.append({w, count, minutes, cnt, min});
+    auto refresh = [cnt, min, this, w] {
+        for (const Row& r : m_rows)
+            if (r.w == w) {
+                cnt->setText(QString::number(r.count));
+                min->setText(QStringLiteral("%1m").arg(r.minutes));
+            }
+    };
+    refresh();
+    auto edit = [this, w, refresh](int dc, int dm) {
+        for (Row& r : m_rows)
+            if (r.w == w) {
+                r.count = qBound(1, r.count + dc, 40);
+                // De a 5 minutos arriba de 10, de a 1 por debajo (como el reproductor).
+                if (dm > 0) r.minutes = qMin(240, r.minutes >= 10 ? (r.minutes / 5 + 1) * 5 : r.minutes + 1);
+                if (dm < 0) r.minutes = qMax(1, r.minutes > 10 ? ((r.minutes - 1) / 5) * 5 : r.minutes - 1);
+            }
+        refresh();
+        emit changed();
+    };
+    connect(cm, &QToolButton::clicked, this, [edit] { edit(-1, 0); });
+    connect(cp, &QToolButton::clicked, this, [edit] { edit(1, 0); });
+    connect(mm, &QToolButton::clicked, this, [edit] { edit(0, -1); });
+    connect(mp, &QToolButton::clicked, this, [edit] { edit(0, 1); });
+    connect(del, &QToolButton::clicked, this, [this, w] {
+        if (m_rows.size() <= 1) return;   // siempre queda al menos una
+        removeRow(w);
+        relayout();
+        emit changed();
+    });
+    m_list->insertWidget(m_list->count() - 1, w);
+}
+
+void ComboRows::removeRow(QWidget* w)
+{
+    for (int i = 0; i < m_rows.size(); ++i)
+        if (m_rows[i].w == w) { m_rows.removeAt(i); break; }
+    w->deleteLater();
+}
+
+// Hasta 3 filas se ven enteras; con más, la lista scrollea en ese espacio.
+void ComboRows::relayout()
+{
+    const int rowH = m_rows.isEmpty() ? 28 : qMax(28, m_rows.first().w->sizeHint().height());
+    const int visible = qMin(3, int(m_rows.size()));
+    m_scroll->setFixedHeight(visible * rowH + qMax(0, visible - 1) * m_list->spacing() + 4);
+    updateGeometry();
 }

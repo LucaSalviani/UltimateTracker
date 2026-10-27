@@ -141,6 +141,11 @@ QWidget* SettingsDialog::pageGeneral()
     form->addRow(QStringLiteral("Comodines por semana"), m_jokers);
     form->addRow(QStringLiteral("Formato de la fecha"), m_dateFormat);
     form->addRow(QStringLiteral("El día empieza a las"), m_dayStart);
+    m_goalInput = new QComboBox(w);
+    m_goalInput->addItem(QStringLiteral("Botones (cantidad × minutos)"), "buttons");
+    m_goalInput->addItem(QStringLiteral("Texto (3x30 + 2x25)"), "text");
+    m_goalInput->setCurrentIndex(m_db->setting("goal_input", "buttons").toString() == QLatin1String("text") ? 1 : 0);
+    form->addRow(QStringLiteral("Objetivo por pomodoros"), m_goalInput);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("General"), w));
@@ -348,6 +353,7 @@ void SettingsDialog::accept()
     m_db->setSetting("jokers_per_week", m_jokers->value());
     m_db->setSetting("date_format", m_dateFormat->currentIndex() == 0 ? "numeric" : "long");
     m_db->setSetting("day_start_hour", m_dayStart->value());
+    m_db->setSetting("goal_input", m_goalInput->currentData().toString());
 
     m_db->setSetting("timer_wheel", m_wheel->isChecked() ? 1 : 0);
     m_db->setSetting("timer_wheel_step", m_wheelStep->value());
