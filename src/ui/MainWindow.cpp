@@ -41,6 +41,19 @@
 // Detalles específicos de Windows 11: esquinas redondeadas y sombra en la
 // ventana sin marco, "siempre visible" sin recrear la ventana y traer al frente.
 // ---------------------------------------------------------------------------
+// Ajustes › Cronómetro → reproductor
+static TimerDeck::AdjustOptions deckAdjustFrom(Database* db)
+{
+    TimerDeck::AdjustOptions o;
+    o.wheel = db->setting("timer_wheel", 1).toBool();
+    o.wheelStep = db->setting("timer_wheel_step", 1).toInt();
+    o.type = db->setting("timer_type", 1).toBool();
+    o.buttons = db->setting("timer_buttons", 1).toBool();
+    o.stepSmall = db->setting("timer_step_small", 1).toInt();
+    o.stepBig = db->setting("timer_step_big", 5).toInt();
+    return o;
+}
+
 namespace win {
 void applyChrome(QWidget* w)
 {
@@ -373,6 +386,7 @@ QWidget* MainWindow::buildTitleBar()
         m_resizable = m_db->setting("resizable", 1).toBool();
         if (!m_resizable) setEdgeCursor({});
         m_stats->setJokersPerWeek(m_jokers);
+        m_deck->setAdjustOptions(deckAdjustFrom(m_db));
         if (!m_session->inProgress()) {
             m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
             m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -476,6 +490,7 @@ QWidget* MainWindow::buildDeck()
     connect(m_folderMenu, &FolderMenu::folderChosen, this, &MainWindow::chooseFolder);
     connect(m_folderMenu, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
     m_deck->setActivityMenu(m_folderMenu);
+    m_deck->setAdjustOptions(deckAdjustFrom(m_db));
 
     connect(m_deck, &TimerDeck::playClicked, this, [this] {
         if (m_session->state() == SessionController::State::Paused) m_session->resume();

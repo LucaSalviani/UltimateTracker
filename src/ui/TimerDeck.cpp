@@ -4,7 +4,13 @@
 #include "ui/Theme.h"
 
 #include <QHBoxLayout>
+#include <QIntValidator>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMouseEvent>
+#include <QRegularExpressionValidator>
+#include <QWheelEvent>
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
@@ -63,13 +69,15 @@ TimerDeck::TimerDeck(QWidget* parent)
 
     m_display = new DeckDisplay(this);
 
-    // − 25 min +
+    // [−1] [−5]  25 min  [+5] [+1]   (los de afuera son opcionales)
     m_stepper = new QWidget(this);
     m_minus = new QToolButton(m_stepper);
     m_plus = new QToolButton(m_stepper);
+    m_minusFine = new QToolButton(m_stepper);
+    m_plusFine = new QToolButton(m_stepper);
     m_minus->setText(QStringLiteral("−"));
     m_plus->setText(QStringLiteral("+"));
-    for (QToolButton* b : {m_minus, m_plus}) {
+    for (QToolButton* b : {m_minus, m_plus, m_minusFine, m_plusFine}) {
         b->setObjectName("DeckStep");
         b->setFocusPolicy(Qt::NoFocus);
         b->setAutoRepeat(true);
@@ -77,6 +85,8 @@ TimerDeck::TimerDeck(QWidget* parent)
         b->setAutoRepeatInterval(90);
         b->setCursor(Qt::PointingHandCursor);
     }
+    m_minusFine->setProperty("fine", true);
+    m_plusFine->setProperty("fine", true);
     m_stepLabel = new QLabel(m_stepper);
     m_stepLabel->setObjectName("DeckStepLabel");
     m_stepLabel->setAlignment(Qt::AlignCenter);
@@ -85,19 +95,49 @@ TimerDeck::TimerDeck(QWidget* parent)
     stepLay->setContentsMargins(0, 0, 0, 0);
     stepLay->setSpacing(6);
     stepLay->addStretch();
+    stepLay->addWidget(m_minusFine);
     stepLay->addWidget(m_minus);
     stepLay->addWidget(m_stepLabel);
     stepLay->addWidget(m_plus);
+    stepLay->addWidget(m_plusFine);
     stepLay->addStretch();
-    // De a 5 minutos arriba de 10, de a 1 por debajo.
     connect(m_minus, &QToolButton::clicked, this, [this] {
         const int v = m_model.durationMin;
+        if (m_adjust.buttons) { nudge(-m_adjust.stepBig); return; }
+        // Clásico: de a 5 minutos arriba de 10, de a 1 por debajo.
         emit durationChanged(qMax(1, v > 10 ? ((v - 1) / 5) * 5 : v - 1));
     });
     connect(m_plus, &QToolButton::clicked, this, [this] {
         const int v = m_model.durationMin;
+        if (m_adjust.buttons) { nudge(m_adjust.stepBig); return; }
         emit durationChanged(qMin(240, v >= 10 ? (v / 5 + 1) * 5 : v + 1));
     });
+    connect(m_minusFine, &QToolButton::clicked, this, [this] { nudge(-m_adjust.stepSmall); });
+    connect(m_plusFine, &QToolButton::clicked, this, [this] { nudge(m_adjust.stepSmall); });
+
+    // Rueda y click sobre el visor
+    connect(m_display, &DeckDisplay::wheelTurned, this, [this](int delta) {
+        if (!editable() || !m_adjust.wheel) return;
+        m_wheelAccum += delta;                 // touchpads mandan pasos chiquitos
+        const int notches = m_wheelAccum / 120;
+        if (notches == 0) return;
+        m_wheelAccum -= notches * 120;
+        nudge(notches * m_adjust.wheelStep);
+    });
+    connect(m_display, &DeckDisplay::digitsClicked, this, [this] {
+        if (editable() && m_adjust.type) beginTyping();
+    });
+
+    // Editor para escribir los minutos: "45", "90" o "1:30"
+    m_editor = new QLineEdit(m_display);
+    m_editor->setObjectName("DeckEditor");
+    m_editor->setAlignment(Qt::AlignCenter);
+    m_editor->setValidator(new QRegularExpressionValidator(QRegularExpression(QStringLiteral("^\\d{0,3}(:\\d{0,2})?$")), m_editor));
+    m_editor->setToolTip(QStringLiteral("Minutos (o h:mm). Enter para confirmar, Esc para cancelar"));
+    m_editor->hide();
+    m_editor->installEventFilter(this);
+    connect(m_editor, &QLineEdit::returnPressed, this, [this] { finishTyping(true); });
+    connect(m_editor, &QLineEdit::editingFinished, this, [this] { if (m_editor->isVisible()) finishTyping(true); });
 
     // Transporte: acción secundaria "hefty" + botón grande
     m_secondary = new QPushButton(this);
@@ -150,6 +190,74 @@ TimerDeck::TimerDeck(QWidget* parent)
     lay->addLayout(transport);
 
     applyMode();
+}
+
+void TimerDeck::setAdjustOptions(const AdjustOptions& o)
+{
+    m_adjust = o;
+    m_minusFine->setText(QStringLiteral("−%1").arg(o.stepSmall));
+    m_plusFine->setText(QStringLiteral("+%1").arg(o.stepSmall));
+    m_minus->setText(o.buttons ? QStringLiteral("−%1").arg(o.stepBig) : QStringLiteral("−"));
+    m_plus->setText(o.buttons ? QStringLiteral("+%1").arg(o.stepBig) : QStringLiteral("+"));
+    m_minus->setProperty("labeled", o.buttons);
+    m_plus->setProperty("labeled", o.buttons);
+    for (QWidget* w : {static_cast<QWidget*>(m_minus), static_cast<QWidget*>(m_plus)}) repolish(w);
+    m_minusFine->setVisible(o.buttons);
+    m_plusFine->setVisible(o.buttons);
+    applyMode();
+}
+
+bool TimerDeck::editable() const
+{
+    return (m_model.mode == Mode::Ready && m_model.canStart) || m_model.mode == Mode::BreakReady;
+}
+
+void TimerDeck::nudge(int minutes)
+{
+    const int v = qBound(1, m_model.durationMin + minutes, 240);
+    if (v != m_model.durationMin) emit durationChanged(v);
+}
+
+void TimerDeck::beginTyping()
+{
+    QFont f = m_editor->font();
+    const QRectF r = m_display->digitsRect();
+    f.setFamilies({QStringLiteral("Bahnschrift"), QStringLiteral("Inter"), QStringLiteral("Segoe UI")});
+    f.setPixelSize(qMax(14, int(qMin(r.height() * 0.62, r.width() * 0.26))));
+    f.setWeight(QFont::DemiBold);
+    m_editor->setFont(f);
+    const int w = int(r.width() * 0.62), h = int(f.pixelSize() * 1.35);
+    m_editor->setGeometry(int(r.center().x() - w / 2), int(r.center().y() - h / 2), w, h);
+    m_editor->setText(QString::number(m_model.durationMin));
+    m_editor->show();
+    m_editor->setFocus();
+    m_editor->selectAll();
+}
+
+void TimerDeck::finishTyping(bool commit)
+{
+    if (!m_editor->isVisible()) return;
+    const QString t = m_editor->text().trimmed();
+    m_editor->hide();
+    if (!commit || t.isEmpty()) return;
+    int minutes = 0;
+    if (t.contains(':')) {
+        const QStringList hm = t.split(':');
+        minutes = hm.value(0).toInt() * 60 + hm.value(1).toInt();
+    } else {
+        minutes = t.toInt();
+    }
+    if (minutes > 0) emit durationChanged(qBound(1, minutes, 240));
+}
+
+bool TimerDeck::eventFilter(QObject* o, QEvent* e)
+{
+    if (o == m_editor && e->type() == QEvent::KeyPress &&
+        static_cast<QKeyEvent*>(e)->key() == Qt::Key_Escape) {
+        finishTyping(false);
+        return true;
+    }
+    return QWidget::eventFilter(o, e);
 }
 
 void TimerDeck::setActivityMenu(QMenu* menu)
@@ -246,6 +354,12 @@ void TimerDeck::applyMode()
     m_stepper->setVisible((m == Mode::Ready && !blocked) || m == Mode::BreakReady);
     m_stepper->setToolTip(m == Mode::Ready ? QStringLiteral("Duración del pomodoro")
                                            : QStringLiteral("Duración del recreo"));
+    if (!editable()) finishTyping(false);
+    QStringList hints;
+    if (editable() && m_adjust.wheel) hints << QStringLiteral("rueda para ajustar");
+    if (editable() && m_adjust.type) hints << QStringLiteral("click para escribir los minutos");
+    m_display->setToolTip(hints.isEmpty() ? QString() : QStringLiteral("Duración: ") + hints.join(QStringLiteral(" · ")));
+    m_display->setCursor(editable() && m_adjust.type ? Qt::IBeamCursor : Qt::ArrowCursor);
 
     for (QWidget* w : {static_cast<QWidget*>(m_primary), static_cast<QWidget*>(m_secondary)}) repolish(w);
 }
@@ -272,6 +386,25 @@ void DeckDisplay::setModel(const TimerDeck::Model& m)
     if (animate && !m_anim.isActive()) m_anim.start();
     if (!animate && m_anim.isActive()) m_anim.stop();
     update();
+}
+
+QRectF DeckDisplay::digitsRect() const
+{
+    const QRectF R = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    const qreal pad = qMax(10.0, R.width() * 0.05);
+    return QRectF(R.left() + pad, R.top() + pad + 20, R.width() - 2 * pad, R.height() - 2 * pad - 20 - 34);
+}
+
+void DeckDisplay::wheelEvent(QWheelEvent* e)
+{
+    emit wheelTurned(e->angleDelta().y());
+    e->accept();
+}
+
+void DeckDisplay::mousePressEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton && digitsRect().contains(e->position())) emit digitsClicked();
+    QWidget::mousePressEvent(e);
 }
 
 void DeckDisplay::paintReel(QPainter& p, const QPointF& c, qreal r, bool spinning) const
@@ -370,7 +503,7 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     }
 
     // ---- Zona central
-    const QRectF center(R.left() + pad, R.top() + pad + 20, W - 2 * pad, H - 2 * pad - 20 - 34);
+    const QRectF center = digitsRect();
     const int shown = (mode == Mode::Ready || mode == Mode::BreakReady)
                           ? m_model.durationMin * 60 : m_model.remainingSec;
 
@@ -384,7 +517,7 @@ void DeckDisplay::paintEvent(QPaintEvent*)
         const qreal total = s * 0.9 + s * 0.35 + tw;
         qreal x = center.center().x() - total / 2;
         const qreal y = center.center().y() - s / 2;
-        QColor c = theme::text;
+        QColor c(0xe8, 0xe8, 0xe8);   // el visor es siempre oscuro
         if (!blinkOn) c.setAlphaF(0.55);
         p.setPen(Qt::NoPen);
         p.setBrush(c);
@@ -443,7 +576,7 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     if (frac > 0) {
         p.setBrush(accent);
         p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * frac, track.height()), 2, 2);
-        p.setBrush(theme::text);
+        p.setBrush(QColor(0xe8, 0xe8, 0xe8));
         p.drawEllipse(QPointF(track.left() + track.width() * frac, track.center().y()), 4.5, 4.5);
     }
     // Tiempos como en Spotify: transcurrido a la izquierda, total a la derecha

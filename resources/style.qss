@@ -248,6 +248,19 @@ QToolButton#DeckStep {
     color: @t2;
 }
 QToolButton#DeckStep:hover { background: @s5; }
+/* Con números (−5 / +5) el botón se estira un poco */
+QToolButton#DeckStep[labeled="true"] { min-width: 36px; max-width: 36px; font-size: 10pt; }
+/* Los de afuera, de paso fino: más chicos y discretos */
+QToolButton#DeckStep[fine="true"] {
+    min-width: 32px; max-width: 32px; min-height: 24px; max-height: 24px;
+    border-radius: 12px; font-size: 9pt; color: @t3; background: @s2; border-color: @s4;
+}
+QToolButton#DeckStep[fine="true"]:hover { background: @s4; color: @t1; }
+QLineEdit#DeckEditor {
+    background: #101010; color: #f0f0f0;
+    border: 1px solid @acc; border-radius: 8px;
+    selection-background-color: @accLo; selection-color: #ffffff;
+}
 QLabel#DeckStepLabel {
     font-family: "Bahnschrift", "Inter", "Segoe UI";
     font-size: 12pt;

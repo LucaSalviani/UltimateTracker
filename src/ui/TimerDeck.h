@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QLabel;
+class QLineEdit;
 class QMenu;
 class QPushButton;
 class QToolButton;
@@ -34,8 +35,19 @@ public:
         bool    canStart = true;     // false viendo otro día: solo se registra hoy
     };
 
+    // Formas de ajustar la duración antes de arrancar (Ajustes › Cronómetro).
+    struct AdjustOptions {
+        bool wheel = true;       // rueda del mouse sobre el tiempo
+        int  wheelStep = 1;      // minutos por paso de rueda
+        bool type = true;        // click en el tiempo para escribirlo
+        bool buttons = true;     // botones de paso fino a los costados
+        int  stepSmall = 1;      // botones de afuera
+        int  stepBig = 5;        // botones de adentro
+    };
+
     explicit TimerDeck(QWidget* parent = nullptr);
     void setModel(const Model& m);
+    void setAdjustOptions(const AdjustOptions& o);
     void setActivityMenu(QMenu* menu);
 
 signals:
@@ -49,10 +61,18 @@ signals:
     void durationChanged(int minutes);
     void goTodayClicked();
 
+protected:
+    bool eventFilter(QObject* o, QEvent* e) override;
+
 private:
     void applyMode();
+    bool editable() const;
+    void nudge(int minutes);           // suma/resta y emite durationChanged
+    void beginTyping();
+    void finishTyping(bool commit);
 
     Model m_model;
+    AdjustOptions m_adjust;
     bool  m_first = true;
 
     QToolButton* m_activity;
@@ -60,7 +80,11 @@ private:
     QWidget*     m_stepper;
     QToolButton* m_minus;
     QToolButton* m_plus;
+    QToolButton* m_minusFine;   // botones de afuera (paso chico)
+    QToolButton* m_plusFine;
     QLabel*      m_stepLabel;
+    QLineEdit*   m_editor;      // escribir los minutos sobre el visor
+    int          m_wheelAccum = 0;
     QPushButton* m_secondary;
     QToolButton* m_primary;
 };
@@ -71,9 +95,17 @@ class DeckDisplay : public QWidget {
 public:
     explicit DeckDisplay(QWidget* parent = nullptr);
     void setModel(const TimerDeck::Model& m);
+    // Zona de los dígitos grandes (para poner el editor encima).
+    QRectF digitsRect() const;
+
+signals:
+    void wheelTurned(int angleDelta);
+    void digitsClicked();
 
 protected:
     void paintEvent(QPaintEvent*) override;
+    void wheelEvent(QWheelEvent* e) override;
+    void mousePressEvent(QMouseEvent* e) override;
 
 private:
     void paintReel(class QPainter& p, const QPointF& c, qreal r, bool spinning) const;
