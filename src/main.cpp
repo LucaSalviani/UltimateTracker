@@ -1,6 +1,7 @@
 #include "core/Database.h"
 #include "core/DayClock.h"
 #include "ui/MainWindow.h"
+#include "ui/Theme.h"
 
 #include <QApplication>
 #include <QDir>
@@ -28,30 +29,6 @@ void migrateOldData(const QString& newDir, const QString& newDb)
         QFile::copy(oldDb + QStringLiteral("-wal"), newDb + QStringLiteral("-wal"));
 }
 
-// Paleta gris: Fusion + estos colores evitan los acentos azules y las
-// selecciones redondeadas del estilo nativo de Windows 11.
-QPalette darkPalette()
-{
-    QPalette p;
-    const QColor bg(0x1c, 0x1c, 0x1c), base(0x22, 0x22, 0x22), text(0xe8, 0xe8, 0xe8);
-    p.setColor(QPalette::Window, bg);
-    p.setColor(QPalette::WindowText, text);
-    p.setColor(QPalette::Base, base);
-    p.setColor(QPalette::AlternateBase, bg);
-    p.setColor(QPalette::Text, text);
-    p.setColor(QPalette::Button, QColor(0x2a, 0x2a, 0x2a));
-    p.setColor(QPalette::ButtonText, text);
-    p.setColor(QPalette::ToolTipBase, QColor(0x2b, 0x2b, 0x2b));
-    p.setColor(QPalette::ToolTipText, text);
-    p.setColor(QPalette::Highlight, QColor(0x3a, 0x3a, 0x3a));
-    p.setColor(QPalette::HighlightedText, Qt::white);
-    p.setColor(QPalette::PlaceholderText, QColor(0x70, 0x70, 0x70));
-    p.setColor(QPalette::Link, text);
-    p.setColor(QPalette::Disabled, QPalette::Text, QColor(0x5a, 0x5a, 0x5a));
-    p.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(0x5a, 0x5a, 0x5a));
-    p.setColor(QPalette::Disabled, QPalette::WindowText, QColor(0x5a, 0x5a, 0x5a));
-    return p;
-}
 } // namespace
 
 int main(int argc, char* argv[])
@@ -63,7 +40,6 @@ int main(int argc, char* argv[])
     // Vive en la bandeja: cerrar la ventana con algo en marcha no cierra la app.
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
-    QApplication::setPalette(darkPalette());
 
     // Una sola instancia: si ya está abierta, la traemos al frente.
     const QString serverName = QStringLiteral("ultimatetracker-") + qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER"));
@@ -95,8 +71,8 @@ int main(int argc, char* argv[])
     }
     dayclock::setStartHour(db.setting("day_start_hour", 4).toInt());
 
-    QFile qss(QStringLiteral(":/style.qss"));
-    if (qss.open(QIODevice::ReadOnly)) app.setStyleSheet(QString::fromUtf8(qss.readAll()));
+    // Tema de colores (paleta + hoja de estilos)
+    theme::apply(db.setting("theme", "dark").toString());
 
     MainWindow w(&db);
     QObject::connect(&server, &QLocalServer::newConnection, &w, [&] {

@@ -196,7 +196,7 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
         p.setBrush(theme::squareDone);
         p.setPen(QPen(theme::squareDoneEdge, 1));
         p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-        textColor = theme::textDim;
+        textColor = theme::mix(theme::squareDone, theme::squareDone.lightness() < 128 ? Qt::white : Qt::black, 0.6);
         break;
     case PomoStatus::Final:
         p.setBrush(theme::squareFinal);
@@ -276,7 +276,7 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         const double h = qMin(a.height(), b.height()) * 0.56;
         const double cy = b.bottom() - qMin(a.height(), b.height()) / 2;
         p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0x6a, 0x6a, 0x6a));
+        p.setBrush(theme::bridge);
         p.drawRect(QRectF(a.right() - 3, cy - h / 2, b.left() - a.right() + 6, h));
     }
     for (const Placed& pl : placed) {
@@ -337,11 +337,11 @@ void GridWidget::paintWeek(QPainter& p)
         if (hover) {
             // Toda la columna se ilumina: se nota que se puede clickear.
             p.setPen(Qt::NoPen);
-            p.setBrush(QColor(0x23, 0x23, 0x23));
+            p.setBrush(theme::mix(theme::bg, theme::text, 0.03));
             p.drawRoundedRect(col.adjusted(1, 0, -1, 0), 8, 8);
         }
-        p.setPen(hover ? QPen(QColor(0x6a, 0x6a, 0x6a), 1) : QPen(Qt::NoPen));
-        p.setBrush(hover ? QColor(0x3a, 0x3a, 0x3a) : (isToday ? theme::surfaceHi : theme::surface));
+        p.setPen(hover ? QPen(theme::hoverEdge, 1) : QPen(Qt::NoPen));
+        p.setBrush(hover ? theme::hover : (isToday ? theme::surfaceHi : theme::surface));
         p.drawRoundedRect(header.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6);
 
         p.setFont(theme::uiFont(9.5, isToday ? QFont::DemiBold : QFont::Normal));
@@ -402,8 +402,8 @@ void GridWidget::paintMonth(QPainter& p)
             const bool isToday = d == m_today;
 
             const bool hover = d == m_hoverDay;
-            p.setPen(hover ? QPen(QColor(0x6a, 0x6a, 0x6a), 1) : QPen(Qt::NoPen));
-            p.setBrush(hover ? QColor(0x34, 0x34, 0x34)
+            p.setPen(hover ? QPen(theme::hoverEdge, 1) : QPen(Qt::NoPen));
+            p.setBrush(hover ? theme::hover
                              : (isToday ? theme::surfaceHi : (inMonth ? theme::surface : theme::bg)));
             p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6);
             if (hover) {

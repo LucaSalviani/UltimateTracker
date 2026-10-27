@@ -157,11 +157,21 @@ void draw(QPainter& p, Id id, const QColor& c)
 // así nunca se escala un bitmap y se ve nítido siempre.
 class VectorIconEngine : public QIconEngine {
 public:
-    VectorIconEngine(Id id, const QColor& color) : m_id(id), m_color(color) {}
+    VectorIconEngine(Id id, const QColor& color, Ink ink) : m_id(id), m_color(color), m_ink(ink) {}
+
+    QColor resolved() const
+    {
+        if (m_color.isValid()) return m_color;
+        switch (m_ink) {
+        case Ink::Text: return theme::text;
+        case Ink::Dim:  return theme::textDim;
+        default:        return theme::iconInk;
+        }
+    }
 
     void paint(QPainter* p, const QRect& rect, QIcon::Mode mode, QIcon::State) override
     {
-        QColor c = m_color;
+        QColor c = resolved();
         if (mode == QIcon::Disabled) c.setAlphaF(c.alphaF() * 0.35);
         p->save();
         p->setRenderHint(QPainter::Antialiasing);
@@ -186,18 +196,26 @@ public:
         return pm;
     }
 
-    QIconEngine* clone() const override { return new VectorIconEngine(m_id, m_color); }
+    QIconEngine* clone() const override { return new VectorIconEngine(m_id, m_color, m_ink); }
+    // Sin caché: así un cambio de tema se ve al instante.
+    QString key() const override { return QStringLiteral("VectorIconEngine"); }
 
 private:
     Id     m_id;
     QColor m_color;
+    Ink    m_ink;
 };
 
 } // namespace
 
-QIcon get(Id id, const QColor& color)
+QIcon get(Id id, Ink ink)
 {
-    return QIcon(new VectorIconEngine(id, color));
+    return QIcon(new VectorIconEngine(id, QColor(), ink));
+}
+
+QIcon get(Id id, const QColor& fixedColor)
+{
+    return QIcon(new VectorIconEngine(id, fixedColor, Ink::Icon));
 }
 
 } // namespace icons

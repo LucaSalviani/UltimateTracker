@@ -12,6 +12,10 @@ enum class Id {
     Skip, Mute,
 };
 
-QIcon get(Id id, const QColor& color = QColor(0xd8, 0xd8, 0xd8));
+// Color que sigue al tema (se resuelve cada vez que se dibuja).
+enum class Ink { Icon, Text, Dim };
+
+QIcon get(Id id, Ink ink = Ink::Icon);
+QIcon get(Id id, const QColor& fixedColor);   // color fijo (ej. blanco sobre el botón rojo)
 
 } // namespace icons

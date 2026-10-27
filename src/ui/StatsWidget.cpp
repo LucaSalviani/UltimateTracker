@@ -160,7 +160,7 @@ private:
         };
         for (const Interval& i : data.intervals)
             block(i.startedAt, i.startedAt + i.seconds,
-                  i.kind == IntervalKind::Break ? QColor(0x55, 0x55, 0x55) : theme::squareFinal.darker(140));
+                  i.kind == IntervalKind::Break ? theme::timelineBreak : theme::squareFinal.darker(140));
         for (const Pomodoro& pm : data.pomos) {
             if (data.filter && !data.filter->contains(pm.folderId)) continue;
             block(pm.startedAt, qMax(pm.endedAt, pm.startedAt + pm.studiedSec), theme::squareFill);
@@ -176,7 +176,7 @@ private:
         // Leyenda
         const QPair<QString, QColor> legend[3] = {
             {QStringLiteral("estudio"), theme::squareFill},
-            {QStringLiteral("recreo"), QColor(0x55, 0x55, 0x55)},
+            {QStringLiteral("recreo"), theme::timelineBreak},
             {QStringLiteral("indebido"), theme::squareFinal.darker(140)},
         };
         double lx = L;
@@ -249,11 +249,11 @@ private:
         auto shade = [](qint64 sec) {
             const double h = sec / 3600.0;
             if (sec <= 0) return theme::surface;
-            if (h < 1)    return QColor(0x45, 0x45, 0x45);
-            if (h < 2.5)  return QColor(0x6a, 0x6a, 0x6a);
-            if (h < 4.5)  return QColor(0x95, 0x95, 0x95);
-            if (h < 7)    return QColor(0xc4, 0xc4, 0xc4);
-            return QColor(0xf2, 0xf2, 0xf2);
+            if (h < 1)    return theme::heat[0];
+            if (h < 2.5)  return theme::heat[1];
+            if (h < 4.5)  return theme::heat[2];
+            if (h < 7)    return theme::heat[3];
+            return theme::heat[4];
         };
 
         int lastMonth = -1;

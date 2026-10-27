@@ -54,7 +54,7 @@ TimerDeck::TimerDeck(QWidget* parent)
 
     m_activity = new QToolButton(this);
     m_activity->setObjectName("DeckActivity");
-    m_activity->setIcon(icons::get(icons::Id::Folder, theme::textDim));
+    m_activity->setIcon(icons::get(icons::Id::Folder, icons::Ink::Dim));
     m_activity->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     m_activity->setPopupMode(QToolButton::InstantPopup);
     m_activity->setFocusPolicy(Qt::NoFocus);
@@ -208,7 +208,7 @@ void TimerDeck::applyMode()
     if (blocked) m_primary->setVisible(false);
 
     // Acción secundaria
-    const QColor ink = theme::text;
+    const icons::Ink ink = icons::Ink::Text;
     m_secondary->setVisible(m != Mode::Ready || blocked);
     m_secondary->setProperty("accent", brk ? "break" : "pomo");
     switch (m) {

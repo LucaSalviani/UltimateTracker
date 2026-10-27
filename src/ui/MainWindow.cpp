@@ -48,7 +48,7 @@ void applyChrome(QWidget* w)
     HWND hwnd = reinterpret_cast<HWND>(w->winId());
     const DWORD round = 2;     // DWMWCP_ROUND
     DwmSetWindowAttribute(hwnd, 33 /*DWMWA_WINDOW_CORNER_PREFERENCE*/, &round, sizeof(round));
-    const BOOL dark = TRUE;
+    const BOOL dark = theme::current().light ? FALSE : TRUE;
     DwmSetWindowAttribute(hwnd, 20 /*DWMWA_USE_IMMERSIVE_DARK_MODE*/, &dark, sizeof(dark));
     const MARGINS shadow = {1, 1, 1, 1};
     DwmExtendFrameIntoClientArea(hwnd, &shadow);
@@ -363,24 +363,19 @@ QWidget* MainWindow::buildTitleBar()
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
     menu->addAction(QStringLiteral("Ajustes…"), this, [this] {
-        SettingsDialog dlg(m_db->setting("work_min", 25).toInt(), m_db->setting("break_min", 10).toInt(),
-                           m_jokers, m_resizable, m_numericDate, this);
+        SettingsDialog dlg(m_db, this);
         win::applyChrome(&dlg);
+        // La vista previa del tema repinta todo mientras el diálogo está abierto.
         if (dlg.exec() != QDialog::Accepted) return;
-        m_db->setSetting("work_min", dlg.workMinutes());
-        m_db->setSetting("break_min", dlg.breakMinutes());
-        m_db->setSetting("jokers_per_week", dlg.jokersPerWeek());
-        m_db->setSetting("resizable", dlg.resizable() ? 1 : 0);
-        m_db->setSetting("date_format", dlg.numericDate() ? "numeric" : "long");
-        m_numericDate = dlg.numericDate();
+        m_numericDate = m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric");
         refreshBand();
-        m_jokers = dlg.jokersPerWeek();
-        m_resizable = dlg.resizable();
+        m_jokers = m_db->setting("jokers_per_week", 2).toInt();
+        m_resizable = m_db->setting("resizable", 1).toBool();
         if (!m_resizable) setEdgeCursor({});
         m_stats->setJokersPerWeek(m_jokers);
         if (!m_session->inProgress()) {
-            m_session->setWorkSec(dlg.workMinutes() * 60);
-            m_session->setBreakSec(dlg.breakMinutes() * 60);
+            m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
+            m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
             refreshDeck();
         }
     });
