@@ -219,7 +219,7 @@ QCheckBox::indicator {
     border-radius: 4px;
     background: @s2;
 }
-QCheckBox::indicator:checked { background: @t1; border-color: @t1; }
+QCheckBox::indicator:checked { background: @t1; border-color: @t1; image: url(@checkImg); }
 
 /* ---- Reproductor (cronómetro) ----------------------------------------- */
 QWidget#Deck {

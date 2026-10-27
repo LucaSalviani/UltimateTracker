@@ -2,6 +2,10 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QPainter>
+#include <QImage>
+#include <QStandardPaths>
+#include <QDir>
 #include <QHash>
 #include <QPalette>
 #include <QRegularExpression>
@@ -118,6 +122,21 @@ void apply(const QString& key)
         {"danger", QColor(0xc4, 0x2b, 0x1c)}, {"dangerBg", mix(B, QColor(0xc4, 0x2b, 0x1c), 0.25)},
         {"dangerEdge", mix(B, QColor(0xc4, 0x2b, 0x1c), 0.5)},
     };
+    // Tilde de las casillas: un PNG chiquito del color del fondo (contrasta con el relleno).
+    // PNG y no SVG: no depende del plugin de SVG de Qt.
+    {
+        const QString path = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+                                 .filePath(QStringLiteral("ultimatetracker-check-%1.png").arg(P.key));
+        QImage img(14, 14, QImage::Format_ARGB32_Premultiplied);
+        img.fill(Qt::transparent);
+        QPainter g(&img);
+        g.setRenderHint(QPainter::Antialiasing);
+        g.setPen(QPen(B, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        g.drawPolyline(QPolygonF({{2.8, 7.4}, {5.7, 10.2}, {11.4, 4.0}}));
+        g.end();
+        img.save(path, "PNG");
+        qss.replace(QStringLiteral("@checkImg"), QDir::fromNativeSeparators(path));
+    }
     // Reemplazo de los tokens más largos primero (@accHi antes que @acc).
     QStringList keys = tokens.keys();
     std::sort(keys.begin(), keys.end(), [](const QString& a, const QString& b) { return a.size() > b.size(); });

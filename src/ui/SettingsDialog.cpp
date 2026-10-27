@@ -229,7 +229,7 @@ QWidget* SettingsDialog::pageSystem()
     auto* w = new QWidget(this);
     m_autostart = new QCheckBox(QStringLiteral("Iniciar con Windows"), w);
     m_autostart->setChecked(m_db->setting("autostart", 0).toBool());
-    m_greeting = new QCheckBox(QStringLiteral("Saludarme al empezar el día"), w);
+    m_greeting = new QCheckBox(QStringLiteral("Saludarme al iniciar con Windows (una vez por día)"), w);
     m_greeting->setChecked(m_db->setting("greeting", 1).toBool());
     m_hotkey = new QCheckBox(QStringLiteral("Atajo global Ctrl + Alt + P para pausar / seguir desde cualquier lado"), w);
     m_hotkey->setChecked(m_db->setting("hotkey", 1).toBool());

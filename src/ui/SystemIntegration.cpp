@@ -8,6 +8,13 @@
 #include <QSettings>
 
 #ifdef Q_OS_WIN
+// SHQueryUserNotificationState y MOD_NOREPEAT necesitan Windows 7+ en los headers.
+#if defined(_WIN32_WINNT) && _WIN32_WINNT < 0x0601
+#undef _WIN32_WINNT
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
 #include <windows.h>
 #include <shellapi.h>
 #endif
