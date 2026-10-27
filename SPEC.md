@@ -75,13 +75,13 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - **Fantasmas de la meta**: los pomodoros que faltan para la meta del día se ven punteados después de los reales (también en semana y mes). Click en uno abre la meta.
 - En semana y mes, el día bajo el mouse se ilumina con "ver día ›" y cursor de mano.
 - **Tamaño**: el botón de la barra cicla entre todos iguales, proporcional solo a lo ancho (alto fijo, largo ∝ minutos) y proporcional completo (área ∝ minutos). En Ajustes se pueden desactivar variantes o fijar una y esconder el botón.
-- **Resaltar** (*Ajustes › Cuadraditos*): por defecto, el que está corriendo se llena con el color del pomodoro; el rojo del último del día queda como opción.
+- **Resaltar** (*Ajustes › Cuadraditos*): por defecto, el que está corriendo se llena con el color del pomodoro (texto negro encima; con la paleta roja, el resaltado es negro); el rojo del último del día queda como opción.
 - **Número**: adentro arriba al centro, afuera arriba (como en los bocetos) u oculto; con "Nº" opcional. Los números de los cuadraditos usan la fuente del cronómetro.
 - **Proporcional completo**: todas las piezas se encastran como un rompecabezas lo más cuadrado posible, cada actividad junta y con su contorno.
 - **Estilo** (*Ajustes › Cuadraditos*, con muestra en vivo):
   - Forma: Clásico, Inclinado (romboide apoyado sobre su base, esquinas suaves), Tarjeta (vertical), Biselado (dos esquinas cortadas suaves). El número va arriba al centro.
   - Marca de hecho: ninguna, diagonal (finita, del color del número, sin tapar el tiempo), cruz delicada, tilde redondo, tilde cuadrado.
-  - Llenado del que corre: barra, líquido (avanza de izquierda a derecha con el frente ondulado), segmentos tipo batería, reloj.
+  - Llenado del que corre: barra, líquido (avanza de izquierda a derecha con el frente ondulado), segmentos (vacíos con borde fino, llenos sólidos, el actual se carga de abajo hacia arriba; inclinados en la forma inclinada), reloj.
   - Invertidos (por defecto): fondo gris que se va llenando del color de terminado.
   - Colores propios de los cuadraditos (del tema, naranja, rojo, azul, verde, papel), grosor de borde, tamaño base (60–170 %), rayita de la actividad y nombre de la actividad opcionales.
   - Al completarse: rebote, sellado, destello, volteo (después del festejo grande).
@@ -100,13 +100,13 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Progreso en el panel; al cumplirla, festejo con sonido (una vez por día).
 
 ## Festejos
-- Al terminar un pomodoro, cumplir el objetivo o llegar a un hito. Estilos (*Ajustes › Apariencia › Festejo*):
+- Al terminar un pomodoro, cumplir el objetivo o llegar a un hito, cada uno con su estilo (*Ajustes › Festejos y sonidos*):
   - Visor: anillo tipo visor de cámara, emblema con rebote (dorado para hitos). Click lo cierra.
   - Minimalistas, que no tapan ni bloquean: Línea (trazo fino arriba + texto chico), Borde (el contorno de la ventana se dibuja una vez), Tilde (círculo chico con tilde), Cifra ("+25m" grande y finito que sube y se va).
 - Se pueden apagar del todo.
 
 ## Sonidos
-- *Ajustes › Cronómetro › Sonidos*, con ▶ para escuchar: fin de pomodoro (Arpegio, Suave, Campana, Madera, Digital, ninguno), logro (Obturador y arpegio, Acorde suave, ninguno), alarma del recreo (Despertador, Marimba, Campanitas) y volumen general. Los genera `tools/make_sounds.py`.
+- *Ajustes › Festejos y sonidos*, con ▶ para escuchar: fin de pomodoro (Arpegio, Suave, Campana, Madera, Digital, ninguno), logro (Obturador y arpegio, Acorde suave, ninguno), alarma del recreo (Despertador, Marimba, Campanitas) y volumen general. Los genera `tools/make_sounds.py`.
 
 ## Estadísticas
 - Por día, semana, mes y año, filtrables por actividad, con los cuatro contadores.
@@ -127,7 +127,10 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - **Modo edge**: se esconde contra cualquier borde (incluido el superior) con una animación, dejando solo una pestañita fina, sin timer visible. Con el mouse encima la pestañita sale un poco más.
 - Cuando termina un timer, la ventana sale sola y suena. Si estás en pantalla completa (juego, presentación, video) no se mete adelante: avisa en la bandeja (se puede apagar).
 - **Tamaño**: chica / mediana (por defecto, +15 %) / grande (+35 %) en *Ajustes › Apariencia*.
-- **Pantalla completa**: botón de la barra o **F11**; **Esc** sale.
+- **Pantalla completa**: menú ⋯ o **F11**; **Esc** sale.
+- **Barra de arriba** liviana: tamaño de cuadraditos, zoom, objetivo, estadísticas y ⋯ (actividades, ajustes, mini reproductor, siempre visible, esconder en el borde, pantalla completa, salir).
+- **Visor del cronómetro**: del color del acento (por defecto, con tinta negra), oscuro siempre o siguiendo al tema.
+- **Formato de tiempo** único en toda la app: "25m", "1h40".
 - **Temas de color**: color (Gris por defecto, Ultra, Rosa, Rojo, Azul, Mostaza) + modo Oscuro / Claro / Seguir a Windows, con vista previa en vivo. Los claros, estilo MKBHD. Opción de acentos fuertes.
 - **Mini reproductor flotante** (M): ventanita siempre visible con pomodoro, actividad, tiempo, play/pausa, terminar y saltear recreo.
 

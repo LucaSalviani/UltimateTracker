@@ -50,12 +50,12 @@ C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\UltimateTracker\Ultim
 | Objetivo del día | Click en la barra de arriba, botón de la diana o **G**; para otro día, click derecho sobre el día en la semana o el mes |
 | Mini reproductor flotante | **M** o ⋯ → Mini reproductor (doble click en él abre la app) |
 | Tamaño de los cuadraditos | Botón de la barra: cicla entre iguales, solo ancho y proporcional completo |
-| Pantalla completa | Botón de la barra o **F11** (Esc sale) |
+| Pantalla completa | ⋯ → Pantalla completa o **F11** (Esc sale) |
 | Pausar / seguir desde cualquier lado | **Ctrl + Alt + P** |
 | Vista día → semana → mes | Botones de la barra superior, **Ctrl + rueda** o **Ctrl −** / **Ctrl +** |
 | Ir a un día | Click sobre el día en la vista semana o mes |
-| Esconder en un borde | Botón ⇥, o arrastrar la ventana y soltar con el mouse contra cualquier borde. Se vuelve a abrir con un click en la pestañita. |
-| Siempre visible | Botón del pin |
+| Esconder en un borde | ⋯ → Esconder en el borde, o arrastrar la ventana y soltarla contra cualquier borde. Se vuelve a abrir con un click en la pestañita. |
+| Siempre visible | ⋯ → Siempre visible |
 | Actividades y ajustes | Botón ⋯ |
 | Mover, anotar, corregir o borrar un pomodoro | Click derecho sobre el cuadradito (borrar se puede deshacer) |
 | Horas que ya tenías | Actividades → click derecho → Horas previas… |
@@ -68,7 +68,7 @@ C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\UltimateTracker\Ultim
 - Cuando termina un pomodoro o un recreo, la ventana aparece sola, aunque esté escondida en el borde o en la bandeja.
 - La alarma del recreo se repite y sube de volumen hasta que la cortás.
 
-**Colores de los cuadraditos:** gris llenándose = en curso · negro = terminado · rojo = último del día.
+**Colores de los cuadraditos:** el que corre se llena con el color del pomodoro · los terminados, del color de "terminado" (negro por defecto) · punteados = lo que falta del objetivo. Todo se cambia en *Ajustes › Cuadraditos*.
 
 ## Datos
 
@@ -151,6 +151,8 @@ Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert
 | `5e8157c` | M28 · reinicio del modo desarrollador, Enter en Ajustes, visor claro |
 | `f0cc8cf` | M29 · ajustes de cuadraditos, número afuera, resaltar el que corre |
 | `056cca6` | M30 · proporcional completo como rompecabezas |
+| `8771c40` | M31 · texto negro sobre el resaltado, visor del acento, festejo por cosa, arreglo del tema |
+| `e0a88e6` | M32 · segmentos "contorno", formato de tiempo único, Ajustes reordenado, barra liviana |
 
 ## Modo desarrollador
 
