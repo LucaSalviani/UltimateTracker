@@ -16,6 +16,16 @@ Style& style()
 // Cuánto se corre arriba el inclinado (lo usan la forma y los segmentos).
 double slantOffset(const QRectF& r) { return r.height() * 0.10; }
 
+// M43: en "proporcional a lo ancho" el cuadradito se estira. El contenido (tiempo,
+// número, marca, segmentos) no se estira con él: se mide contra el cuadradito de
+// tamaño normal, así todos tienen la misma letra y la misma marca y solo cambia el largo.
+double unitSide(const QRectF& r) { return qMin(r.width(), r.height() * qMin(1.0, aspect())); }
+QRectF unitRect(const QRectF& r)
+{
+    const double w = qMin(r.width(), r.height() * aspect());
+    return QRectF(r.center().x() - w / 2, r.top(), w, r.height());
+}
+
 QStringList shapeNames()    { return {"Clásico", "Inclinado", "Tarjeta", "Biselado"}; }
 QStringList markNames()     { return {"Sin marca", "Diagonal", "Cruz", "Tilde redondo", "Tilde cuadrado"}; }
 QStringList fillNames()     { return {"Barra", "Líquido", "Segmentos", "Reloj"}; }
@@ -90,7 +100,7 @@ QPainterPath roundedPolygon(const QVector<QPointF>& pts, double radius)
 // ---- Textos: número arriba al centro, tiempo al medio, actividad abajo
 void drawLabel(QPainter& p, const QRectF& r, const Tile& t, const QColor& color, bool faint, const QColor& halo = {})
 {
-    const double s = qMin(r.width(), r.height());
+    const double s = unitSide(r);
     if (s < 12) return;
     const bool card = style().shape == Shape::Card;
     const bool caption = !t.caption.isEmpty() && style().caption && s >= 34;   // M29: solo si está elegido
@@ -149,7 +159,8 @@ void drawMark(QPainter& p, const QRectF& r, State st, double amount, const QColo
 {
     const Mark m = style().mark;
     if (m == Mark::None || amount <= 0) return;
-    const double s = qMin(r.width(), r.height());
+    const double s = unitSide(r);
+    const QRectF ur = unitRect(r);   // la cruz o la diagonal no se estiran: van en el cuadradito del medio
     if (s < 14) return;
     const QPointF c = r.center();
     const bool card = style().shape == Shape::Card;
@@ -168,10 +179,10 @@ void drawMark(QPainter& p, const QRectF& r, State st, double amount, const QColo
         if (f2 > 0) p.drawLine(at(0.5 + gap), at(0.5 + gap + g1 * f2));
     };
     const double inset = 0.20;
-    const QPointF tl(r.left() + r.width() * inset, r.top() + r.height() * inset);
-    const QPointF br(r.right() - r.width() * inset, r.bottom() - r.height() * inset);
-    const QPointF tr(r.right() - r.width() * inset, r.top() + r.height() * inset);
-    const QPointF bl(r.left() + r.width() * inset, r.bottom() - r.height() * inset);
+    const QPointF tl(ur.left() + ur.width() * inset, ur.top() + ur.height() * inset);
+    const QPointF br(ur.right() - ur.width() * inset, ur.bottom() - ur.height() * inset);
+    const QPointF tr(ur.right() - ur.width() * inset, ur.top() + ur.height() * inset);
+    const QPointF bl(ur.left() + ur.width() * inset, ur.bottom() - ur.height() * inset);
     const double gap = card ? 0.14 : 0.24;
     switch (m) {
     case Mark::Diagonal:   // de arriba-izquierda a abajo-derecha, finita
@@ -239,7 +250,7 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
     case Fill::Liquid: {
         // Avanza de izquierda a derecha con el frente ondulado (dos capas que se mueven).
         const double front = r.left() + r.width() * pr;
-        const double amp = parked ? 0 : qMax(1.5, r.width() * 0.05);
+        const double amp = parked ? 0 : qMax(1.5, unitSide(r) * 0.05);
         for (int layer = 0; layer < 2; ++layer) {
             QPainterPath wave;
             wave.moveTo(r.left(), r.top());
@@ -264,10 +275,12 @@ void fillRunning(QPainter& p, const QRectF& r, const QPainterPath& path, double 
         // M32 "contorno": los vacíos son solo un borde fino, los llenos sólidos y el
         // que se está llenando se carga de abajo hacia arriba. Se lee de un vistazo
         // cuánto falta, sin transparencias. En el inclinado, inclinados.
-        const int n = 5;
+        // M43: 5 segmentos por cada 25' de largo (estirado, hay más segmentos, no más anchos).
+        const double stretch = r.width() / qMax(1.0, r.height() * aspect());
+        const int n = qBound(2, int(std::lround(5 * stretch)), 24);
         const QColor segFill = t_accent ? accentFill() : theme::mix(cs.fill, QColor(255, 255, 255), 0.15);
         const QColor edge = theme::mix(cs.empty, segFill, parked ? 0.30 : 0.50);
-        const double gap = qMax(1.5, r.width() * 0.035);
+        const double gap = qMax(1.5, unitSide(r) * 0.035);
         const double skew = style().shape == Shape::Slant ? slantOffset(r) : 0.0;
         const double usable = r.width() - skew;
         const double swk = (usable - gap * (n + 1)) / n;
@@ -374,7 +387,7 @@ bool animatesWhileRunning()
 void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
 {
     const QRectF r = rIn.adjusted(0.5, 0.5, -0.5, -0.5);
-    const double s = qMin(r.width(), r.height());
+    const double s = unitSide(r);
     const Colors cs = colors();
     const double bw = borderWidth();
     State st = t.state;
