@@ -3,6 +3,7 @@
 #include "ui/Icons.h"
 #include "ui/Theme.h"
 
+#include <QApplication>
 #include <QHBoxLayout>
 #include <QIntValidator>
 #include <QKeyEvent>
@@ -246,6 +247,8 @@ bool TimerDeck::editable() const
 
 void TimerDeck::nudge(int minutes)
 {
+    // Si estabas escribiendo, primero se toma lo escrito y después se ajusta.
+    if (m_editor->isVisible()) finishTyping(true);
     const int v = qBound(1, m_model.durationMin + minutes, 240);
     if (v != m_model.durationMin) emit durationChanged(v);
 }
@@ -264,11 +267,14 @@ void TimerDeck::beginTyping()
     m_editor->show();
     m_editor->setFocus();
     m_editor->selectAll();
+    // Un click en cualquier otro lado (aunque no tome el foco) confirma y sale.
+    qApp->installEventFilter(this);
 }
 
 void TimerDeck::finishTyping(bool commit)
 {
     if (!m_editor->isVisible()) return;
+    qApp->removeEventFilter(this);
     const QString t = m_editor->text().trimmed();
     m_editor->hide();
     if (!commit || t.isEmpty()) return;
@@ -284,6 +290,13 @@ void TimerDeck::finishTyping(bool commit)
 
 bool TimerDeck::eventFilter(QObject* o, QEvent* e)
 {
+    if (m_editor->isVisible() && e->type() == QEvent::MouseButtonPress) {
+        auto* w = qobject_cast<QWidget*>(o);
+        const QPoint g = static_cast<QMouseEvent*>(e)->globalPosition().toPoint();
+        const QRect er(m_editor->mapToGlobal(QPoint(0, 0)), m_editor->size());
+        if (w && !er.contains(g)) finishTyping(true);
+    }
+    // (La rueda sobre el editor sube al visor: wheelTurned → nudge confirma lo escrito y ajusta.)
     if (o == m_editor && e->type() == QEvent::KeyPress &&
         static_cast<QKeyEvent*>(e)->key() == Qt::Key_Escape) {
         finishTyping(false);

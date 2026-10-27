@@ -13,6 +13,7 @@ QWidget#Root, QDialog, QMessageBox {
 QWidget#Root {
     border: 1px solid @s5;
 }
+QWidget#Root[fullscreen="true"] { border: none; }
 
 QLabel[dim="true"] { color: @t3; }
 QLabel[heading="true"] { font-size: 12pt; font-weight: 600; }

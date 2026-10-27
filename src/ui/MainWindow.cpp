@@ -20,6 +20,7 @@
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QHBoxLayout>
+#include <QStyle>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -72,6 +73,22 @@ void applyChrome(QWidget* w)
     DwmExtendFrameIntoClientArea(hwnd, &shadow);
 #else
     Q_UNUSED(w);
+#endif
+}
+
+// Pantalla completa de verdad: sin esquinas redondeadas ni el marco de 1 px de
+// la sombra (si no, se ve una línea del fondo en los bordes).
+void setFullscreenChrome(QWidget* w, bool on)
+{
+#ifdef Q_OS_WIN
+    HWND hwnd = reinterpret_cast<HWND>(w->winId());
+    const DWORD corner = on ? 1 /*DWMWCP_DONOTROUND*/ : 2 /*DWMWCP_ROUND*/;
+    DwmSetWindowAttribute(hwnd, 33 /*DWMWA_WINDOW_CORNER_PREFERENCE*/, &corner, sizeof(corner));
+    const MARGINS m = on ? MARGINS{0, 0, 0, 0} : MARGINS{1, 1, 1, 1};
+    DwmExtendFrameIntoClientArea(hwnd, &m);
+#else
+    Q_UNUSED(w);
+    Q_UNUSED(on);
 #endif
 }
 
@@ -281,6 +298,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         w->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
 
     auto* root = new QVBoxLayout(this);
+    m_rootLayout = root;
     root->setContentsMargins(1, 1, 1, 1);
     root->setSpacing(0);
     m_titleBar = buildTitleBar();
@@ -807,12 +825,22 @@ void MainWindow::toggleFullScreen()
     if (m_docked) undock();
     if (m_anim) m_anim->stop();
     if (isFullScreen()) {
+        win::setFullscreenChrome(this, false);
+        m_rootLayout->setContentsMargins(1, 1, 1, 1);
+        setProperty("fullscreen", false);
+        style()->unpolish(this);
+        style()->polish(this);
         showNormal();
         m_btnFull->setIcon(icons::get(icons::Id::FullScreen));
         m_btnFull->setToolTip(QStringLiteral("Pantalla completa (F11 · Esc para salir)"));
         updateDeckWidth();
         resize(viewSize(viewKey()));
     } else {
+        m_rootLayout->setContentsMargins(0, 0, 0, 0);
+        setProperty("fullscreen", true);
+        style()->unpolish(this);
+        style()->polish(this);
+        win::setFullscreenChrome(this, true);
         showFullScreen();
         m_btnFull->setIcon(icons::get(icons::Id::ExitFullScreen));
         m_btnFull->setToolTip(QStringLiteral("Salir de pantalla completa (Esc)"));

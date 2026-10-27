@@ -138,6 +138,7 @@ private:
     QToolButton* m_btnProportional = nullptr;
     QToolButton* m_btnPin = nullptr;
     QToolButton* m_btnFull = nullptr;
+    class QVBoxLayout* m_rootLayout = nullptr;
     qint64       m_noteTarget = 0;
     class GoalPanel* m_goalPanel = nullptr;
     class Celebration* m_celebration = nullptr;
