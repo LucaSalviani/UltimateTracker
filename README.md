@@ -39,21 +39,25 @@ C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\UltimateTracker\Ultim
 `windeployqt` copia al lado del `.exe` las DLLs de Qt, el driver de SQLite y el backend de audio. Después:
 
 - **Acceso directo:** clic derecho en `UltimateTracker.exe` → *Mostrar más opciones → Crear acceso directo*, y anclalo a Inicio o a la barra de tareas.
-- **Que arranque con Windows:** `Win+R` → `shell:startup` → pegá ahí el acceso directo.
+- **Que arranque con Windows:** *⋯ → Ajustes → Sistema → Iniciar con Windows* (si antes pusiste un acceso directo en `shell:startup`, borralo para que no abra dos veces).
 
 ## Uso
 
 | Acción | Cómo |
 |---|---|
 | Arrancar / pausar / seguir | Botón grande del reproductor o **Espacio** |
-| Elegir actividad y duración | Arriba y en el − / + del reproductor (la actividad se puede cambiar con el pomodoro corriendo) |
+| Elegir actividad y duración | Arriba del reproductor; la duración con los botones −1 −5 +5 +1, la rueda del mouse sobre el tiempo o click en el tiempo para escribirla |
+| Meta del día | Botón de la diana o **G**; para otro día, click derecho sobre el día en la semana o el mes |
+| Pantalla completa | Botón de la barra o **F11** (Esc sale) |
+| Pausar / seguir desde cualquier lado | **Ctrl + Alt + P** |
 | Vista día → semana → mes | Botones de la barra superior, **Ctrl + rueda** o **Ctrl −** / **Ctrl +** |
 | Ir a un día | Click sobre el día en la vista semana o mes |
 | Cuadraditos proporcionales al tiempo | Botón de los dos cuadrados en la barra superior |
 | Esconder en un borde | Botón ⇥, o arrastrar la ventana y soltar con el mouse contra cualquier borde. Se vuelve a abrir con un click en la pestañita. |
 | Siempre visible | Botón del pin |
 | Actividades y ajustes | Botón ⋯ |
-| Borrar o mover un pomodoro | Click derecho sobre el cuadradito |
+| Mover, anotar, corregir o borrar un pomodoro | Click derecho sobre el cuadradito (borrar se puede deshacer) |
+| Horas que ya tenías | Actividades → click derecho → Horas previas… |
 | Stats en vivo: actividad / todo el día | "ver todo el día ⇄" abajo de la grilla |
 | Volver al tamaño original | Click derecho en la barra de arriba |
 | Estadísticas | Botón de barras |
@@ -66,7 +70,9 @@ C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\UltimateTracker\Ultim
 
 ## Datos
 
-Todo queda en `%APPDATA%\UltimateTracker\ultimatetracker.db` (SQLite). La primera vez se copian solos los datos de cuando la app se llamaba Constancia (`%APPDATA%\Constancia`, que queda como respaldo). Para hacer backup alcanza con copiar ese archivo con la app cerrada.
+Todo queda en `%APPDATA%\UltimateTracker\ultimatetracker.db` (SQLite) y se guarda al instante. La primera vez se copian solos los datos de cuando la app se llamaba Constancia (`%APPDATA%\Constancia`, que queda como respaldo).
+
+Además, una vez por día se hace una copia de seguridad en `%APPDATA%\UltimateTracker\backups` (se guardan las últimas 7; la carpeta se puede cambiar en Ajustes, por ejemplo a OneDrive). Para volver a una copia: cerrá la app y reemplazá `ultimatetracker.db` por la copia (renombrándola).
 
 Si la app se cierra de golpe (corte de luz, cuelgue), el pomodoro en curso se guarda hasta donde llegó, porque se persiste cada 5 segundos, y queda marcado como final.
 
@@ -78,6 +84,8 @@ src/core/                 lógica pura, sin interfaz (testeable)
   SessionController       máquina de estados del timer (ver diagrama en el .h)
   Stats                   totales, horas inactivas, racha con comodines, hitos
   FolderTree              árbol de actividades y suma de horas hacia arriba
+  DayClock                el día de la app (empieza a las 4 AM)
+  Goals                   metas diarias: specs, reglas que se repiten
 src/ui/
   MainWindow              ventana gadget, borde, bandeja, tamaños
   TimerDeck               el reproductor (cronómetro con todos los controles)
@@ -85,8 +93,12 @@ src/ui/
   GridWidget              la grilla pintada a mano (día / semana / mes)
   StatsWidget             estadísticas y mapa de calor
   ActivitiesWidget        gestor de actividades
+  GoalPanel               meta del día (panel deslizable)
+  Celebration             animación de logro
+  Greeting                saludo al iniciar con Windows
+  SystemIntegration       backup, inicio con Windows, atajo global, pantalla completa
   EdgeTab, FolderMenu, SettingsDialog, Sounds, Icons, Theme
-resources/                style.qss (tema gris) y sonidos
+resources/                style.qss (plantilla de temas) y sonidos
 tools/make_sounds.py      genera los .wav (sonidos propios)
 tests/test_core.cpp       tests del motor con reloj simulado
 ```
@@ -100,3 +112,21 @@ build-tests\core_tests.exe
 ```
 
 En Qt Creator: activá `CONSTANCIA_TESTS` en *Projects → Build → CMake* y corré el target `core_tests`.
+
+## Módulos (para sacar uno si no te gusta)
+
+Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert <commit>` y recompilar. Las columnas y tablas que agregó un módulo quedan en la base sin usar (no molestan).
+
+| Commit | Módulo |
+|---|---|
+| `6d76b94` | M1 · borrar y mover el pomodoro en pausa |
+| `120a2f3` | M2 · el día empieza a las 4 AM |
+| `e34d4a5` | M3 · temas de color y ajustes por secciones |
+| `e150601` | M4 · ajuste del cronómetro (rueda, escribir, ±1/±5) |
+| `4a3a1e9` | M5 · tamaños de ventana y pantalla completa |
+| `0ddb560` | M6 · nota por pomodoro, corregir duración, deshacer |
+| `0d6088c` | M7 · meta diaria |
+| `3e66f79` | M8 · cuadraditos nuevos, agrupado, animaciones y festejos |
+| `bfc5ff2` | M9 · backup, inicio con Windows, atajo global, no molestar |
+| `842eff6` | M10 · saludo al iniciar |
+| `96d1f8f` | M11 · horas previas |

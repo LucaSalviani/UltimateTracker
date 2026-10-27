@@ -26,7 +26,12 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## Reproductor (cronómetro)
 - Panel a la derecha de la grilla, ~80 % del alto de la vista día. Inspirado en caseteras/DVD: visor con contador grande, LED, carretes que giran, barra de progreso con transcurrido/total como Spotify.
-- Rojo = pomodoro; verde agua = recreo.
+- Rojo = pomodoro; verde agua = recreo (cada tema de color trae sus propios tonos).
+- Ajustar la duración antes de arrancar (cada forma se puede apagar en *Ajustes › Cronómetro*):
+  - **Rueda del mouse** sobre el tiempo (sensibilidad configurable).
+  - **Click en el tiempo** para escribir los minutos (`45`, `90` o `1:30`; Enter confirma, Esc cancela).
+  - Botones **−1 −5 · +5 +1** (los de afuera y los de adentro con paso configurable). Sin ellos queda el − / + clásico (de a 5 arriba de 10, de a 1 abajo).
+- Al terminar el pomodoro aparece **"¿En qué trabajaste?"** (opcional). La nota se ve en el tooltip del cuadradito y se edita con click derecho.
 - Adentro está todo lo que avanza, cambia o mueve el tiempo: actividad, duración (− / +), play/pausa, terminar pomodoro, iniciar/saltear recreo, terminar recreo, silenciar.
 - La actividad se puede cambiar en cualquier momento:
   - En el primer minuto del pomodoro: se corrige la actividad (fue un error).
@@ -48,7 +53,8 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## Jornada (sesión)
 - La sesión es el día: no hay botón para terminarla.
-- Se cierra sola pasada la medianoche (cuando no hay nada en marcha) o al salir de la app.
+- **El día de la app empieza a las 4 AM** (configurable de 0 a 6 en *Ajustes › General*): lo que estudies a las 2 AM cuenta para el día anterior.
+- Se cierra sola pasado el inicio del día (cuando no hay nada en marcha) o al salir de la app.
 - El tiempo muerto queda "pendiente": si volvés a estudiar, era recreo indebido; si no, era el final del día (inactivo).
 - Al día siguiente, la primera vez que mirás la ventana, aparece el resumen del día anterior con los recreos indebidos.
 - Si la app se cierra o se cae con un pomodoro corriendo, al volver se guarda lo que llegó a correr.
@@ -62,13 +68,26 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
   - **En curso:** se va llenando de gris.
   - **Terminado:** negro (como tachar la hoja), con el tiempo que duró.
   - **Último del día:** **rojo**. Para hoy es provisorio: se pinta rojo mientras no haya nada en marcha.
-- Click derecho sobre un cuadradito → **Mover a actividad** o **Borrar pomodoro** (con confirmación; se descuenta de las estadísticas).
+- Click derecho sobre un cuadradito → **Mover a actividad**, **Nota**, **Corregir duración** (solo terminados) o **Borrar pomodoro**. Uno terminado se borra al toque con **Deshacer** en el aviso; el que está en marcha o en pausa pide confirmación.
+- **Agrupados por actividad** (se puede apagar en *Ajustes › Apariencia*): en el día y la semana cada actividad arranca en su renglón con un título (● nombre · tiempo); en el mes quedan contiguos. Cada cuadradito tiene abajo una rayita del color de su actividad.
+- Al cambiar de vista los cuadraditos entran en cascada con un rebote; uno nuevo "salta" solo.
+- **Fantasmas de la meta**: los pomodoros que faltan para la meta del día se ven punteados después de los reales (también en semana y mes). Click en uno abre la meta.
 - En semana y mes, el día bajo el mouse se ilumina con "ver día ›" y cursor de mano.
 - Toggle **proporcional**: el área de cada cuadradito pasa a ser proporcional a sus minutos.
 - Vistas tipo Google Calendar:
   - **Día** (al abrir siempre muestra hoy): ventana horizontal chica. Banda gris con la tarea del día (opcional) a la izquierda y la fecha a la derecha (por defecto `26/10/26`; en Ajustes se puede poner escrita).
   - **Semana** (lunes a domingo): la ventana se agranda.
   - **Mes**: la ventana se agranda más. Siempre se ven los cuadraditos.
+
+## Meta del día
+- Botón de la diana (o **G**): panel que sale desde la derecha. Click derecho en un día de la semana o el mes → "Poner meta…" para planearla.
+- La tarea del día (texto) también se edita ahí.
+- **Por tiempo** (ej. 4 h → se pasa a pomodoros con la duración que estés usando, redondeando para arriba) o **por pomodoros** (`3x30 + 2x25 + 2x60`).
+- **Repetir** como en Google Calendar: solo ese día, todos los días, de lunes a viernes o días elegidos. Cambiar una meta que se repite corta la anterior el día antes (el pasado no cambia). Quitar: "solo este día" o "desde este día en adelante".
+- Progreso en el panel; al cumplirla, festejo con sonido (una vez por día).
+
+## Festejos
+- Al terminar un pomodoro, cumplir la meta o llegar a un hito: animación de 2–3 s (anillo tipo visor de cámara que se dibuja, emblema que entra con rebote, tilde, destello). Dorado para los hitos. Click la cierra. Se puede apagar en Ajustes.
 
 ## Estadísticas
 - Por día, semana, mes y año, filtrables por actividad, con los cuatro contadores.
@@ -77,6 +96,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## Hitos
 - Aviso al llegar a 1, 2, …, 10 h y luego cada 25 h, en cada actividad.
+- **Horas previas**: en Actividades, click derecho → "Horas previas…" para sumar lo que ya tenías (la hoja de papel). Cuentan en el total y los hitos, no en los días.
 - Los stages hacia las 10.000 h quedan para una versión futura.
 
 ## Ventana
@@ -86,9 +106,17 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Al agrandar la vista (semana, mes, estadísticas) y volver a achicarla, la ventana vuelve al lugar donde estaba.
 - Tooltips en todos los botones de la barra.
 - **Modo edge**: se esconde contra cualquier borde (incluido el superior) con una animación, dejando solo una pestañita fina, sin timer visible. Con el mouse encima la pestañita sale un poco más.
-- Cuando termina un timer, la ventana sale sola y suena.
+- Cuando termina un timer, la ventana sale sola y suena. Si estás en pantalla completa (juego, presentación, video) no se mete adelante: avisa en la bandeja (se puede apagar).
+- **Tamaño**: chica / mediana (por defecto, +15 %) / grande (+35 %) en *Ajustes › Apariencia*.
+- **Pantalla completa**: botón de la barra o **F11**; **Esc** sale.
+- **Temas de color**: Oscuro (por defecto), Día, Ultra oscuro, Rosa, Rojo, Azul y Mostaza, con vista previa en vivo.
+
+## Sistema
+- **Iniciar con Windows** (entrada en `HKCU\…\Run` con `--autostart`).
+- **Saludo**: al iniciar con Windows, una vez por día: "Buen día, ¿estás listo para ser productivo?" con una frase, la racha, lo de ayer y la meta. "A trabajar" se expande hasta la ventana y abre la meta del día; "Por ahora no" cierra el programa. Para verlo a mano: `UltimateTracker.exe --greeting`.
+- **Atajo global Ctrl + Alt + P**: pausar / seguir desde cualquier lado.
+- **Copia de seguridad diaria**: `%APPDATA%\UltimateTracker\backups` (o la carpeta que elijas), se guardan las últimas 7.
 
 ## Fuera de la v1
-- Importar el historial de las hojas en papel.
 - Sincronizar con el celular.
 - Stages hacia las 10.000 h.
