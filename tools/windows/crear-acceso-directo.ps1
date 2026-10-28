@@ -1,4 +1,4 @@
-# Crea (o actualiza) el acceso directo a UltimateTracker en el escritorio y en el menú Inicio.
+﻿# Crea (o actualiza) el acceso directo a UltimateTracker en el escritorio y en el menú Inicio.
 # Uso: crear-acceso-directo.ps1 -Exe "ruta\a\UltimateTracker.exe"
 param([Parameter(Mandatory = $true)][string]$Exe)
 if (-not (Test-Path $Exe)) { Write-Host "No encuentro $Exe (compilá primero con recompilar.bat)." -ForegroundColor Red; exit 1 }

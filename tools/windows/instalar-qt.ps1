@@ -1,4 +1,4 @@
-# Instala lo necesario para compilar UltimateTracker en Windows, sin cuenta de Qt:
+﻿# Instala lo necesario para compilar UltimateTracker en Windows, sin cuenta de Qt:
 # Python (si falta, con winget, solo para tu usuario), aqtinstall, Qt 6.8 MinGW 64-bit
 # con Qt Multimedia, y MinGW, CMake y Ninja en C:\Qt. No compila: para eso está recompilar.bat.
 $ErrorActionPreference = 'Stop'
