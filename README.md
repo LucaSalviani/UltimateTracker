@@ -26,6 +26,8 @@ Si ya tenés Visual Studio 2022 con "Desarrollo para el escritorio con C++", pod
 
 Para recompilar después de un cambio alcanza con `recompilar.bat` (en la carpeta de arriba).
 
+**Sin Qt Creator:** `tools/windows/instalar-qt.bat` instala Qt 6.8 (MinGW), CMake y Ninja en `C:\Qt` sin cuenta. `tools/windows/crear-acceso-directo.ps1 -Exe <ruta al .exe>` pone la app en el escritorio y en el menú Inicio.
+
 ### 3. Dejarla instalada como app
 
 Qt Creator compila en una carpeta tipo `build/Desktop_Qt_6_8_..._Release/`. Para tener un ejecutable que funcione solo:
