@@ -164,7 +164,13 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - **Copia de seguridad diaria**: `%APPDATA%\UltimateTracker\backups` (o la carpeta que elijas), se guardan las últimas 7.
 
 ## Celular (Android, beta)
-- App en QML sobre el mismo motor de la PC (`mobile/`): elegir o crear actividad, duración del pomodoro y del recreo, play/pausa, terminar, recreo o seguir sin recreo, los cuadraditos y las horas de hoy.
+- App en QML sobre el mismo motor de la PC (`mobile/`), con cuatro pestañas abajo:
+  - **Hoy**: el reloj (actividad, duración del pomodoro y del recreo, play/pausa, terminar, recreo o seguir sin recreo), el objetivo del día con su barra y los cuadraditos de hoy, con los fantasmas de lo que falta. Tocar un cuadradito: nota, cambiar la actividad o borrarlo (con deshacer).
+  - **Objetivo del día** (tocando la tarjeta): "¿Qué querés lograr hoy?", por pomodoros (grupos "4 × 25m", cada uno de una actividad o de cualquiera) o por tiempo, y repetir (solo hoy, lun a vie, todos los días o días sueltos). Igual que en la PC: el próximo pomodoro viene con la duración y la actividad del bloque que sigue.
+  - **Estadísticas**: día, semana, mes y año, con flechas para ir hacia atrás y filtro por actividad (tocar una actividad entra en sus subactividades). Total, pomodoros, promedio, días con estudio, objetivos cumplidos (barras verdes), por actividad, y recreos / recreo indebido / inactivo. En "Día", los cuadraditos con sus notas.
+  - **Hitos**: etapas hacia las 10.000 h (global y por actividad), marca del día, racha y comodines, récords, meta semanal y cómo va el mes contra el anterior.
+  - **Ajustes**: cuenta, duraciones, "el pomodoro en curso ocupa un bloque del objetivo", inicio del día, comodines, hitos (prender/apagar, meta semanal, bronce/plata/oro) y actividades (nombre, color, horas previas, subactividades, borrar).
+- Festejos (objetivo cumplido, marcas, rachas, récords, etapas y horas) como en la PC.
 - Con la pantalla apagada: notificación con la cuenta regresiva (servicio en primer plano, así Android no corta la app) y alarma exacta que suena y vibra al terminar el pomodoro o el recreo.
 - Se compila sola en GitHub Actions y se publica en Releases como `android-beta` (APK firmado siempre con la misma llave: cada versión se instala arriba de la anterior).
 
@@ -173,6 +179,3 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - Cada aparato guarda todo localmente y funciona sin internet. Unos triggers anotan lo que cambia; al sincronizar se baja lo nuevo (gana el cambio más reciente) y se sube lo anotado. Cada minuto con la app abierta en la PC, cada 30 s en el celu, al terminar un pomodoro y al volver a la app.
 - La primera vez, las actividades con el mismo nombre y lugar se unen (no queda la "General" duplicada). Un pomodoro que llega corriendo de otro aparato no se cierra solo.
 - Cuenta: ⋯ › *Sincronizar con el celu* en la PC; la nube arriba a la derecha en el celu. Crear cuenta → confirmar el mail → Entrar.
-
-## Fuera de la v1
-- Sincronizar con el celular.
