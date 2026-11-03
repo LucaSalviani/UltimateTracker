@@ -163,5 +163,16 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - **Modo desarrollador**: trabaja sobre una copia de la base (al prenderlo o apagarlo en Ajustes la app se reinicia sola); botón 🧪 para completar ya, acelerar el tiempo y ver festejos, sonidos y saludo.
 - **Copia de seguridad diaria**: `%APPDATA%\UltimateTracker\backups` (o la carpeta que elijas), se guardan las últimas 7.
 
+## Celular (Android, beta)
+- App en QML sobre el mismo motor de la PC (`mobile/`): elegir o crear actividad, duración del pomodoro y del recreo, play/pausa, terminar, recreo o seguir sin recreo, los cuadraditos y las horas de hoy.
+- Con la pantalla apagada: notificación con la cuenta regresiva (servicio en primer plano, así Android no corta la app) y alarma exacta que suena y vibra al terminar el pomodoro o el recreo.
+- Se compila sola en GitHub Actions y se publica en Releases como `android-beta` (APK firmado siempre con la misma llave: cada versión se instala arriba de la anterior).
+
+## Sincronización (PC ↔ celu)
+- Supabase (gratis): una tabla `records` con una fila por actividad, pomodoro, recreo, objetivo o título de día, protegida para que cada cuenta vea solo lo suyo (`tools/supabase.sql`).
+- Cada aparato guarda todo localmente y funciona sin internet. Unos triggers anotan lo que cambia; al sincronizar se baja lo nuevo (gana el cambio más reciente) y se sube lo anotado. Cada minuto con la app abierta en la PC, cada 30 s en el celu, al terminar un pomodoro y al volver a la app.
+- La primera vez, las actividades con el mismo nombre y lugar se unen (no queda la "General" duplicada). Un pomodoro que llega corriendo de otro aparato no se cierra solo.
+- Cuenta: ⋯ › *Sincronizar con el celu* en la PC; la nube arriba a la derecha en el celu. Crear cuenta → confirmar el mail → Entrar.
+
 ## Fuera de la v1
 - Sincronizar con el celular.

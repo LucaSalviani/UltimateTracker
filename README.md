@@ -11,6 +11,8 @@ Pomodoros y horas de estudio en una ventana chica: cada pomodoro es un cuadradit
 
 Windows 10 y 11 de 64 bits. No pide permisos de administrador. También hay una versión portable en `.zip`.
 
+**Android (beta):** bajá `UltimateTracker-android.apk` de [android-beta](https://github.com/LucaSalviani/UltimateTracker/releases/tag/android-beta) desde el celu. Con la misma cuenta en ⋯ › *Sincronizar con el celu* (PC) y en la nube (celu), todo se junta solo.
+
 ## Uso básico
 
 - **⋯ → Actividades:** creá tus materias.
