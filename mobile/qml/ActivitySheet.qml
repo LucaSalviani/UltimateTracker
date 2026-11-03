@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 // Elegir la actividad (o crear una nueva), desde abajo.
@@ -55,14 +55,17 @@ Drawer {
                 Layout.fillWidth: true
                 placeholderText: "Nueva actividad"
                 color: root.textColor
+                font.pixelSize: 16
                 placeholderTextColor: root.dimColor
-                background: Rectangle { color: Qt.darker(root.bg, 1.3); radius: 10; border.color: root.lineColor }
+                background: Rectangle { implicitHeight: 46; color: Qt.darker(root.bg, 1.3); radius: 10; border.color: root.lineColor }
                 onAccepted: { root.added(text); text = "" }
             }
-            Button {
-                text: "Agregar"
-                enabled: field.text.trim().length > 0
-                onClicked: { root.added(field.text); field.text = "" }
+            Rectangle {
+                implicitWidth: 96; implicitHeight: 46; radius: 23
+                readonly property bool ok: field.text.trim().length > 0
+                color: ok ? (addMouse.pressed ? "#c23d35" : "#e0483f") : Qt.lighter(root.bg, 1.25)
+                Text { anchors.centerIn: parent; text: "Agregar"; color: parent.ok ? "#ffffff" : root.dimColor; font.pixelSize: 15; font.weight: Font.DemiBold }
+                MouseArea { id: addMouse; anchors.fill: parent; enabled: parent.ok; onClicked: { root.added(field.text); field.text = "" } }
             }
         }
     }

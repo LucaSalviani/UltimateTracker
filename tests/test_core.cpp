@@ -3,6 +3,8 @@
 #include "core/Goals.h"
 #include "core/Export.h"
 #include "core/Milestones.h"
+#include "core/Sync.h"
+#include <QSqlQuery>
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
@@ -669,6 +671,87 @@ private slots:
         QCOMPARE(ms::weekTotal(d, mon.addDays(3)), qint64(10 * 3600));
         QCOMPARE(ms::weeksInARow(d, mon.addDays(2), 10 * 3600), 2);
         QCOMPARE(ms::weeksInARow(d, mon.addDays(2), 12 * 3600), 0);
+    }
+
+    // Celu-3: dos bases que se sincronizan a través de un "servidor" en memoria.
+    void syncTwoDevices()
+    {
+        Database pc, cel;
+        QVERIFY(pc.open(":memory:"));
+        QVERIFY(cel.open(":memory:"));
+        SyncStore spc(pc), scel(cel);
+        QMap<QString, SyncRecord> server;   // kind/uid → último
+        auto push = [&](SyncStore& s) {
+            const auto out = s.pending(1000);
+            for (const auto& r : out) {
+                const QString k = r.kind + "/" + r.uid;
+                if (!server.contains(k) || server[k].updatedAt < r.updatedAt) server[k] = r;
+            }
+            s.acknowledge(out);
+        };
+        auto pull = [&](SyncStore& s) { return s.apply(server.values().toVector()); };
+
+        // En la PC: actividades, un pomodoro, un objetivo con actividad y un título de día.
+        const qint64 fac = pc.addFolder(0, "Facultad");
+        const qint64 so = pc.addFolder(fac, "SO");
+        Pomodoro p; p.folderId = so; p.day = QDate(2026, 11, 2); p.startedAt = 1000; p.endedAt = 2500;
+        p.plannedSec = 1500; p.studiedSec = 1500; p.status = PomoStatus::Completed; p.note = "memoria";
+        pc.insertPomodoro(p);
+        GoalRule g; g.spec = QString("2x25@%1").arg(so); g.start = QDate(2026, 11, 2); g.weekdays = 0;
+        pc.insertGoal(g);
+        pc.setDayTitle(QDate(2026, 11, 2), "Parcial");
+        QVERIFY(spc.pendingCount() > 0);
+        push(spc);
+        QCOMPARE(spc.pendingCount(), 0);
+
+        // El celu baja todo. Su "General" se une con la de la PC (no queda duplicada).
+        QVERIFY(pull(scel) > 0);
+        const FolderTree t(cel.folders());
+        QCOMPARE(t.all().size(), 3);
+        qint64 soCel = 0;
+        for (const Folder& f : t.all()) if (f.name == "SO") soCel = f.id;
+        QVERIFY(soCel > 0);
+        QCOMPARE(t.path(soCel), QString("Facultad › SO"));
+        const auto pomos = cel.pomodorosBetween(QDate(2026, 11, 2), QDate(2026, 11, 2));
+        QCOMPARE(pomos.size(), 1);
+        QCOMPARE(pomos[0].folderId, soCel);
+        QCOMPARE(pomos[0].note, QString("memoria"));
+        QCOMPARE(cel.goals().first().spec, QString("2x25@%1").arg(soCel));
+        QCOMPARE(cel.dayTitle(QDate(2026, 11, 2)), QString("Parcial"));
+        QCOMPARE(scel.pendingCount(), 0);   // aplicar lo que llega no se vuelve a mandar
+        // Un pomodoro de otro aparato no es "nuestro" para cerrar al abrir la app.
+        Pomodoro run; run.folderId = so; run.day = QDate(2026, 11, 3); run.startedAt = 5000; run.endedAt = 5100;
+        run.plannedSec = 1500; run.status = PomoStatus::Running;
+        pc.insertPomodoro(run);
+        push(spc);
+        pull(scel);
+        QCOMPARE(cel.pomodorosWithStatus(PomoStatus::Running).size(), 0);
+        QCOMPARE(pc.pomodorosWithStatus(PomoStatus::Running).size(), 1);
+
+        // En el celu: renombrar y una nota nueva; vuelve a la PC.
+        QTest::qWait(5);
+        cel.renameFolder(soCel, "Sistemas Operativos");
+        push(scel);
+        pull(spc);
+        QCOMPARE(FolderTree(pc.folders()).find(so)->name, QString("Sistemas Operativos"));
+
+        // Borrar en la PC llega como borrado al celu.
+        pc.deletePomodoro(pc.pomodorosBetween(QDate(2026, 11, 2), QDate(2026, 11, 2))[0].id);
+        push(spc);
+        pull(scel);
+        QCOMPARE(cel.pomodorosBetween(QDate(2026, 11, 2), QDate(2026, 11, 2)).size(), 0);
+
+        // Gana el cambio más nuevo: si el celu cambió algo después, lo viejo de la PC no lo pisa.
+        QTest::qWait(5);
+        pc.renameFolder(so, "SO viejo");
+        QTest::qWait(1100);
+        cel.renameFolder(soCel, "SO nuevo");
+        push(scel);
+        push(spc);   // llega después pero es más viejo: el servidor se queda con el del celu
+        pull(spc);
+        pull(scel);
+        QCOMPARE(FolderTree(pc.folders()).find(so)->name, QString("SO nuevo"));
+        QCOMPARE(FolderTree(cel.folders()).find(soCel)->name, QString("SO nuevo"));
     }
 
     // M39: CSV

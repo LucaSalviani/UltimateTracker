@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 ApplicationWindow {
@@ -39,6 +39,13 @@ ApplicationWindow {
         }
     }
 
+    // Para revisar la interfaz sin un celu (capturas)
+    Component.onCompleted: {
+        const a = Qt.application.arguments
+        if (a.indexOf("--demo-sync") >= 0) syncSheet.open()
+        if (a.indexOf("--demo-acts") >= 0) sheet.open()
+    }
+
     Connections {
         target: ut
         function onCompleted() { pulse.restart() }
@@ -67,6 +74,29 @@ ApplicationWindow {
                     Label { text: ut.dateLabel; color: theme.dim; font.pixelSize: 13 }
                 }
                 Item { Layout.fillWidth: true }
+                // Nube: estado de la sincronización (toca para la cuenta)
+                Rectangle {
+                    implicitWidth: 38; implicitHeight: 38; radius: 19
+                    color: cloudMouse.pressed ? theme.surfaceHi : "transparent"
+                    Canvas {
+                        id: cloud
+                        anchors.centerIn: parent
+                        width: 22; height: 16
+                        property bool on: ut.syncSignedIn
+                        onOnChanged: requestPaint()
+                        onPaint: {
+                            const c = getContext("2d"); c.reset()
+                            c.strokeStyle = on ? theme.text : theme.faint; c.lineWidth = 1.8
+                            c.beginPath()
+                            c.moveTo(5, 15); c.lineTo(17, 15)
+                            c.arc(17, 10, 5, Math.PI / 2, -Math.PI / 2, true)
+                            c.arc(11, 7, 6, -0.2, Math.PI + 0.6, true)
+                            c.arc(5, 11, 4, -Math.PI / 2, Math.PI / 2, true)
+                            c.stroke()
+                        }
+                    }
+                    MouseArea { id: cloudMouse; anchors.fill: parent; onClicked: syncSheet.open() }
+                }
                 ColumnLayout {
                     spacing: 2
                     Label { Layout.alignment: Qt.AlignRight; text: ut.todayStudied; color: theme.text; font.pixelSize: 24; font.weight: Font.Bold }
@@ -197,6 +227,15 @@ ApplicationWindow {
                 faint: theme.faint
             }
         }
+    }
+
+    SyncSheet {
+        id: syncSheet
+        bg: theme.surface
+        textColor: theme.text
+        dimColor: theme.dim
+        lineColor: theme.line
+        accent: theme.accent
     }
 
     ActivitySheet {

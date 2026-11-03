@@ -3,6 +3,7 @@
 #include "core/Database.h"
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
+#include "core/Sync.h"
 
 #include <QObject>
 #include <QVariantList>
@@ -26,6 +27,10 @@ class MobileApp : public QObject {
     Q_PROPERTY(QString todayStudied READ todayStudied NOTIFY ticked)
     Q_PROPERTY(QString dateLabel READ dateLabel NOTIFY todayChanged)
     Q_PROPERTY(int pomodoroNumber READ pomodoroNumber NOTIFY todayChanged)
+    // Sincronización con la PC
+    Q_PROPERTY(bool syncSignedIn READ syncSignedIn NOTIFY syncChanged)
+    Q_PROPERTY(QString syncEmail READ syncEmail NOTIFY syncChanged)
+    Q_PROPERTY(QString syncStatus READ syncStatus NOTIFY syncChanged)
 
 public:
     explicit MobileApp(Database* db, QObject* parent = nullptr);
@@ -59,6 +64,13 @@ public:
     Q_INVOKABLE void nudgeBreak(int deltaMin);
     Q_INVOKABLE QString clock(int sec) const;   // "24:59"
     Q_INVOKABLE void appActivated();            // al volver a la app: ponerse al día
+    bool    syncSignedIn() const { return m_sync.signedIn(); }
+    QString syncEmail() const { return m_sync.email(); }
+    QString syncStatus() const { return m_sync.status(); }
+    Q_INVOKABLE void signIn(const QString& email, const QString& password) { m_sync.signIn(email, password); }
+    Q_INVOKABLE void signUp(const QString& email, const QString& password) { m_sync.signUp(email, password); }
+    Q_INVOKABLE void signOut() { m_sync.signOut(); }
+    Q_INVOKABLE void syncNow() { m_sync.syncNow(); }
 
 signals:
     void changed();
@@ -67,6 +79,8 @@ signals:
     void todayChanged();
     void completed();      // terminó un pomodoro (vibra / suena)
     void breakOver();
+    void syncChanged();
+    void syncMessage(const QString& text);
 
 private:
     void reloadFolders();
@@ -79,4 +93,5 @@ private:
     QHash<qint64, QString> m_colors;
     QVariantList       m_today;
     AndroidBridge*     m_android = nullptr;
+    SyncClient         m_sync;
 };

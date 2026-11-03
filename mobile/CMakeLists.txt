@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Sql)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Sql Network)
 
 # El mismo motor que la app de escritorio (pomodoros, base, estadísticas, hitos).
 set(CORE ${CMAKE_CURRENT_SOURCE_DIR}/../src/core)
@@ -19,9 +19,11 @@ add_library(ut_core STATIC
     ${CORE}/Stats.h           ${CORE}/Stats.cpp
     ${CORE}/Milestones.h      ${CORE}/Milestones.cpp
     ${CORE}/SessionController.h ${CORE}/SessionController.cpp
+    ${CORE}/SyncConfig.h
+    ${CORE}/Sync.h            ${CORE}/Sync.cpp
 )
 target_include_directories(ut_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
-target_link_libraries(ut_core PUBLIC Qt6::Core Qt6::Sql)
+target_link_libraries(ut_core PUBLIC Qt6::Core Qt6::Sql Qt6::Network)
 
 qt_add_executable(UltimateTrackerMobile
     src/main.cpp
@@ -36,6 +38,7 @@ qt_add_qml_module(UltimateTrackerMobile
         qml/TimerRing.qml
         qml/Tiles.qml
         qml/ActivitySheet.qml
+        qml/SyncSheet.qml
         qml/UtButton.qml
         qml/Stepper.qml
 )

@@ -13,6 +13,8 @@
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
 #include "core/Milestones.h"
+#include "core/Sync.h"
+#include "ui/SyncDialog.h"
 #include "ui/LiveStats.h"
 #include "ui/TimerDeck.h"
 #include "ui/Icons.h"
@@ -434,6 +436,22 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_wakeDebounce->setInterval(4000);   // despertar + desbloquear llegan juntos: uno solo
     connect(m_wake, &WakeWatcher::woke, m_wakeDebounce, qOverload<>(&QTimer::start));
     connect(m_wakeDebounce, &QTimer::timeout, this, &MainWindow::onWake);
+    // Celu-4: sincronización con el celu (cada minuto, al terminar un pomodoro y al abrir).
+    // En el modo de pruebas no: es una copia de los datos.
+    if (!devmode::active()) {
+        m_sync = new SyncClient(m_db, this);
+        connect(m_sync, &SyncClient::applied, this, [this] {
+            reloadFolders();
+            reloadGrid();
+            if (m_overlay == Overlay::Stats) m_stats->refresh();
+            if (m_overlay == Overlay::Activities) m_activities->refresh();
+        });
+        connect(m_sync, &SyncClient::changed, this, [this] {
+            if (m_sync->signedIn()) m_sync->setAutoSync(true, 60000); else m_sync->setAutoSync(false);
+        });
+        connect(m_session, &SessionController::pomodoroSaved, this, [this] { QTimer::singleShot(1500, m_sync, &SyncClient::syncNow); });
+        if (m_sync->signedIn()) QTimer::singleShot(3000, this, [this] { m_sync->setAutoSync(true, 60000); });
+    }
     m_hotkey = new GlobalHotkey(this);
     connect(m_hotkey, &GlobalHotkey::activated, this, [this] {
         togglePlay();
@@ -604,6 +622,12 @@ QWidget* MainWindow::buildTitleBar()
         }
         hitos->addSeparator();
         hitos->addAction(QStringLiteral("Ajustar números…"), this, [this] { openSettings(5); });
+    });
+    menu->addAction(QStringLiteral("Sincronizar con el celu…"), this, [this] {
+        if (!m_sync) { toast(QStringLiteral("En el modo de pruebas no se sincroniza")); return; }
+        SyncDialog dlg(m_sync, this);
+        win::applyChrome(&dlg);
+        dlg.exec();
     });
     menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });
     menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);

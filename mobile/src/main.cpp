@@ -38,6 +38,7 @@ int main(int argc, char* argv[])
     engine.load(QUrl(path));
     if (engine.rootObjects().isEmpty()) return 1;
     // Para revisar la interfaz sin un celu: UT_SHOT=archivo.png saca una captura y sale.
+    if (QCoreApplication::arguments().contains(QStringLiteral("--demo-run"))) ut.primary();
     const QString shot = qEnvironmentVariable("UT_SHOT");
     if (!shot.isEmpty()) {
         QTimer::singleShot(qEnvironmentVariableIntValue("UT_SHOT_MS") > 0 ? qEnvironmentVariableIntValue("UT_SHOT_MS") : 1200, &app, [&engine, shot] {

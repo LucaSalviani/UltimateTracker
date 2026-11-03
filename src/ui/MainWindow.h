@@ -168,6 +168,7 @@ private:
     class Celebration* m_celebration = nullptr;
     class GlobalHotkey* m_hotkey = nullptr;   // M9
     class WakeWatcher*  m_wake = nullptr;     // B2-4
+    class SyncClient*   m_sync = nullptr;     // Celu-4
     QTimer*             m_wakeDebounce = nullptr;
     bool                m_greetingOpen = false;
     class MiniPlayer* m_mini = nullptr;       // M19

@@ -147,7 +147,9 @@ void Database::setupSync(bool firstTime)
         if (c.next() && c.value(0).toInt() == 0) { c.finish(); exec("INSERT INTO sync_flag(applying) VALUES(0)"); }
     }
     exec("UPDATE sync_flag SET applying = 0");   // por si la app se cerró en medio de una sincronización
-    const QString now = QStringLiteral("(CAST(strftime('%s','now') AS INTEGER) * 1000)");
+    addColumnIfMissing("pomodoros", "device", "TEXT NOT NULL DEFAULT ''");   // '' = de este aparato
+    // Hora actual en milisegundos (strftime('%s') solo da segundos: dos cambios en el mismo segundo empataban).
+    const QString now = QStringLiteral("CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)");
     const QString off = QStringLiteral("(SELECT applying FROM sync_flag LIMIT 1) = 0");
     struct T { const char* table; const char* kind; const char* key; };   // key: columna que hace de uid
     const T tables[] = {{"folders", "folder", "uid"}, {"pomodoros", "pomodoro", "uid"}, {"intervals", "interval", "uid"},
@@ -176,7 +178,7 @@ void Database::setupSync(bool firstTime)
                                  .arg(kind, key, table);
         exec(QStringLiteral("CREATE TRIGGER IF NOT EXISTS sync_%1_ins AFTER INSERT ON %1 WHEN %2 BEGIN %3%4END").arg(table, off, ins, note));
         exec(QStringLiteral("CREATE TRIGGER IF NOT EXISTS sync_%1_upd AFTER UPDATE ON %1 WHEN %2 BEGIN "
-                            "UPDATE %1 SET updated_at = %3 WHERE rowid = NEW.rowid; %4END").arg(table, off, now, note));
+                            "UPDATE %1 SET updated_at = MAX(OLD.updated_at + 1, %3) WHERE rowid = NEW.rowid; %4END").arg(table, off, now, note));
         exec(QStringLiteral("CREATE TRIGGER IF NOT EXISTS sync_%1_del AFTER DELETE ON %1 WHEN %2 AND OLD.%3 IS NOT NULL BEGIN "
                             "DELETE FROM sync_outbox WHERE kind = '%4' AND uid = OLD.%3; "
                             "INSERT INTO sync_outbox(kind, uid, deleted, at) VALUES('%4', OLD.%3, 1, %5); END")
@@ -476,7 +478,8 @@ QVector<Pomodoro> Database::pomodorosWithStatus(PomoStatus st) const
 {
     QVector<Pomodoro> out;
     QSqlQuery q(m_db);
-    q.prepare("SELECT " POMO_COLUMNS " FROM pomodoros WHERE status = ? ORDER BY started_at, id");
+    // Solo los de este aparato (device = ''): uno que llegó del celu corriendo no es nuestro para cerrar.
+    q.prepare("SELECT " POMO_COLUMNS " FROM pomodoros WHERE status = ? AND device = '' ORDER BY started_at, id");
     q.addBindValue(int(st));
     q.exec();
     while (q.next()) out.append(readPomodoro(q));

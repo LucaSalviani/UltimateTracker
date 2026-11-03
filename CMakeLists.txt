@@ -20,10 +20,12 @@ add_library(constancia_core STATIC
     src/core/Stats.h           src/core/Stats.cpp
     src/core/Export.h          src/core/Export.cpp
     src/core/Milestones.h      src/core/Milestones.cpp
+    src/core/SyncConfig.h
+    src/core/Sync.h            src/core/Sync.cpp
     src/core/SessionController.h src/core/SessionController.cpp
 )
 target_include_directories(constancia_core PUBLIC src)
-target_link_libraries(constancia_core PUBLIC Qt6::Core Qt6::Sql)
+target_link_libraries(constancia_core PUBLIC Qt6::Core Qt6::Sql Qt6::Network)
 
 # ---------------------------------------------------------------------------
 # Aplicación
@@ -48,6 +50,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/MiniPlayer.h        src/ui/MiniPlayer.cpp
     src/ui/DevMode.h           src/ui/DevMode.cpp
     src/ui/SettingsDialog.h    src/ui/SettingsDialog.cpp
+    src/ui/SyncDialog.h        src/ui/SyncDialog.cpp
     src/ui/StatsWidget.h       src/ui/StatsWidget.cpp
     src/ui/MainWindow.h        src/ui/MainWindow.cpp
 )

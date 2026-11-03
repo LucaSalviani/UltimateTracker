@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QDateTime>
+#include <QTimer>
 #include <QVariantMap>
 #include <functional>
 
@@ -17,6 +18,7 @@ MobileApp::MobileApp(Database* db, QObject* parent)
     : QObject(parent)
     , m_db(db)
     , m_session(db)
+    , m_sync(db)
 {
     m_android = new AndroidBridge;
     m_session.setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
@@ -46,6 +48,18 @@ MobileApp::MobileApp(Database* db, QObject* parent)
     });
     reloadToday();
     m_android->requestPermissions();
+
+    // Sincronización: cada 30 s con la app abierta, al volver a ella y al terminar un pomodoro.
+    connect(&m_sync, &SyncClient::changed, this, &MobileApp::syncChanged);
+    connect(&m_sync, &SyncClient::message, this, &MobileApp::syncMessage);
+    connect(&m_sync, &SyncClient::applied, this, [this] {
+        reloadFolders();
+        if (!m_tree.contains(m_session.folderId()) && !m_tree.all().isEmpty()) m_session.setFolderId(m_tree.all().first().id);
+        emit changed();
+        reloadToday();
+    });
+    connect(&m_session, &SessionController::pomodoroSaved, this, [this] { QTimer::singleShot(1500, &m_sync, &SyncClient::syncNow); });
+    m_sync.setAutoSync(true, 30000);
 }
 
 MobileApp::~MobileApp()
@@ -254,6 +268,7 @@ void MobileApp::appActivated()
     m_session.tick();   // si el sistema la tuvo dormida, se pone al día con el reloj
     reloadToday();
     syncAndroid();
+    m_sync.syncNow();
 }
 
 // La notificación con la cuenta regresiva y la alarma exacta para cuando termine.
