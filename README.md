@@ -1,176 +1,76 @@
 # UltimateTracker
 
-App de escritorio para gamificar el estudio: pomodoros como cuadraditos en una grilla, horas por actividad camino a las 10.000 h, recreos, recreos indebidos y estadísticas. C++20 + Qt 6, nativa, sin navegador embebido.
+**Pomodoros y horas de estudio, en una ventana chica.** Cada pomodoro es un cuadradito que se va llenando mientras estudiás. La app cuenta tus horas por materia como el contador de horas de un videojuego y te acompaña camino a las 10.000 horas.
 
-La especificación completa está en [`SPEC.md`](SPEC.md).
+![UltimateTracker](docs/captura-dia.png)
 
-## Compilar en Windows 11
+## Descargar
 
-### 1. Instalar Qt (una sola vez)
+1. Entrá a [**Releases**](https://github.com/LucaSalviani/UltimateTracker/releases) y bajá el último **`UltimateTracker-…-setup.exe`**.
+2. Abrilo y seguí el instalador. Se instala solo para tu usuario, no pide permisos de administrador y te deja un acceso directo en el escritorio.
+3. Si Windows muestra **"Windows protegió tu PC"**, tocá **Más información → Ejecutar de todas formas**. Aparece porque la app todavía no está firmada; es normal en una beta.
 
-1. Bajá el **Qt Online Installer** desde qt.io (pide crear una cuenta gratuita).
-2. Elegí **Custom installation** y marcá:
-   - **Qt 6.8.x** (LTS) →
-     - **MinGW 13.1.0 64-bit**, que es el compilador más simple porque no necesita Visual Studio.
-     - **Additional Libraries → Qt Multimedia**, que se usa para los sonidos.
-   - **Developer and Designer Tools** → **Qt Creator**, **MinGW 13.1.0 64-bit**, **CMake** y **Ninja** (suelen venir marcados).
-3. Instalá.
+> Funciona en **Windows 10 y 11 (64 bits)**. Si preferís no instalar nada, en el mismo lugar está la versión portable en `.zip`: descomprimila y abrí `UltimateTracker.exe`.
 
-Si ya tenés Visual Studio 2022 con "Desarrollo para el escritorio con C++", podés usar el kit **MSVC 2022 64-bit** en lugar de MinGW.
+## Primeros pasos
 
-### 2. Abrir y correr
+1. **Creá tus actividades.** En el menú **⋯ → Actividades** agregá tus materias o temas (por ejemplo *Facultad → Física II*). Podés anidarlas y elegirles un color.
+2. **Elegí la actividad y la duración.** Arriba del cronómetro elegís en qué vas a trabajar. La duración se cambia con los botones **− / +**, con la rueda del mouse o haciendo click en el tiempo para escribirla.
+3. **Dale play** (o apretá **Espacio**). El cuadradito se va llenando. Cuando termina suena un aviso y elegís si tomarte un recreo, y de cuánto, o seguir con otro pomodoro.
+4. **Mirá cómo venís.** Abajo de la grilla ves los pomodoros y el tiempo de hoy. En **Estadísticas** (el ícono de barras) tenés el día, la semana, el mes y el año.
 
-1. Abrí **Qt Creator** → *File → Open File or Project…* → elegí `CMakeLists.txt`.
-2. Elegí el kit **Desktop Qt 6.8.x MinGW 64-bit** → *Configure Project*.
-3. Abajo a la izquierda poné **Release** y tocá ▶ (Ctrl+R).
+## Lo que trae
 
-Para recompilar después de un cambio alcanza con `recompilar.bat` (en la carpeta de arriba).
+- **Pomodoros a tu medida:** la duración que quieras, y cada uno arranca cuando vos le das play.
+- **Recreos con alarma.** El tiempo muerto entre un pomodoro y otro, sin recreo ni estudio, se anota aparte como "recreo indebido" para que lo veas.
+- **Objetivo del día:** decí qué querés lograr hoy (tecla **G**) y la grilla te muestra lo que falta. Se puede repetir todos los días o algunos días de la semana.
+- **Estadísticas** por día, semana, mes y año, con mapa de calor, rachas y la opción de exportar todo a Excel (CSV).
+- **Hitos para motivarte:**
+  - *Todos los días:* marca de bronce, plata y oro según las horas, rachas y récords personales.
+  - *Cada semana:* una meta de horas que se va llenando abajo de la grilla.
+  - *A largo plazo:* etapas por materia camino a las 10.000 h, de **Novato** a **Maestro**, y un nivel global con todo lo que estudiaste.
+- **Siempre a mano:** ventana chica para tener al costado, mini reproductor flotante (**M**), modo pantalla completa (**F11**) y la opción de esconderla contra el borde de la pantalla.
+- **A tu gusto:** temas oscuro y claro en varios colores, distintos estilos de cuadraditos, festejos y sonidos. Todo se cambia en **⋯ → Ajustes**.
 
-**Sin Qt Creator:** `tools/windows/instalar-qt.bat` instala Qt 6.8 (MinGW), CMake y Ninja en `C:\Qt` sin cuenta. `tools/windows/crear-acceso-directo.ps1 -Exe <ruta al .exe>` pone la app en el escritorio y en el menú Inicio.
+![Estadísticas](docs/captura-estadisticas.png)
 
-**Instalador:** `tools/windows/installer.nsi` arma un `setup.exe` (NSIS, para Linux o Windows): `makensis -DAPPDIR=<carpeta de la app> -DVERSION=1.0.0 -DVERSION_LABEL="1.0 beta 1" installer.nsi`. Instala solo para el usuario, sin administrador, con accesos directos y desinstalador.
+## Atajos de teclado
 
-### 3. Dejarla instalada como app
-
-Qt Creator compila en una carpeta tipo `build/Desktop_Qt_6_8_..._Release/`. Para tener un ejecutable que funcione solo:
-
-```bat
-mkdir C:\Apps\UltimateTracker
-copy build\...\UltimateTracker.exe C:\Apps\UltimateTracker\
-C:\Qt\6.8.x\mingw_64\bin\windeployqt.exe --release C:\Apps\UltimateTracker\UltimateTracker.exe
-```
-
-`windeployqt` copia al lado del `.exe` las DLLs de Qt, el driver de SQLite y el backend de audio. Después:
-
-- **Acceso directo:** clic derecho en `UltimateTracker.exe` → *Mostrar más opciones → Crear acceso directo*, y anclalo a Inicio o a la barra de tareas.
-- **Que arranque con Windows:** *⋯ → Ajustes → Sistema → Iniciar con Windows* (si antes pusiste un acceso directo en `shell:startup`, borralo para que no abra dos veces).
-
-## Uso
-
-| Acción | Cómo |
+| Tecla | Qué hace |
 |---|---|
-| Arrancar / pausar / seguir | Botón grande del reproductor o **Espacio** |
-| Elegir actividad y duración | Arriba del reproductor; la duración con los botones −1 −5 +5 +1, la rueda del mouse sobre el tiempo o click en el tiempo para escribirla |
-| Objetivo del día | Click en la barra de arriba, botón de la diana o **G**; para otro día, click derecho sobre el día en la semana o el mes |
-| Mini reproductor flotante | **M** o ⋯ → Mini reproductor (doble click en él abre la app) |
-| Tamaño de los cuadraditos | Botón de la barra: cicla entre iguales, solo ancho y proporcional completo |
-| Pantalla completa | ⋯ → Pantalla completa o **F11** (Esc sale) |
-| Pausar / seguir desde cualquier lado | **Ctrl + Alt + P** |
-| Vista día → semana → mes | Botones de la barra superior, **Ctrl + rueda** o **Ctrl −** / **Ctrl +** |
-| Ir a un día | Click sobre el día en la vista semana o mes |
-| Esconder en un borde | ⋯ → Esconder en el borde, o arrastrar la ventana y soltarla contra cualquier borde. Se vuelve a abrir con un click en la pestañita. |
-| Siempre visible | ⋯ → Siempre visible |
-| Actividades y ajustes | Botón ⋯ |
-| Mover, anotar, corregir o borrar un pomodoro | Click derecho sobre el cuadradito (borrar se puede deshacer) |
-| Horas que ya tenías | Actividades → click derecho → Horas previas… |
-| Color de una actividad | Actividades → click derecho → Color (o Automático) |
-| Stats en vivo: actividad / todo el día | "ver todo el día ⇄" abajo de la grilla |
-| Volver al tamaño original | Click derecho en la barra de arriba |
-| Estadísticas | Botón de barras |
+| **Espacio** | Play / pausa |
+| **← →** | Día anterior / siguiente |
+| **T** | Volver a hoy |
+| **G** | Objetivo del día |
+| **S** | Estadísticas |
+| **M** | Mini reproductor |
+| **Ctrl + Z** | Deshacer lo último |
+| **Ctrl + Alt + P** | Pausar o seguir desde cualquier programa |
+| **?** | Ver todos los atajos |
 
-- Cerrar la ventana con un pomodoro, pausa o recreo en marcha la manda a la bandeja del sistema y el tiempo sigue contando. Si no, cierra la app.
-- Cuando termina un pomodoro o un recreo, la ventana aparece sola, aunque esté escondida en el borde o en la bandeja.
-- La alarma del recreo se repite y sube de volumen hasta que la cortás.
+## Preguntas frecuentes
 
-**Colores de los cuadraditos:** el que corre se llena con el color del pomodoro · los terminados, del color de "terminado" (negro por defecto) · punteados = lo que falta del objetivo. Todo se cambia en *Ajustes › Cuadraditos*.
+**¿Dónde se guardan mis datos?**
+En tu compu, en `%APPDATA%\UltimateTracker`. No se suben a ningún lado. La app hace una copia de seguridad todos los días y guarda las últimas 7.
 
-## Datos
+**¿Puedo cargar las horas que estudié antes de usar la app?**
+Sí: en **Actividades**, click derecho sobre la materia → **Horas previas…**. Cuentan para el total, los hitos y las etapas.
 
-Todo queda en `%APPDATA%\UltimateTracker\ultimatetracker.db` (SQLite) y se guarda al instante. La primera vez se copian solos los datos de cuando la app se llamaba Constancia (`%APPDATA%\Constancia`, que queda como respaldo).
+**Me equivoqué con un pomodoro, ¿lo puedo corregir?**
+Sí: click derecho sobre el cuadradito para moverlo a otra actividad, corregir cuánto duró, agregarle una nota o borrarlo. Casi todo se puede deshacer con **Ctrl + Z**.
 
-Además, una vez por día se hace una copia de seguridad en `%APPDATA%\UltimateTracker\backups` (se guardan las últimas 7; la carpeta se puede cambiar en Ajustes, por ejemplo a OneDrive). Para volver a una copia: cerrá la app y reemplazá `ultimatetracker.db` por la copia (renombrándola).
+**No quiero que arranque con Windows.**
+Viene prendido. Se apaga en **⋯ → Ajustes → Sistema → Iniciar con Windows**.
 
-Si la app se cierra de golpe (corte de luz, cuelgue), el pomodoro en curso se guarda hasta donde llegó, porque se persiste cada 5 segundos, y queda marcado como final.
+**¿Cómo la desinstalo?**
+En **Configuración → Aplicaciones → Aplicaciones instaladas → UltimateTracker**. Te pregunta si querés borrar también tus datos.
 
-## Estructura
+![Tema claro](docs/captura-claro.png)
 
-```
-src/core/                 lógica pura, sin interfaz (testeable)
-  Database                SQLite: actividades, pomodoros, recreos, hitos, ajustes
-  SessionController       máquina de estados del timer (ver diagrama en el .h)
-  Stats                   totales, horas inactivas, racha con comodines, hitos
-  FolderTree              árbol de actividades y suma de horas hacia arriba
-  DayClock                el día de la app (empieza a las 4 AM)
-  Goals                   metas diarias: specs, reglas que se repiten
-src/ui/
-  MainWindow              ventana gadget, borde, bandeja, tamaños
-  TimerDeck               el reproductor (cronómetro con todos los controles)
-  LiveStats               stats del día en vivo
-  GridWidget              la grilla pintada a mano (día / semana / mes)
-  StatsWidget             estadísticas y mapa de calor
-  ActivitiesWidget        gestor de actividades
-  GoalPanel               meta del día (panel deslizable)
-  Celebration             animación de logro
-  Greeting                saludo al iniciar con Windows
-  SystemIntegration       backup, inicio con Windows, atajo global, pantalla completa
-  EdgeTab, FolderMenu, SettingsDialog, Sounds, Icons, Theme
-resources/                style.qss (plantilla de temas) y sonidos
-tools/make_sounds.py      genera los .wav (sonidos propios)
-tests/test_core.cpp       tests del motor con reloj simulado
-```
+## Comentarios y errores
 
-## Tests
+Es una beta: si algo no anda o se te ocurre una mejora, [abrí un issue](https://github.com/LucaSalviani/UltimateTracker/issues) o escribime.
 
-```bat
-cmake -S . -B build-tests -DCONSTANCIA_TESTS=ON
-cmake --build build-tests
-build-tests\core_tests.exe
-```
+---
 
-En Qt Creator: activá `CONSTANCIA_TESTS` en *Projects → Build → CMake* y corré el target `core_tests`.
-
-## Módulos (para sacar uno si no te gusta)
-
-Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert <commit>` y recompilar. Las columnas y tablas que agregó un módulo quedan en la base sin usar (no molestan).
-
-| Commit | Módulo |
-|---|---|
-| `6d76b94` | M1 · borrar y mover el pomodoro en pausa |
-| `120a2f3` | M2 · el día empieza a las 4 AM |
-| `e34d4a5` | M3 · temas de color y ajustes por secciones |
-| `e150601` | M4 · ajuste del cronómetro (rueda, escribir, ±1/±5) |
-| `4a3a1e9` | M5 · tamaños de ventana y pantalla completa |
-| `0ddb560` | M6 · nota por pomodoro, corregir duración, deshacer |
-| `0d6088c` | M7 · meta diaria |
-| `3e66f79` | M8 · cuadraditos nuevos, agrupado, animaciones y festejos |
-| `bfc5ff2` | M9 · backup, inicio con Windows, atajo global, no molestar |
-| `842eff6` | M10 · saludo al iniciar |
-| `96d1f8f` | M11 · horas previas |
-| `1927114` | M12 · arreglos: editor del cronómetro y pantalla completa |
-| `921e05e` | M13 · sin "¿En qué trabajaste?" |
-| `a2f5a94` | M14 · "Objetivo" y la barra de arriba |
-| `dcada70` | M15 · modo claro para cada color |
-| `f90ba49` | M16 · tamaños de cuadraditos cíclicos |
-| `1a28944` | M17 · objetivo con botones y precarga del próximo pomodoro |
-| `388d9e4` | M18 · estilo de cuadraditos (formas, marcas, llenado, completado) |
-| `1a8b3ee` | M19 · mini reproductor flotante |
-| `1795836` | M20 · modo desarrollador |
-| `2b5a6d9` | M21 · objetivo por tiempo acumulado, filas, barra con tu texto |
-| `5ec3223` | M22 · acentos fuertes |
-| `dee394e` | M23 · cuadraditos v2 (tamaño base, invertidos, paletas, borde, marcas nuevas…) |
-| `39b30e8` | M24 · agrupado en línea recuadrado y tetris en proporcional completo |
-| `43cc66c` | M25 · colores por actividad elegibles |
-| `621d381` | M26 · festejos minimalistas (Línea, Borde, Tilde, Cifra) |
-| `dd61ec3` | M27 · sonidos alternativos y volumen |
-| `5e8157c` | M28 · reinicio del modo desarrollador, Enter en Ajustes, visor claro |
-| `f0cc8cf` | M29 · ajustes de cuadraditos, número afuera, resaltar el que corre |
-| `056cca6` | M30 · proporcional completo como rompecabezas |
-| `8771c40` | M31 · texto negro sobre el resaltado, visor del acento, festejo por cosa, arreglo del tema |
-| `e0a88e6` | M32 · segmentos "contorno", formato de tiempo único, Ajustes reordenado, barra liviana |
-| `9f6a70a` | M33 · tus ajustes actuales como valores por defecto |
-| `8a1b9e9` | M34 · reinicio del modo de pruebas dentro del mismo proceso, visor y agrupado en vivo |
-| `4896d09` | M35 · colores en Estadísticas y en el menú de actividades |
-| `cb70d32` | M36 · transiciones suaves y estados vacíos |
-| `c7f2b30` | M37 · atajos de teclado (panel con ?) y Ajustes reinicia de verdad al cambiar el modo de pruebas |
-| `8e511c1` | M38 · «Restablecer esta sección» en Ajustes |
-| `44066c8` | M39 · exportar a CSV |
-| `63767c9` | M40 · deshacer en todo |
-| `19db0ed` | M41 · Estadísticas con el rojo suave del cronómetro |
-| `45bd0af` | M42 · proporcional completo rehecho (sin rompecabezas) |
-| `072e3fd` | M43 · proporcional a lo ancho prolijo |
-| `4b330b4` | M44 · hitos en tres plazos (lógica, menú ⋯ › Hitos, Ajustes › Hitos) |
-| `843cd32` | M45 · hitos a la vista (grilla, Estadísticas, resumen del mes) |
-
-## Modo desarrollador
-
-*Ajustes → Sistema → Modo desarrollador* y Guardar (se reinicia sola). La app abre una **copia** de tu base (`ultimatetracker-pruebas.db`, se rehace en cada arranque) y aparece el botón 🧪: completar ya, acelerar el tiempo (×10, ×60, ×300), ver los festejos, la animación de completado, los sonidos y el saludo. Tus datos reales no se tocan. Para salir: 🧪 → Salir del modo desarrollador.
+<sub>Hecha en C++ y Qt, nativa para Windows. Si querés compilarla o modificarla, mirá la [guía de desarrollo](docs/DESARROLLO.md).</sub>
