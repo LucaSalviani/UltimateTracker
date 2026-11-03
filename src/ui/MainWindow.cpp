@@ -427,6 +427,13 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     midnight->start();
 
     // ---- M9: atajo global, inicio con Windows y copia de seguridad diaria
+    // B2-4: al desbloquear o despertar la PC (con la app abierta), saludo si es el primer uso del día.
+    m_wake = new WakeWatcher(this);
+    m_wakeDebounce = new QTimer(this);
+    m_wakeDebounce->setSingleShot(true);
+    m_wakeDebounce->setInterval(4000);   // despertar + desbloquear llegan juntos: uno solo
+    connect(m_wake, &WakeWatcher::woke, m_wakeDebounce, qOverload<>(&QTimer::start));
+    connect(m_wakeDebounce, &QTimer::timeout, this, &MainWindow::onWake);
     m_hotkey = new GlobalHotkey(this);
     connect(m_hotkey, &GlobalHotkey::activated, this, [this] {
         togglePlay();
@@ -1936,7 +1943,16 @@ void MainWindow::applySoundSettings()
 
 void MainWindow::applySystemSettings()
 {
-    sysint::setAutostart(m_db->setting("autostart", 1).toBool());
+    sysint::setAutostart(m_db->setting("autostart", 0).toBool());   // B2: apagado para la gente nueva
+    // B2-4: la tarea que la abre al desbloquear o despertar la PC va con el saludo.
+    // Solo se toca si cambió algo (prendido/apagado o dónde está el .exe).
+    if (!devmode::active()) {
+        const bool wantWake = m_db->setting("greeting", 0).toBool();
+        const QString want = wantWake ? QCoreApplication::applicationFilePath() : QString();
+        if (m_db->setting("wake_task").toString() != want) {
+            if (sysint::setWakeTask(wantWake) || !wantWake) m_db->setSetting("wake_task", want);
+        }
+    }
     const bool wantHotkey = m_db->setting("hotkey", 1).toBool();
     const bool ok = m_hotkey->setEnabled(wantHotkey);
 #ifdef Q_OS_WIN
@@ -1950,6 +1966,17 @@ void MainWindow::runDailyBackup()
 {
     if (!m_db->setting("backup", 1).toBool() || devmode::active()) return;   // la copia de prueba no se respalda
     sysint::dailyBackup(*m_db, qApp->property("dataDir").toString(), m_db->setting("backup_dir").toString());
+}
+
+void MainWindow::onWake()
+{
+    checkDayRollover();   // por si el día cambió mientras dormía
+    if (m_greetingOpen || !Greeting::shouldShow(*m_db)) return;
+    auto* g = new Greeting(m_db, geometry());
+    m_greetingOpen = true;
+    connect(g, &Greeting::accepted, this, &MainWindow::openFromGreeting);
+    connect(g, &QObject::destroyed, this, [this] { m_greetingOpen = false; });
+    g->show();
 }
 
 void MainWindow::openFromGreeting()
@@ -2240,6 +2267,7 @@ void MainWindow::showEvent(QShowEvent* e)
         m_firstShow = false;
         win::applyChrome(this);
         win::enableMinimize(this);
+        m_wake->attach(quintptr(winId()));
         if (m_db->setting("pinned", 0).toBool()) m_btnPin->setChecked(true);
         QTimer::singleShot(400, this, &MainWindow::maybeShowDaySummary);
     }

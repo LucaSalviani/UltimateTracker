@@ -59,7 +59,7 @@ QString hello()
 
 bool Greeting::shouldShow(Database& db)
 {
-    if (!db.setting("greeting", 1).toBool()) return false;
+    if (!db.setting("greeting", 0).toBool()) return false;   // B2: apagado para la gente nueva
     const QString last = db.setting("greeting/last").toString();
     return last != fmt::dayKey(dayclock::today());
 }

@@ -1,4 +1,4 @@
-; Instalador de UltimateTracker para Windows (NSIS 3).
+﻿; Instalador de UltimateTracker para Windows (NSIS 3).
 ; Se instala solo para el usuario (no pide permisos de administrador) en
 ; %LOCALAPPDATA%\Programs\UltimateTracker, con accesos directos en el escritorio
 ; y en el menú Inicio, y aparece en "Aplicaciones instaladas" para desinstalarla.
@@ -105,6 +105,8 @@ Section "Uninstall"
   !insertmacro WAIT_APP_CLOSED
   ; Que no quede arrancando con Windows
   DeleteRegValue HKCU "${RUNKEY}" "${APPNAME}"
+  ; ni abriéndose al desbloquear la PC (tarea del saludo)
+  nsExec::Exec 'schtasks /Delete /TN "UltimateTracker - saludo" /F'
   Delete "$SMPROGRAMS\${APPNAME}.lnk"
   Delete "$DESKTOP\${APPNAME}.lnk"
   RMDir /r "$INSTDIR"

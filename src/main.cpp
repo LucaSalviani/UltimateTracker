@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("UltimateTracker"));
     QApplication::setApplicationDisplayName(QStringLiteral("UltimateTracker"));
-    QApplication::setApplicationVersion(QStringLiteral("0.10.0"));
+    QApplication::setApplicationVersion(QStringLiteral("1.0.0-beta.2"));
     // Vive en la bandeja: cerrar la ventana con algo en marcha no cierra la app.
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
@@ -64,7 +64,8 @@ int main(int argc, char* argv[])
         QLocalSocket probe;
         probe.connectToServer(serverName);
         if (probe.waitForConnected(300)) {
-            probe.write("show");
+            // B2-4: la tarea de "despertar" no trae la ventana al frente: solo le avisa.
+            probe.write(QCoreApplication::arguments().contains(QStringLiteral("--wake")) ? "wake" : "show");
             probe.waitForBytesWritten(300);
             return 0;
         }
@@ -101,6 +102,9 @@ int main(int argc, char* argv[])
             return 1;
         }
         dayclock::setStartHour(db.setting("day_start_hour", 4).toInt());
+        // B2-4: abierta por la tarea al desbloquear o despertar la PC: si hoy ya saludó
+        // (o el saludo está apagado), no abre nada.
+        if (first && QCoreApplication::arguments().contains(QStringLiteral("--wake")) && !Greeting::shouldShow(db)) return 0;
 
         // Tema de colores (paleta + hoja de estilos)
         theme::apply(SettingsDialog::themeKey(&db));
@@ -111,14 +115,18 @@ int main(int argc, char* argv[])
         if (!first && keep.isValid()) w.setGeometry(keep);   // misma posición que antes del reinicio
         QObject::connect(&server, &QLocalServer::newConnection, &w, [&] {
             while (QLocalSocket* s = server.nextPendingConnection()) {
+                s->waitForReadyRead(300);
+                const QByteArray what = s->readAll();
                 s->deleteLater();
-                w.bringToFront();
+                if (what == "wake") w.onWake();
+                else w.bringToFront();
             }
         });
         // M10: al iniciar con Windows (o con --greeting), una vez por día, saludo primero.
         const QStringList args = QCoreApplication::arguments();
         const bool forceGreeting = args.contains(QStringLiteral("--greeting"));
-        if (first && (forceGreeting || (args.contains(QStringLiteral("--autostart")) && Greeting::shouldShow(db)))) {
+        const bool wake = args.contains(QStringLiteral("--wake"));
+        if (first && (forceGreeting || ((wake || args.contains(QStringLiteral("--autostart"))) && Greeting::shouldShow(db)))) {
             auto* g = new Greeting(&db, w.geometry());
             QObject::connect(g, &Greeting::accepted, &w, &MainWindow::openFromGreeting);
             QObject::connect(g, &Greeting::declined, &w, &MainWindow::quitApp);

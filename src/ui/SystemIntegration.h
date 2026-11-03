@@ -20,7 +20,29 @@ bool autostartEnabled();
 // ¿El usuario está en pantalla completa / presentando / jugando? (no molestar)
 bool userBusy();
 
+// B2-4: tarea programada de Windows que abre la app con "--wake" al desbloquear la
+// sesión o al despertar la PC (la app decide si corresponde saludar: una vez por día).
+// Devuelve false si Windows no la dejó crear o borrar.
+bool setWakeTask(bool on);
+QString wakeTaskName();
+
 } // namespace sysint
+
+// B2-4: avisa cuando la PC se despierta o se desbloquea la sesión (con la app abierta).
+class WakeWatcher : public QObject, public QAbstractNativeEventFilter {
+    Q_OBJECT
+public:
+    explicit WakeWatcher(QObject* parent = nullptr);
+    ~WakeWatcher() override;
+    void attach(quintptr windowId);   // la ventana que recibe los avisos de sesión
+    bool nativeEventFilter(const QByteArray& type, void* message, qintptr* result) override;
+
+signals:
+    void woke();
+
+private:
+    quintptr m_hwnd = 0;
+};
 
 // Atajo global (Ctrl + Alt + P): funciona aunque la app no tenga el foco.
 class GlobalHotkey : public QObject, public QAbstractNativeEventFilter {

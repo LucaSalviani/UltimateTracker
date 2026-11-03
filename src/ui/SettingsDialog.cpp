@@ -630,9 +630,9 @@ QWidget* SettingsDialog::pageSystem()
 {
     auto* w = new QWidget(this);
     m_autostart = new QCheckBox(QStringLiteral("Iniciar con Windows"), w);
-    m_autostart->setChecked(m_db->setting("autostart", 1).toBool());
-    m_greeting = new QCheckBox(QStringLiteral("Saludarme al iniciar con Windows (una vez por día)"), w);
-    m_greeting->setChecked(m_db->setting("greeting", 1).toBool());
+    m_autostart->setChecked(m_db->setting("autostart", 0).toBool());
+    m_greeting = new QCheckBox(QStringLiteral("Saludarme la primera vez que uso la PC en el día (al prender, despertar o desbloquear)"), w);
+    m_greeting->setChecked(m_db->setting("greeting", 0).toBool());
     m_hotkey = new QCheckBox(QStringLiteral("Atajo global Ctrl + Alt + P (pausar / seguir)"), w);
     m_hotkey->setChecked(m_db->setting("hotkey", 1).toBool());
     m_quietFullscreen = new QCheckBox(QStringLiteral("No saltar al frente en pantalla completa (solo aviso)"), w);
@@ -836,8 +836,8 @@ void SettingsDialog::resetSection(int page)
         m_soundVolume->setValue(100);
         break;
     case 6:   // Sistema
-        m_autostart->setChecked(true);
-        m_greeting->setChecked(true);
+        m_autostart->setChecked(false);
+        m_greeting->setChecked(false);
         m_hotkey->setChecked(true);
         m_quietFullscreen->setChecked(true);
         m_backup->setChecked(true);

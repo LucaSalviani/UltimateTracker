@@ -70,7 +70,7 @@ qt_add_resources(UltimateTracker "assets"
 target_link_libraries(UltimateTracker PRIVATE constancia_core Qt6::Widgets Qt6::Multimedia Qt6::Network)
 if(WIN32)
     # Esquinas redondeadas, sombra y modo oscuro de Windows 11 (DWM).
-    target_link_libraries(UltimateTracker PRIVATE dwmapi shell32 user32)
+    target_link_libraries(UltimateTracker PRIVATE dwmapi shell32 user32 wtsapi32)
     # Ícono del .exe (el mismo de la barra de tareas).
     # Con MinGW se enlaza un objeto ya compilado: windres falla con rutas que
     # tienen espacios. Para regenerarlo, ver el comentario en resources/app.rc.
