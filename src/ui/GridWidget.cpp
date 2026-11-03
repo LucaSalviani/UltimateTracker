@@ -496,14 +496,23 @@ void GridWidget::paintDying(QPainter& p, const QDate& day)
         const qint64 dt = m_clock.elapsed() - d.at;
         if (dt > kMs) { m_dying.removeAt(i); continue; }
         if (d.day != day) continue;
-        // Destino: el último hecho del día (de la misma actividad si la tiene).
+        // Destino: el que se acaba de completar; si no, el último hecho del día (de su actividad si la tiene).
         QRectF target = d.from;
-        qint64 bestStart = -1;
+        qint64 best = -1;
         for (const Placed& pl : m_placed) {
             const Pomodoro& pm = m_pomos[pl.index];
-            if (isGhost(pm) || pm.day != day) continue;
-            if (d.folder > 0 && pm.folderId != d.folder) continue;
-            if (pm.startedAt > bestStart) { bestStart = pm.startedAt; target = pl.rect; }
+            if (isGhost(pm) || pm.day != day || m_completeAt.value(pm.id, -1) <= best) continue;
+            best = m_completeAt.value(pm.id);
+            target = pl.rect;
+        }
+        if (best < 0) {
+            qint64 bestStart = -1;
+            for (const Placed& pl : m_placed) {
+                const Pomodoro& pm = m_pomos[pl.index];
+                if (isGhost(pm) || pm.day != day || pm.status == PomoStatus::Running || pm.status == PomoStatus::Parked) continue;
+                if (d.folder > 0 && pm.folderId != d.folder) continue;
+                if (pm.startedAt > bestStart) { bestStart = pm.startedAt; target = pl.rect; }
+            }
         }
         const double u = QEasingCurve(QEasingCurve::InOutCubic).valueForProgress(double(dt) / kMs);
         const QRectF r(d.from.left() + (target.left() - d.from.left()) * u, d.from.top() + (target.top() - d.from.top()) * u,
