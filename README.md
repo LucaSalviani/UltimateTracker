@@ -28,6 +28,8 @@ Para recompilar después de un cambio alcanza con `recompilar.bat` (en la carpet
 
 **Sin Qt Creator:** `tools/windows/instalar-qt.bat` instala Qt 6.8 (MinGW), CMake y Ninja en `C:\Qt` sin cuenta. `tools/windows/crear-acceso-directo.ps1 -Exe <ruta al .exe>` pone la app en el escritorio y en el menú Inicio.
 
+**Instalador:** `tools/windows/installer.nsi` arma un `setup.exe` (NSIS, para Linux o Windows): `makensis -DAPPDIR=<carpeta de la app> -DVERSION=1.0.0 -DVERSION_LABEL="1.0 beta 1" installer.nsi`. Instala solo para el usuario, sin administrador, con accesos directos y desinstalador.
+
 ### 3. Dejarla instalada como app
 
 Qt Creator compila en una carpeta tipo `build/Desktop_Qt_6_8_..._Release/`. Para tener un ejecutable que funcione solo:
