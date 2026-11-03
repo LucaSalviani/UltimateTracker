@@ -1,0 +1,53 @@
+import QtQuick
+import QtQuick.Layouts
+
+// [−]  25 min  [+]
+RowLayout {
+    id: root
+    property int value: 25
+    property string suffix: ""
+    property string label: ""
+    property color textColor: "#ececec"
+    property color dimColor: "#9a9a9a"
+    property color buttonColor: "#222222"
+    property color lineColor: "#333333"
+    signal minus()
+    signal plus()
+    spacing: 22
+
+    component StepButton: Rectangle {
+        property string sign: "−"
+        signal tapped()
+        implicitWidth: 46; implicitHeight: 46; radius: 23
+        color: ma.pressed ? Qt.lighter(root.buttonColor, 1.4) : root.buttonColor
+        border.color: root.lineColor
+        Text { anchors.centerIn: parent; text: parent.sign; color: root.textColor; font.pixelSize: 22 }
+        MouseArea {
+            id: ma
+            anchors.fill: parent
+            onClicked: parent.tapped()
+            onPressAndHold: repeat.start()
+            onReleased: repeat.stop()
+        }
+        Timer { id: repeat; interval: 110; repeat: true; onTriggered: parent.tapped() }
+    }
+
+    StepButton { sign: "−"; onTapped: root.minus() }
+    Column {
+        Layout.minimumWidth: 92
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.value + root.suffix
+            color: root.textColor
+            font.pixelSize: 22
+            font.weight: Font.DemiBold
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.label
+            color: root.dimColor
+            font.pixelSize: 12
+        }
+    }
+    StepButton { sign: "+"; onTapped: root.plus() }
+}

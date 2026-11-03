@@ -2,3 +2,4 @@ build*/
 *.user
 .qtcreator/
 CMakeLists.txt.user*
+mobile/android/*.keystore
