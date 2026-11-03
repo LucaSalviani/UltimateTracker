@@ -22,6 +22,7 @@ add_library(constancia_core STATIC
     src/core/Milestones.h      src/core/Milestones.cpp
     src/core/SyncConfig.h
     src/core/Sync.h            src/core/Sync.cpp
+    src/core/Live.h            src/core/Live.cpp
     src/core/SessionController.h src/core/SessionController.cpp
 )
 target_include_directories(constancia_core PUBLIC src)

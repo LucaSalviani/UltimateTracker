@@ -56,6 +56,12 @@ bool SessionController::switchWouldPark(qint64 id) const
 
 void SessionController::setFolderId(qint64 id)
 {
+    // Espejo: cambiar la actividad de un pomodoro que corre es tomar el reloj;
+    // en los demás estados solo se elige la del próximo (sin tocar nada).
+    if (m_passive) {
+        if (m_hasPomo && m_pomo.folderId != id) takeOver();
+        else { m_folderId = id; return; }
+    }
     tick();
     if (!m_hasPomo || m_pomo.folderId == id) {
         m_folderId = id;
@@ -76,6 +82,7 @@ void SessionController::setFolderId(qint64 id)
 
 void SessionController::moveCurrentTo(qint64 id)
 {
+    takeOver();
     m_folderId = id;
     if (m_hasPomo && m_pomo.folderId != id) {
         m_pomo.folderId = id;
@@ -94,6 +101,7 @@ QHash<qint64, int> SessionController::parkedSeconds() const
 
 void SessionController::discardCurrent()
 {
+    takeOver();
     tick();
     if (!m_hasPomo) return;
     m_db->deletePomodoro(m_pomo.id);
@@ -189,6 +197,7 @@ void SessionController::tick()
     if (m_state == State::Idle) return;
 
     m_stateMs += delta;
+    if (m_passive) { passiveTick(delta); emit ticked(); return; }
 
     switch (m_state) {
     case State::Running: {
@@ -233,6 +242,7 @@ void SessionController::tick()
 // ---------------------------------------------------------------------------
 void SessionController::start()
 {
+    takeOver();
     tick();
     if (m_state == State::Running || m_state == State::Paused || m_state == State::Break) return;
     // Si esta actividad tenía un pomodoro en pausa, se sigue ese.
@@ -264,6 +274,7 @@ void SessionController::startPomodoro(bool linked)
 
 void SessionController::pause()
 {
+    takeOver();
     tick();
     if (m_state != State::Running) return;
     persist();
@@ -272,6 +283,7 @@ void SessionController::pause()
 
 void SessionController::resume()
 {
+    takeOver();
     tick();
     if (m_state != State::Paused) return;
     setState(State::Running);
@@ -279,6 +291,7 @@ void SessionController::resume()
 
 void SessionController::endPomodoro()
 {
+    takeOver();
     tick();
     if (m_state != State::Running && m_state != State::Paused) return;
     if (finishPomodoro()) setState(State::WorkDone);
@@ -287,6 +300,7 @@ void SessionController::endPomodoro()
 
 void SessionController::startBreak()
 {
+    takeOver();
     tick();
     if (m_state != State::WorkDone) return;
     m_breakMs = 0;
@@ -296,6 +310,7 @@ void SessionController::startBreak()
 
 void SessionController::skipBreak()
 {
+    takeOver();
     tick();
     if (m_state != State::WorkDone) return;
     if (restoreParked(m_folderId)) setState(State::Running);
@@ -304,18 +319,26 @@ void SessionController::skipBreak()
 
 void SessionController::endBreakEarly()
 {
+    takeOver();
     tick();
     if (m_state == State::Break) setState(State::Ready);
 }
 
 void SessionController::silenceAlarm()
 {
+    takeOver();
     tick();
     if (m_state == State::BreakOver) setState(State::Ready);
 }
 
 void SessionController::closeDay(bool endOfDay)
 {
+    if (m_passive) {   // lo que corre es del otro aparato: acá no se cierra nada
+        if (endOfDay) finishParked();
+        releaseToIdle();
+        m_lastPomoId = 0;
+        return;
+    }
     tick();
     if (endOfDay) finishParked();
     if (m_state == State::Idle) return;
@@ -360,7 +383,7 @@ void SessionController::recoverAfterRestart()
 void SessionController::setState(State s)
 {
     if (s == m_state) return;
-    const IvKind newKind = kindFor(s);
+    const IvKind newKind = m_passive ? IvKind::None : kindFor(s);
     if (newKind != m_ivKind) {
         closeInterval();
         // Volviste a estudiar (o arrancaste un recreo): el tiempo muerto de
@@ -427,6 +450,7 @@ bool SessionController::finishPomodoro()
     m_pomo.status     = PomoStatus::Completed;
     m_db->updatePomodoro(m_pomo);
     m_lastPomoId = m_pomo.id;
+    m_lastPomo = m_pomo;
     m_hasPomo = false;
     emit studyRecorded(m_pomo.folderId, m_pomo.studiedSec);
     emit pomodoroSaved(m_pomo.id);
@@ -436,6 +460,7 @@ bool SessionController::finishPomodoro()
 void SessionController::persist()
 {
     m_lastPersistMs = now();
+    if (m_passive) return;
     if (m_hasPomo) {
         m_pomo.studiedSec = int(m_pomoMs / 1000);
         m_pomo.endedAt = now() / 1000;
@@ -476,3 +501,158 @@ int SessionController::remainingSec() const
 }
 
 int SessionController::stateElapsedSec() const { return int(m_stateMs / 1000); }
+
+// ---------------------------------------------------------------------------
+// En vivo (PC ↔ celu)
+// ---------------------------------------------------------------------------
+SessionController::LiveState SessionController::liveState() const
+{
+    LiveState s;
+    s.state = m_state;
+    s.folderId = m_folderId;
+    s.breakMs = m_breakMs;
+    s.breakPlannedMs = m_breakPlannedMs;
+    if (m_hasPomo) {
+        s.pomo = m_pomo;
+        s.pomoMs = m_pomoMs;
+        s.pomoUid = m_passive ? m_passiveUid : m_db->uidFor("pomodoros", m_pomo.id);
+    } else if (m_state == State::WorkDone || m_state == State::Break || m_state == State::BreakOver) {
+        s.pomo = m_lastPomo;
+        s.pomoMs = qint64(m_lastPomo.studiedSec) * 1000;
+        s.pomoUid = m_passive ? m_passiveUid : (m_lastPomo.id ? m_db->uidFor("pomodoros", m_lastPomo.id) : QString());
+    }
+    return s;
+}
+
+void SessionController::adoptRemote(const LiveState& s, bool announce)
+{
+    if (!m_passive) {
+        // Lo manejaba este aparato y el otro lo tomó: se cierra lo propio sin
+        // tocar el pomodoro (ahora lo guarda el otro).
+        tick();
+        closeInterval();
+        m_hasPomo = false;
+    }
+    m_passive = true;
+    m_ivKind = IvKind::None;
+    const State prev = m_state;
+    if (s.folderId > 0) m_folderId = s.folderId;
+    m_passiveUid = s.pomoUid;
+    m_hasPomo = s.state == State::Running || s.state == State::Paused;
+    m_pomo = s.pomo;
+    m_pomoMs = s.pomoMs;
+    if (!m_hasPomo) {
+        m_lastPomo = s.pomo;
+        m_lastPomo.studiedSec = int(s.pomoMs / 1000);
+        m_lastPomoId = s.pomo.id;
+    }
+    m_breakMs = s.breakMs;
+    m_breakPlannedMs = s.breakPlannedMs;
+    m_lastMs = now();
+    if (prev != s.state) {
+        m_state = s.state;
+        m_stateMs = 0;
+        emit stateChanged(m_state);
+        if (announce && prev == State::Running && s.state == State::WorkDone) emit pomodoroCompleted(s.pomo.id);
+        if (announce && prev == State::Break && s.state == State::BreakOver) emit breakFinished();
+    }
+    emit pomodoroChanged();
+    emit ticked();
+}
+
+void SessionController::releaseToIdle()
+{
+    if (!m_passive) {
+        tick();
+        closeInterval();
+    }
+    m_passive = false;
+    m_passiveUid.clear();
+    m_hasPomo = false;
+    m_ivKind = IvKind::None;
+    if (m_state != State::Idle) {
+        m_state = State::Idle;
+        m_stateMs = 0;
+        m_releasing = true;
+        emit stateChanged(m_state);
+        m_releasing = false;
+    }
+    emit ticked();
+}
+
+// Espejo: el tiempo corre igual, pero sin guardar nada.
+void SessionController::passiveTick(qint64 delta)
+{
+    if (m_state == State::Running) {
+        const qint64 plannedMs = qint64(m_pomo.plannedSec) * 1000;
+        m_pomoMs += delta;
+        if (m_pomoMs >= plannedMs) {
+            m_pomoMs = plannedMs;
+            m_lastPomo = m_pomo;
+            m_lastPomo.studiedSec = m_pomo.plannedSec;
+            m_lastPomo.endedAt = now() / 1000;
+            m_lastPomoId = m_pomo.id;
+            m_hasPomo = false;
+            m_state = State::WorkDone;
+            m_stateMs = 0;
+            emit stateChanged(m_state);
+            emit pomodoroCompleted(m_lastPomo.id);
+        }
+    } else if (m_state == State::Break) {
+        m_breakMs += delta;
+        if (m_breakMs >= m_breakPlannedMs) {
+            m_breakMs = m_breakPlannedMs;
+            m_state = State::BreakOver;
+            m_stateMs = 0;
+            emit stateChanged(m_state);
+            emit breakFinished();
+        }
+    }
+}
+
+// Tocaste algo mientras era espejo: el reloj pasa a este aparato.
+void SessionController::takeOver()
+{
+    if (!m_passive) return;
+    tick();   // se pone al día (como espejo)
+    m_passive = false;
+    if (m_hasPomo) {
+        // El pomodoro que corría allá sigue acá, con el mismo id global.
+        Pomodoro p = m_pomo;
+        p.status = PomoStatus::Running;
+        p.studiedSec = int(m_pomoMs / 1000);
+        p.endedAt = now() / 1000;
+        qint64 id = m_db->idForUid("pomodoros", m_passiveUid);
+        if (id <= 0) id = m_db->insertPomodoroWithUid(p, m_passiveUid);
+        p.id = id;
+        m_db->updatePomodoro(p);
+        m_db->setPomodoroDevice(id, QString());   // ahora es de este aparato
+        m_pomo = p;
+    } else if (!m_passiveUid.isEmpty() && (m_state == State::WorkDone || m_state == State::Break || m_state == State::BreakOver)) {
+        // El último pomodoro ya terminó. Si allá no llegó a guardarse (aparato
+        // apagado o sin internet), se guarda acá.
+        Pomodoro p = m_lastPomo;
+        qint64 id = m_db->idForUid("pomodoros", m_passiveUid);
+        const auto local = id > 0 ? m_db->pomodoro(id) : std::nullopt;
+        if (!local || local->status == PomoStatus::Running || local->status == PomoStatus::Parked) {
+            p.status = PomoStatus::Completed;
+            if (p.endedAt <= p.startedAt) p.endedAt = p.startedAt + p.studiedSec;
+            if (id <= 0) id = m_db->insertPomodoroWithUid(p, m_passiveUid);
+            p.id = id;
+            m_db->updatePomodoro(p);
+            m_db->setPomodoroDevice(id, QString());
+            if (p.studiedSec >= kMinStudySec) {
+                emit studyRecorded(p.folderId, p.studiedSec);
+                emit pomodoroSaved(id);
+            }
+        }
+        m_lastPomo = p;
+        m_lastPomo.id = id;
+        m_lastPomoId = id;
+    }
+    m_passiveUid.clear();
+    const IvKind k = kindFor(m_state);
+    if (k != IvKind::None) openInterval(k);
+    m_lastPersistMs = 0;
+    emit tookOver();
+}

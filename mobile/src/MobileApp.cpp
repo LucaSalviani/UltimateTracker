@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QDateTime>
+#include <QJsonObject>
 #include <QTimer>
 #include <QVariantMap>
 #include <functional>
@@ -69,6 +70,19 @@ MobileApp::MobileApp(Database* db, QObject* parent)
     });
     connect(&m_session, &SessionController::pomodoroSaved, this, [this] { QTimer::singleShot(1500, &m_sync, &SyncClient::syncNow); });
     m_sync.setAutoSync(true, 30000);
+
+    // En vivo con la PC: el mismo reloj en los dos (cada 3 s con la app abierta).
+    m_live = new LiveLink(m_db, &m_session, &m_sync, QStringLiteral("el celu"), {}, this);
+    connect(m_live, &LiveLink::changed, this, [this] {
+        emit liveChanged();
+        emit changed();
+        reloadToday();
+        syncAndroid();
+    });
+    connect(&m_session, &SessionController::stateChanged, this, &MobileApp::liveChanged);
+    connect(&m_sync, &SyncClient::changed, this, [this] { m_live->setPollInterval(m_sync.signedIn() ? 3000 : 0); });
+    m_live->setPollInterval(m_sync.signedIn() ? 3000 : 0);
+    m_live->pollNow();
 }
 
 MobileApp::~MobileApp()
@@ -293,8 +307,14 @@ qint64 MobileApp::addFolder(const QString& name, qint64 parentId)
     return id;
 }
 
+void MobileApp::appDeactivated()
+{
+    if (m_sync.signedIn()) m_live->setPollInterval(15000);
+}
+
 void MobileApp::appActivated()
 {
+    if (m_sync.signedIn()) { m_live->setPollInterval(3000); m_live->pollNow(); }
     m_session.tick();   // si el sistema la tuvo dormida, se pone al día con el reloj
     reloadToday();
     preloadFromGoal();
@@ -313,7 +333,9 @@ void MobileApp::syncAndroid()
         const qint64 end = now + qint64(m_session.remainingSec()) * 1000;
         const bool brk = s == S::Break;
         const QString title = brk ? QStringLiteral("Recreo") : QStringLiteral("Pomodoro · %1").arg(folderName());
-        m_android->showRunning(title, brk ? QStringLiteral("Volvés en un rato") : QStringLiteral("A concentrarse"), end, brk);
+        const QString live = liveFrom();
+        m_android->showRunning(title, !live.isEmpty() ? QStringLiteral("En vivo desde %1").arg(live)
+                                      : brk ? QStringLiteral("Volvés en un rato") : QStringLiteral("A concentrarse"), end, brk);
         m_android->scheduleEnd(end, brk ? QStringLiteral("Terminó el recreo") : QStringLiteral("¡Pomodoro terminado!"),
                                brk ? QStringLiteral("A seguir estudiando") : QStringLiteral("Elegí si tomás un recreo"));
     } else if (s == S::Paused) {
@@ -324,4 +346,14 @@ void MobileApp::syncAndroid()
         m_android->cancelEnd();
         m_android->stopRunning();
     }
+}
+
+void MobileApp::demoLive()
+{
+    QJsonObject d{{"v", 999999.0}, {"device", "pc-demo"}, {"label", "la PC"}, {"state", "running"},
+                  {"at", double(QDateTime::currentMSecsSinceEpoch() - 7 * 60 * 1000)},
+                  {"folder", m_db->uidFor("folders", m_session.folderId())}, {"pomo", "demo"},
+                  {"pomo_folder", m_db->uidFor("folders", m_session.folderId())}, {"pomo_day", fmt::dayKey(dayclock::today())},
+                  {"pomo_started", double(QDateTime::currentSecsSinceEpoch() - 600)}, {"pomo_planned", 1500}, {"pomo_ms", 3 * 60 * 1000}};
+    m_live->receive(d);
 }

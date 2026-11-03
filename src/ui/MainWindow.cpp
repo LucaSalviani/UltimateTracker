@@ -14,6 +14,7 @@
 #include "core/Goals.h"
 #include "core/Milestones.h"
 #include "core/Sync.h"
+#include "core/Live.h"
 #include "ui/SyncDialog.h"
 #include "ui/LiveStats.h"
 #include "ui/TimerDeck.h"
@@ -451,6 +452,21 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         });
         connect(m_session, &SessionController::pomodoroSaved, this, [this] { QTimer::singleShot(1500, m_sync, &SyncClient::syncNow); });
         if (m_sync->signedIn()) QTimer::singleShot(3000, this, [this] { m_sync->setAutoSync(true, 60000); });
+        // En vivo: el mismo reloj en la PC y el celu. Se pregunta cada 3 s con la
+        // ventana a la vista y cada 10 s en la bandeja.
+        m_live = new LiveLink(m_db, m_session, m_sync, QStringLiteral("la PC"), {}, this);
+        connect(m_live, &LiveLink::changed, this, [this] {
+            const bool mirror = m_live->mirroring();
+            if (mirror && !m_wasMirroring) toast(QStringLiteral("En vivo: el reloj lo está manejando %1").arg(m_live->remoteLabel()));
+            m_wasMirroring = mirror;
+            refreshDeck();
+            reloadGrid();
+        });
+        auto livePace = [this] { m_live->setPollInterval(m_sync->signedIn() ? (isVisible() && !isMinimized() ? 3000 : 10000) : 0); };
+        auto* paceTimer = new QTimer(this);
+        connect(paceTimer, &QTimer::timeout, this, livePace);
+        paceTimer->start(2000);
+        QTimer::singleShot(1500, this, [this, livePace] { livePace(); m_live->pollNow(); });
     }
     m_hotkey = new GlobalHotkey(this);
     connect(m_hotkey, &GlobalHotkey::activated, this, [this] {
@@ -1214,6 +1230,8 @@ void MainWindow::refreshDeck()
     using M = TimerDeck::Mode;
     TimerDeck::Model m;
     m.activity = m_tree.path(m_session->folderId());
+    if (m_live && m_live->mirroring() && m_session->state() != SessionController::State::Idle)
+        m.activity += QStringLiteral("  ·  en vivo desde %1").arg(m_live->remoteLabel());
     const auto cur = m_session->currentPomodoro();
     switch (m_session->state()) {
     case S::Idle:

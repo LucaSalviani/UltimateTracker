@@ -62,6 +62,11 @@ public:
     void   setPomodoroNote(qint64 id, const QString& note);
     void   setPomodoroDuration(qint64 id, int studiedSec);   // solo terminados
     std::optional<Pomodoro> pomodoro(qint64 id) const;
+    // En vivo: el mismo pomodoro en los dos aparatos se reconoce por su uid.
+    qint64  insertPomodoroWithUid(const Pomodoro& p, const QString& uid);
+    void    setPomodoroDevice(qint64 id, const QString& device);
+    QString uidFor(const char* table, qint64 id) const;
+    qint64  idForUid(const char* table, const QString& uid) const;
     QVector<Pomodoro> pomodorosBetween(const QDate& from, const QDate& to) const; // inclusivo
     QVector<Pomodoro> pomodorosWithStatus(PomoStatus st) const;
     QSet<QDate> studiedDays() const;

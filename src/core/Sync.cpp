@@ -12,6 +12,7 @@
 #include <QUuid>
 #include <QVariant>
 #include <algorithm>
+#include <utility>
 
 // ===========================================================================
 // SyncStore
@@ -449,10 +450,14 @@ void SyncClient::withToken(std::function<void(const QString&)> fn)
     }
     const QString refresh = m_db->setting("sync/refresh").toString();
     if (refresh.isEmpty()) { finish(QStringLiteral("Sin conectar")); return; }
+    // Un solo pedido de token a la vez (lo usan la sincronización y el en vivo).
+    m_waiting.append(fn);
+    if (m_waiting.size() > 1) return;
     QNetworkReply* rep = m_net.post(request(QStringLiteral("/auth/v1/token?grant_type=refresh_token")),
                                     QJsonDocument(QJsonObject{{"refresh_token", refresh}}).toJson(QJsonDocument::Compact));
-    connect(rep, &QNetworkReply::finished, this, [this, rep, fn] {
+    connect(rep, &QNetworkReply::finished, this, [this, rep] {
         rep->deleteLater();
+        const auto waiting = std::exchange(m_waiting, {});
         const int code = rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QJsonObject o = QJsonDocument::fromJson(rep->readAll()).object();
         const QString access = o.value("access_token").toString();
@@ -468,7 +473,7 @@ void SyncClient::withToken(std::function<void(const QString&)> fn)
         m_db->setSetting("sync/access", access);
         m_db->setSetting("sync/refresh", o.value("refresh_token").toString());
         m_db->setSetting("sync/expires", QDateTime::currentSecsSinceEpoch() + o.value("expires_in").toInt(3600) - 60);
-        fn(access);
+        for (const auto& f : waiting) f(access);
     });
 }
 
@@ -544,6 +549,7 @@ void SyncClient::push(const QString& token)
 void SyncClient::finish(const QString& status)
 {
     m_busy = false;
+    m_liveBusy = false;
     m_status = status;
     emit changed();
     if (m_again) { m_again = false; QTimer::singleShot(500, this, &SyncClient::syncNow); }
@@ -553,4 +559,46 @@ void SyncClient::setAutoSync(bool on, int intervalMs)
 {
     if (on) { m_timer.start(intervalMs); syncNow(); }
     else m_timer.stop();
+}
+
+// ---------------------------------------------------------------------------
+// En vivo
+// ---------------------------------------------------------------------------
+void SyncClient::fetchLive()
+{
+    if (!signedIn() || m_liveBusy) return;
+    m_liveBusy = true;
+    withToken([this](const QString& token) {
+        QNetworkRequest req = request(QStringLiteral("/rest/v1/records?kind=eq.live&uid=eq.session&select=data,updated_at,deleted"), token);
+        req.setTransferTimeout(8000);
+        QNetworkReply* rep = m_net.get(req);
+        connect(rep, &QNetworkReply::finished, this, [this, rep] {
+            rep->deleteLater();
+            m_liveBusy = false;
+            if (rep->error() != QNetworkReply::NoError) return;
+            const QJsonArray arr = QJsonDocument::fromJson(rep->readAll()).array();
+            QJsonObject data = arr.isEmpty() ? QJsonObject() : arr.first().toObject().value("data").toObject();
+            if (!arr.isEmpty()) data.insert("v", arr.first().toObject().value("updated_at").toDouble());
+            emit liveReceived(data);
+        });
+    });
+}
+
+void SyncClient::pushLive(const QJsonObject& data, qint64 version)
+{
+    if (!signedIn()) return;
+    withToken([this, data, version](const QString& token) {
+        const QJsonArray items{QJsonObject{{"kind", "live"}, {"uid", "session"}, {"data", data}, {"updated_at", version}, {"deleted", false}}};
+        QNetworkRequest req = request(QStringLiteral("/rest/v1/rpc/push_records"), token);
+        req.setTransferTimeout(8000);
+        QNetworkReply* rep = m_net.post(req, QJsonDocument(QJsonObject{{"items", items}}).toJson(QJsonDocument::Compact));
+        connect(rep, &QNetworkReply::finished, this, [this, rep] {
+            rep->deleteLater();
+            const bool ok = rep->error() == QNetworkReply::NoError;
+            emit livePushed(ok);
+            // Enseguida se pregunta: si otro aparato ganó al mismo tiempo, se ve ahora.
+            m_liveBusy = false;
+            fetchLive();
+        });
+    });
 }

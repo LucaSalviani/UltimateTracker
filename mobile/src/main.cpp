@@ -30,6 +30,7 @@ int main(int argc, char* argv[])
     MobileApp ut(&db);
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, &ut, [&ut](Qt::ApplicationState s) {
         if (s == Qt::ApplicationActive) ut.appActivated();
+        else ut.appDeactivated();
     });
 
     QQmlPropertyMap theme;   // antes que el motor: tiene que vivir más que él
@@ -50,6 +51,7 @@ int main(int argc, char* argv[])
     if (engine.rootObjects().isEmpty()) return 1;
     // Para revisar la interfaz sin un celu: UT_SHOT=archivo.png saca una captura y sale.
     if (QCoreApplication::arguments().contains(QStringLiteral("--demo-run"))) ut.primary();
+    if (QCoreApplication::arguments().contains(QStringLiteral("--demo-live"))) ut.demoLive();
     const QString shot = qEnvironmentVariable("UT_SHOT");
     if (!shot.isEmpty()) {
         QTimer::singleShot(qEnvironmentVariableIntValue("UT_SHOT_MS") > 0 ? qEnvironmentVariableIntValue("UT_SHOT_MS") : 1200, &app, [&engine, shot] {

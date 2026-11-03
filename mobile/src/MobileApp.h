@@ -4,6 +4,7 @@
 #include "core/FolderTree.h"
 #include "core/SessionController.h"
 #include "core/Sync.h"
+#include "core/Live.h"
 
 #include <QObject>
 #include <QVariantList>
@@ -33,6 +34,8 @@ class MobileApp : public QObject {
     Q_PROPERTY(bool syncSignedIn READ syncSignedIn NOTIFY syncChanged)
     Q_PROPERTY(QString syncEmail READ syncEmail NOTIFY syncChanged)
     Q_PROPERTY(QString syncStatus READ syncStatus NOTIFY syncChanged)
+    // En vivo: el reloj lo está manejando la PC (vacío si no)
+    Q_PROPERTY(QString liveFrom READ liveFrom NOTIFY liveChanged)
     // Objetivo del día (lo mismo que el panel de la PC)
     Q_PROPERTY(QVariantMap goal READ goal NOTIFY todayChanged)
     Q_PROPERTY(QString dayTitle READ dayTitle NOTIFY todayChanged)
@@ -72,6 +75,9 @@ public:
     Q_INVOKABLE void nudgeBreak(int deltaMin);
     Q_INVOKABLE QString clock(int sec) const;   // "24:59"
     Q_INVOKABLE void appActivated();            // al volver a la app: ponerse al día
+    Q_INVOKABLE void appDeactivated();
+    void demoLive();                            // capturas: como si la PC tuviera un pomodoro corriendo          // a segundo plano: se pregunta menos seguido
+    QString liveFrom() const { return m_live && m_live->mirroring() && m_session.state() != SessionController::State::Idle ? m_live->remoteLabel() : QString(); }
     bool    syncSignedIn() const { return m_sync.signedIn(); }
     QString syncEmail() const { return m_sync.email(); }
     QString syncStatus() const { return m_sync.status(); }
@@ -122,6 +128,7 @@ signals:
     void completed();      // terminó un pomodoro (vibra / suena)
     void breakOver();
     void syncChanged();
+    void liveChanged();
     void syncMessage(const QString& text);
     void dataChanged();
     void toast(const QString& text);
@@ -146,6 +153,7 @@ private:
     QVariantList       m_today;
     AndroidBridge*     m_android = nullptr;
     SyncClient         m_sync;
+    LiveLink*          m_live = nullptr;
     QVariantMap        m_goal;
     int                m_revision = 0;
     std::optional<Pomodoro> m_deleted;   // para deshacer el último borrado

@@ -398,6 +398,57 @@ qint64 Database::insertPomodoro(const Pomodoro& p)
     return q.lastInsertId().toLongLong();
 }
 
+qint64 Database::insertPomodoroWithUid(const Pomodoro& p, const QString& uid)
+{
+    if (uid.isEmpty()) return insertPomodoro(p);
+    QSqlQuery q(m_db);
+    q.prepare("INSERT INTO pomodoros(uid, folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked, note) "
+              "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    q.addBindValue(uid);
+    q.addBindValue(p.folderId > 0 ? QVariant(p.folderId) : QVariant(QMetaType(QMetaType::LongLong)));
+    q.addBindValue(fmt::dayKey(p.day));
+    q.addBindValue(p.startedAt);
+    q.addBindValue(p.endedAt);
+    q.addBindValue(p.plannedSec);
+    q.addBindValue(p.studiedSec);
+    q.addBindValue(int(p.status));
+    q.addBindValue(p.linked ? 1 : 0);
+    q.addBindValue(p.note.isNull() ? QStringLiteral("") : p.note);
+    if (!q.exec()) {
+        m_error = q.lastError().text();
+        return 0;
+    }
+    return q.lastInsertId().toLongLong();
+}
+
+void Database::setPomodoroDevice(qint64 id, const QString& device)
+{
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE pomodoros SET device = ? WHERE id = ? AND device <> ?");
+    q.addBindValue(device);
+    q.addBindValue(id);
+    q.addBindValue(device);
+    q.exec();
+}
+
+QString Database::uidFor(const char* table, qint64 id) const
+{
+    if (id <= 0) return {};
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT uid FROM %1 WHERE id = ?").arg(QLatin1String(table)));
+    q.addBindValue(id);
+    return q.exec() && q.next() ? q.value(0).toString() : QString();
+}
+
+qint64 Database::idForUid(const char* table, const QString& uid) const
+{
+    if (uid.isEmpty()) return 0;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT id FROM %1 WHERE uid = ?").arg(QLatin1String(table)));
+    q.addBindValue(uid);
+    return q.exec() && q.next() ? q.value(0).toLongLong() : 0;
+}
+
 void Database::updatePomodoro(const Pomodoro& p)
 {
     QSqlQuery q(m_db);

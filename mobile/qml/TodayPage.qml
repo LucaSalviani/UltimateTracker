@@ -126,6 +126,31 @@ Flickable {
             MouseArea { id: actMouse; anchors.fill: parent; onClicked: page.openActivity() }
         }
 
+        // ---- En vivo: lo maneja la PC (tocar cualquier botón lo toma el celu)
+        Rectangle {
+            visible: ut.liveFrom.length > 0
+            Layout.alignment: Qt.AlignHCenter
+            implicitWidth: liveRow.implicitWidth + 24
+            implicitHeight: 28
+            radius: 14
+            color: "transparent"
+            border.color: Theme.line
+            RowLayout {
+                id: liveRow
+                anchors.centerIn: parent
+                spacing: 8
+                Rectangle {
+                    width: 8; height: 8; radius: 4; color: Theme.brk
+                    SequentialAnimation on opacity {
+                        running: ut.liveFrom.length > 0; loops: Animation.Infinite
+                        NumberAnimation { to: 0.3; duration: 900 }
+                        NumberAnimation { to: 1; duration: 900 }
+                    }
+                }
+                Text { text: "En vivo desde " + ut.liveFrom; color: Theme.dim; font.pixelSize: 12 }
+            }
+        }
+
         // ---- El reloj
         TimerRing {
             Layout.alignment: Qt.AlignHCenter

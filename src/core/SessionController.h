@@ -41,6 +41,19 @@ public:
     enum class State { Idle, Ready, Running, Paused, WorkDone, Break, BreakOver };
     Q_ENUM(State)
 
+    // En vivo (PC ↔ celu): la foto del reloj para mandarle al otro aparato, y
+    // lo que llega de él. Mientras el reloj lo maneja el otro, este queda
+    // "espejo": cuenta igual pero no escribe nada; si tocás algo, lo toma.
+    struct LiveState {
+        State    state = State::Idle;
+        QString  pomoUid;          // el pomodoro actual o el último terminado
+        Pomodoro pomo;             // con ids locales (0 si todavía no llegó)
+        qint64   pomoMs = 0;
+        qint64   breakMs = 0;
+        qint64   breakPlannedMs = 0;
+        qint64   folderId = 0;
+    };
+
     using Clock = std::function<qint64()>; // milisegundos epoch
 
     explicit SessionController(Database* db, Clock clock = {}, bool autoTick = true,
@@ -92,6 +105,16 @@ public:
     // se guarda hasta donde llegó, y se retoma el tiempo pendiente de hoy.
     void recoverAfterRestart();
 
+    // ---- En vivo ----------------------------------------------------------
+    LiveState liveState() const;
+    // Copia lo que hace el otro aparato (queda espejo). announce: si al
+    // ponerse al día se cumplió el pomodoro o el recreo, suena como acá.
+    void adoptRemote(const LiveState& s, bool announce);
+    // El otro aparato dejó el reloj quieto (o lo tomó y lo cerró): acá queda sin nada.
+    void releaseToIdle();
+    bool passive() const { return m_passive; }
+    bool releasing() const { return m_releasing; }   // el cambio de estado viene de releaseToIdle
+
     // ---- Lectura para la interfaz --------------------------------------
     std::optional<Pomodoro> currentPomodoro() const;   // con el tiempo al día
     double progress() const;                           // 0..1 del pomodoro actual
@@ -107,6 +130,7 @@ signals:
     void pomodoroChanged();                     // cambió la actividad del pomodoro en curso
     void studyRecorded(qint64 folderId, qint64 seconds); // para hitos
     void breakFinished();                       // alarma
+    void tookOver();                            // este aparato tomó el reloj que manejaba el otro
 
 private:
     enum class IvKind { None, Break, Pending };
@@ -125,6 +149,8 @@ private:
     void   finishParked();
     void   startPomodoro(bool linked);
     void   persist();
+    void   takeOver();         // si era espejo: el reloj pasa a ser de este aparato
+    void   passiveTick(qint64 delta);
 
     Database* m_db;
     Clock     m_clock;
@@ -143,6 +169,11 @@ private:
     Pomodoro m_pomo;
     qint64   m_pomoMs = 0;
     qint64   m_lastPomoId = 0;
+    Pomodoro m_lastPomo;      // el último terminado (para mandarlo en vivo)
+
+    bool     m_passive = false;
+    bool     m_releasing = false;
+    QString  m_passiveUid;    // uid del pomodoro del otro aparato
 
     qint64 m_breakMs = 0;
     qint64 m_breakPlannedMs = 0;

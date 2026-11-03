@@ -4,6 +4,7 @@
 #include "core/Export.h"
 #include "core/Milestones.h"
 #include "core/Sync.h"
+#include "core/Live.h"
 #include <QSqlQuery>
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
@@ -11,6 +12,7 @@
 #include "core/Stats.h"
 
 #include <QDateTime>
+#include <memory>
 #include <QSignalSpy>
 #include <QtTest>
 #include <QTemporaryDir>
@@ -674,6 +676,152 @@ private slots:
     }
 
     // Celu-3: dos bases que se sincronizan a través de un "servidor" en memoria.
+    // En vivo: el mismo reloj en la PC y el celu (como Spotify).
+    void liveTwoDevices()
+    {
+        Database pc, cel;
+        QVERIFY(pc.open(":memory:"));
+        QVERIFY(cel.open(":memory:"));
+        pc.setSetting("sync/device", "pc");
+        cel.setSetting("sync/device", "cel");
+        SyncStore spc(pc), scel(cel);
+        QMap<QString, SyncRecord> rows;
+        auto syncRows = [&] {
+            for (SyncStore* s : {&spc, &scel}) {
+                const auto out = s->pending(1000);
+                for (const auto& r : out) {
+                    const QString k = r.kind + "/" + r.uid;
+                    if (!rows.contains(k) || rows[k].updatedAt < r.updatedAt) rows[k] = r;
+                }
+                s->acknowledge(out);
+            }
+            spc.apply(rows.values().toVector());
+            scel.apply(rows.values().toVector());
+        };
+        const qint64 so = pc.addFolder(0, "SO");
+        syncRows();
+        const qint64 soCel = cel.idForUid("folders", pc.uidFor("folders", so));
+        QVERIFY(soCel > 0);
+
+        std::unique_ptr<SessionController> a(make(pc)), b(make(cel));
+        a->setFolderId(so);
+        b->setFolderId(soCel);
+        auto clock = [this] { return m_now; };
+        LiveLink la(&pc, a.get(), nullptr, "la PC", clock), lb(&cel, b.get(), nullptr, "el celu", clock);
+        // El servidor: guarda la foto solo si la versión es más nueva.
+        qint64 sv = 0;
+        QJsonObject sdata;
+        auto serve = [&](const QJsonObject& d, qint64 v) { if (v > sv) { sv = v; sdata = d; sdata.insert("v", double(v)); } };
+        connect(&la, &LiveLink::published, this, serve);
+        connect(&lb, &LiveLink::published, this, serve);
+        auto both = [&](qint64 sec) { for (qint64 i = 0; i < sec; ++i) { m_now += 1000; a->tick(); b->tick(); } };
+
+        // 1) Play en la PC: el celu lo ve corriendo, con el mismo tiempo.
+        a->setWorkSec(25 * 60);
+        a->start();
+        la.flush();
+        syncRows();
+        lb.receive(sdata);
+        QVERIFY(b->passive());
+        QCOMPARE(b->state(), SessionController::State::Running);
+        both(60);
+        QCOMPARE(b->remainingSec(), a->remainingSec());
+        QCOMPARE(lb.remoteLabel(), QString("la PC"));
+
+        // 2) Pausa en el celu: lo toma el celu; la PC queda espejo en pausa.
+        b->pause();
+        QVERIFY(!b->passive());
+        lb.flush();
+        la.receive(sdata);
+        QVERIFY(a->passive());
+        QCOMPARE(a->state(), SessionController::State::Paused);
+        QCOMPARE(a->remainingSec(), b->remainingSec());
+        both(30);
+        QCOMPARE(a->remainingSec(), b->remainingSec());   // en pausa no corre en ninguno
+
+        // 3) Seguir en la PC y dejar que termine: lo guarda la PC; el celu suena pero no guarda.
+        a->resume();
+        la.flush();
+        lb.receive(sdata);
+        QVERIFY(b->passive());
+        QSignalSpy doneCel(b.get(), &SessionController::pomodoroCompleted);
+        QSignalSpy savedCel(b.get(), &SessionController::studyRecorded);
+        QSignalSpy savedPc(a.get(), &SessionController::studyRecorded);
+        both(24 * 60 + 5);
+        QCOMPARE(a->state(), SessionController::State::WorkDone);
+        QCOMPARE(b->state(), SessionController::State::WorkDone);
+        QCOMPARE(doneCel.count(), 1);
+        QCOMPARE(savedCel.count(), 0);
+        QCOMPARE(savedPc.count(), 1);
+        la.flush();
+        lb.receive(sdata);
+        syncRows();
+        QCOMPARE(pc.pomodorosBetween(QDate(2026, 10, 26), QDate(2026, 10, 26)).size(), 1);
+        QCOMPARE(cel.pomodorosBetween(QDate(2026, 10, 26), QDate(2026, 10, 26)).size(), 1);
+        QCOMPARE(cel.pomodorosBetween(QDate(2026, 10, 26), QDate(2026, 10, 26)).first().studiedSec, 25 * 60);
+
+        // 4) Recreo desde el celu: no se vuelve a guardar el pomodoro; la PC suena al terminar.
+        b->setBreakSec(5 * 60);
+        b->startBreak();
+        QCOMPARE(savedCel.count(), 0);
+        lb.flush();
+        la.receive(sdata);
+        QCOMPARE(a->state(), SessionController::State::Break);
+        QSignalSpy alarmPc(a.get(), &SessionController::breakFinished);
+        both(5 * 60 + 2);
+        QCOMPARE(alarmPc.count(), 1);
+        QCOMPARE(b->state(), SessionController::State::BreakOver);
+        b->silenceAlarm();
+        lb.flush();
+        la.receive(sdata);
+        QCOMPARE(a->state(), SessionController::State::Idle);
+        QVERIFY(!a->passive());
+
+        // 5) La PC arranca otro y se "duerme" (sin internet ni ticks). El celu lo ve
+        //    terminar y arranca el recreo: el pomodoro se guarda en el celu.
+        a->start();
+        la.flush();
+        syncRows();
+        lb.receive(sdata);
+        QVERIFY(b->passive());
+        for (int i = 0; i < 26 * 60; ++i) { m_now += 1000; b->tick(); }
+        QCOMPARE(b->state(), SessionController::State::WorkDone);
+        b->startBreak();
+        QCOMPARE(savedCel.count(), 1);   // lo guardó el celu
+        lb.flush();
+        // La PC se despierta: también lo da por terminado, pero su foto es vieja y pierde.
+        a->tick();
+        la.flush();
+        la.receive(sdata);
+        QVERIFY(a->passive());
+        QCOMPARE(a->state(), SessionController::State::Break);
+        syncRows();
+        QCOMPARE(pc.pomodorosBetween(QDate(2026, 10, 26), QDate(2026, 10, 26)).size(), 2);
+        QCOMPARE(cel.pomodorosBetween(QDate(2026, 10, 26), QDate(2026, 10, 26)).size(), 2);
+
+        // 6) Los dos tocan a la vez: gana el primero que llega; el otro se pone al día.
+        b->endBreakEarly();   // celu → listo
+        lb.flush();
+        la.receive(sdata);
+        a->start();           // la PC arranca…
+        b->start();           // …y el celu también, sin enterarse
+        la.flush();
+        lb.flush();           // misma versión: el servidor se queda con la de la PC
+        lb.receive(sdata);
+        la.receive(sdata);
+        QVERIFY(b->passive());
+        QVERIFY(!a->passive());
+        QCOMPARE(b->state(), SessionController::State::Running);
+
+        // 7) Una foto de ayer no se copia.
+        QJsonObject old = sdata;
+        old.insert("at", double(m_now - 24 * 3600 * 1000));
+        old.insert("v", double(sv + 10));
+        old.insert("device", "otro");
+        lb.receive(old);
+        QCOMPARE(b->state(), SessionController::State::Idle);
+    }
+
     void syncTwoDevices()
     {
         Database pc, cel;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include <functional>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QString>
@@ -62,10 +63,18 @@ public:
     void syncNow();
     void setAutoSync(bool on, int intervalMs = 60000);
 
+    // En vivo: una sola fila ("live"/"session") con el estado del reloj.
+    // Se pregunta seguido (cada pocos segundos) y se manda al tocar algo.
+    void fetchLive();
+    void pushLive(const QJsonObject& data, qint64 version);
+    QString deviceId() { return m_store.deviceId(); }
+
 signals:
     void changed();                 // sesión, estado o mensaje
     void applied(int count);        // llegaron cambios: recargar la interfaz
     void message(const QString& text);
+    void liveReceived(const QJsonObject& data);   // vacío = todavía no hay nada en el servidor
+    void livePushed(bool ok);
 
 private:
     void auth(const QString& path, const QJsonObject& body, bool signup);
@@ -82,4 +91,6 @@ private:
     QString               m_status;
     bool                  m_busy = false;
     bool                  m_again = false;
+    bool                  m_liveBusy = false;
+    QVector<std::function<void(const QString&)>> m_waiting;   // esperando un token nuevo
 };

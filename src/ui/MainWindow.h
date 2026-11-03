@@ -169,6 +169,8 @@ private:
     class GlobalHotkey* m_hotkey = nullptr;   // M9
     class WakeWatcher*  m_wake = nullptr;     // B2-4
     class SyncClient*   m_sync = nullptr;     // Celu-4
+    class LiveLink*     m_live = nullptr;     // en vivo con el celu
+    bool                m_wasMirroring = false;
     QTimer*             m_wakeDebounce = nullptr;
     bool                m_greetingOpen = false;
     class MiniPlayer* m_mini = nullptr;       // M19
