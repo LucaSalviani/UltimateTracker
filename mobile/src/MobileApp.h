@@ -7,6 +7,8 @@
 
 #include <QObject>
 #include <QVariantList>
+#include <QVariantMap>
+#include <optional>
 
 class AndroidBridge;
 
@@ -31,6 +33,12 @@ class MobileApp : public QObject {
     Q_PROPERTY(bool syncSignedIn READ syncSignedIn NOTIFY syncChanged)
     Q_PROPERTY(QString syncEmail READ syncEmail NOTIFY syncChanged)
     Q_PROPERTY(QString syncStatus READ syncStatus NOTIFY syncChanged)
+    // Objetivo del día (lo mismo que el panel de la PC)
+    Q_PROPERTY(QVariantMap goal READ goal NOTIFY todayChanged)
+    Q_PROPERTY(QString dayTitle READ dayTitle NOTIFY todayChanged)
+    // Cambia cuando se guarda algo que afecta estadísticas e hitos
+    Q_PROPERTY(int revision READ revision NOTIFY dataChanged)
+    Q_PROPERTY(QString versionText READ version CONSTANT)
 
 public:
     explicit MobileApp(Database* db, QObject* parent = nullptr);
@@ -72,6 +80,40 @@ public:
     Q_INVOKABLE void signOut() { m_sync.signOut(); }
     Q_INVOKABLE void syncNow() { m_sync.syncNow(); }
 
+    // ---- Objetivo del día
+    QVariantMap goal() const { return m_goal; }
+    QString dayTitle() const;
+    Q_INVOKABLE void setDayTitle(const QString& text);
+    Q_INVOKABLE QVariantMap goalDraft() const;   // para editar: modo, partes, repetición
+    // parts: [{count, minutes, folder}]; weekdays: 0 solo hoy, 127 todos los días, 31 lun–vie
+    Q_INVOKABLE void saveGoal(bool timeMode, int totalMin, const QVariantList& parts, int weekdays);
+    Q_INVOKABLE void removeGoal(bool fromTodayOn);
+    Q_INVOKABLE QString describeParts(bool timeMode, int totalMin, const QVariantList& parts) const;
+
+    // ---- Cuadraditos (tocar uno): nota, actividad, borrar
+    Q_INVOKABLE QVariantMap pomodoroInfo(qint64 id) const;
+    Q_INVOKABLE void setNote(qint64 id, const QString& note);
+    Q_INVOKABLE void movePomodoro(qint64 id, qint64 folderId);
+    Q_INVOKABLE void deletePomodoro(qint64 id);
+    Q_INVOKABLE void undoDelete();
+
+    // ---- Estadísticas: period = "day" | "week" | "month" | "year"; offset 0 = el actual
+    Q_INVOKABLE QVariantMap stats(const QString& period, int offset, qint64 folder) const;
+    // ---- Hitos
+    Q_INVOKABLE QVariantMap milestones() const;
+
+    // ---- Ajustes y actividades
+    Q_INVOKABLE QVariant setting(const QString& key, const QVariant& def) const;
+    Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    Q_INVOKABLE QVariantMap folderInfo(qint64 id) const;
+    Q_INVOKABLE void renameFolder(qint64 id, const QString& name);
+    Q_INVOKABLE void setFolderColor(qint64 id, const QString& color);
+    Q_INVOKABLE void setFolderPriorHours(qint64 id, double hours);
+    Q_INVOKABLE bool deleteFolder(qint64 id);
+    Q_INVOKABLE QStringList palette() const;
+    int revision() const { return m_revision; }
+    QString version() const;
+
 signals:
     void changed();
     void ticked();
@@ -81,11 +123,21 @@ signals:
     void breakOver();
     void syncChanged();
     void syncMessage(const QString& text);
+    void dataChanged();
+    void toast(const QString& text);
+    void celebrate(const QString& kicker, const QString& title, const QString& detail);
 
 private:
     void reloadFolders();
     void reloadToday();
     void syncAndroid();    // notificación con el tiempo y alarma programada
+    void reloadGoal();
+    void preloadFromGoal();
+    void afterSave(qint64 id);           // objetivo cumplido, marca del día, rachas, récords
+    void onStudyRecorded(qint64 folderId, qint64 seconds);   // etapas y horas por actividad
+    bool once(const QString& key);
+    void bump();                         // algo cambió: estadísticas e hitos se recalculan
+    QHash<qint64, qint64> studiedByFolder(const QVector<Pomodoro>& dayPomos, bool reserve) const;
 
     Database*          m_db;
     SessionController  m_session;
@@ -94,4 +146,7 @@ private:
     QVariantList       m_today;
     AndroidBridge*     m_android = nullptr;
     SyncClient         m_sync;
+    QVariantMap        m_goal;
+    int                m_revision = 0;
+    std::optional<Pomodoro> m_deleted;   // para deshacer el último borrado
 };

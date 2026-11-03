@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Barras del sistema del mismo gris que la app (si no, Android las pinta de azul). -->
+    <style name="UtTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/ut_bg</item>
+        <item name="android:statusBarColor">@color/ut_bg</item>
+        <item name="android:navigationBarColor">@color/ut_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+    <color name="ut_bg">#161616</color>
+</resources>

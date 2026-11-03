@@ -1,22 +1,20 @@
 import QtQuick
 
-// Los cuadraditos de hoy: hechos (oscuros, con la rayita del color de la actividad)
-// y el que corre, llenándose.
+// Los cuadraditos del día: hechos (oscuros, con la rayita del color de la actividad),
+// el que corre (llenándose) y los fantasmas de lo que falta del objetivo.
 Flow {
     id: root
     property var model: []
     property real progress: 0
-    property color accent: "#e0483f"
-    property color surface: "#222222"
-    property color line: "#333333"
-    property color textColor: "#ececec"
-    property color faint: "#5f5f5f"
+    property string emptyText: "Todavía no hay cuadraditos. Dale play para sumar el primero."
+    signal tapped(var id)
     spacing: 10
+    readonly property int side: Math.floor((width - 4 * spacing) / 5)
 
     Text {
         visible: root.model.length === 0
-        text: "Todavía no hay cuadraditos. Dale play para sumar el primero."
-        color: root.faint
+        text: root.emptyText
+        color: Theme.faint
         font.pixelSize: 13
         width: root.width
         wrapMode: Text.WordWrap
@@ -25,40 +23,61 @@ Flow {
     Repeater {
         model: root.model
         delegate: Item {
-            width: 64; height: 82
+            width: root.side; height: root.side + 18
+            readonly property bool ghost: modelData.ghost === true
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Nº" + modelData.number
-                color: root.faint
+                text: ghost ? "" : "Nº" + modelData.number
+                color: Theme.faint
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
             }
             Rectangle {
                 id: tile
                 y: 18
-                width: 64; height: 64; radius: 9
-                color: modelData.running ? root.surface : "#0c0c0c"
-                border.color: modelData.running ? root.accent : root.line
+                width: root.side; height: root.side; radius: 9
+                color: ghost ? "transparent" : modelData.running ? Theme.surface : "#0c0c0c"
+                border.color: ghost ? "transparent" : modelData.running ? Theme.accent : Theme.line
                 clip: true
-                Rectangle {   // lo que va del que corre
-                    visible: modelData.running
-                    width: parent.width * Math.min(1, root.progress); height: parent.height
-                    color: root.accent
-                    opacity: 0.85
+                // fantasma: borde punteado
+                Canvas {
+                    visible: ghost
+                    anchors.fill: parent
+                    onPaint: {
+                        const c = getContext("2d"); c.reset()
+                        c.strokeStyle = Theme.faint; c.lineWidth = 1.2; c.setLineDash([4, 4])
+                        const r = 9, w = width - 1, h = height - 1
+                        c.beginPath(); c.roundedRect(0.5, 0.5, w, h, r, r); c.stroke()
+                    }
+                }
+                Rectangle {   // lo que va: del que corre o la parte hecha del fantasma
+                    visible: modelData.running || (ghost && modelData.fill > 0)
+                    width: parent.width * Math.min(1, modelData.running ? root.progress : (modelData.fill || 0)); height: parent.height
+                    color: modelData.running ? Theme.accent : Theme.surfaceHi
+                    opacity: modelData.running ? 0.85 : 1
                 }
                 Rectangle {   // rayita del color de la actividad
                     anchors.bottom: parent.bottom
-                    width: parent.width; height: 4
-                    color: modelData.color
-                    opacity: modelData.running ? 0 : 0.9
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: ghost ? parent.width - 16 : parent.width; height: ghost ? 3 : 4
+                    anchors.bottomMargin: ghost ? 6 : 0
+                    radius: ghost ? 1.5 : 0
+                    color: modelData.color || "transparent"
+                    opacity: modelData.running ? 0 : ghost ? 0.55 : 0.9
+                }
+                Rectangle {   // tiene nota
+                    visible: !ghost && (modelData.note || "").length > 0
+                    anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 6
+                    width: 6; height: 6; radius: 3; color: Theme.dim
                 }
                 Text {
                     anchors.centerIn: parent
                     text: modelData.minutes + "m"
-                    color: root.textColor
-                    font.pixelSize: 18
+                    color: ghost ? Theme.faint : Theme.text
+                    font.pixelSize: Math.round(root.side * 0.26)
                     font.weight: Font.DemiBold
                 }
+                MouseArea { anchors.fill: parent; enabled: !ghost; onClicked: root.tapped(modelData.id) }
             }
         }
     }

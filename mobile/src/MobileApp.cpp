@@ -35,8 +35,14 @@ MobileApp::MobileApp(Database* db, QObject* parent)
         emit ticked();
         reloadToday();
         syncAndroid();
+        preloadFromGoal();
     });
-    connect(&m_session, &SessionController::pomodoroSaved, this, [this] { reloadToday(); });
+    connect(&m_session, &SessionController::pomodoroSaved, this, [this](qint64 id) {
+        reloadToday();
+        afterSave(id);
+        bump();
+    });
+    connect(&m_session, &SessionController::studyRecorded, this, &MobileApp::onStudyRecorded);
     connect(&m_session, &SessionController::pomodoroStarted, this, [this] { reloadToday(); });
     connect(&m_session, &SessionController::pomodoroCompleted, this, [this] {
         m_android->vibrate(400);
@@ -47,6 +53,7 @@ MobileApp::MobileApp(Database* db, QObject* parent)
         emit breakOver();
     });
     reloadToday();
+    preloadFromGoal();
     m_android->requestPermissions();
 
     // Sincronización: cada 30 s con la app abierta, al volver a ella y al terminar un pomodoro.
@@ -57,6 +64,8 @@ MobileApp::MobileApp(Database* db, QObject* parent)
         if (!m_tree.contains(m_session.folderId()) && !m_tree.all().isEmpty()) m_session.setFolderId(m_tree.all().first().id);
         emit changed();
         reloadToday();
+        preloadFromGoal();
+        bump();
     });
     connect(&m_session, &SessionController::pomodoroSaved, this, [this] { QTimer::singleShot(1500, &m_sync, &SyncClient::syncNow); });
     m_sync.setAutoSync(true, 30000);
@@ -186,7 +195,28 @@ void MobileApp::reloadToday()
         m["minutes"] = qMax(1, (running ? cur->plannedSec : p.representedSec()) / 60);
         m["running"] = running;
         m["color"] = m_colors.value(p.folderId, QStringLiteral("#a8a8a8"));
+        m["note"] = p.note;
+        m["ghost"] = false;
         m_today.append(m);
+    }
+    // Los cuadraditos fantasma de lo que falta del objetivo
+    reloadGoal();
+    if (m_goal.value("has").toBool()) {
+        int i = 0;
+        for (const QVariant& v : m_goal.value("blocks").toList()) {
+            const QVariantMap b = v.toMap();
+            ++i;
+            if (b.value("fill").toDouble() >= 0.999) continue;
+            QVariantMap g;
+            g["ghost"] = true;
+            g["id"] = -i;
+            g["minutes"] = b.value("minutes");
+            g["fill"] = b.value("done");
+            g["color"] = b.value("color");
+            g["running"] = false;
+            g["number"] = 0;
+            m_today.append(g);
+        }
     }
     emit todayChanged();
     emit ticked();
@@ -195,7 +225,7 @@ void MobileApp::reloadToday()
 int MobileApp::todayCount() const
 {
     int n = 0;
-    for (const QVariant& v : m_today) if (!v.toMap().value("running").toBool()) ++n;
+    for (const QVariant& v : m_today) if (!v.toMap().value("running").toBool() && !v.toMap().value("ghost").toBool()) ++n;
     return n;
 }
 
@@ -267,6 +297,8 @@ void MobileApp::appActivated()
 {
     m_session.tick();   // si el sistema la tuvo dormida, se pone al día con el reloj
     reloadToday();
+    preloadFromGoal();
+    bump();
     syncAndroid();
     m_sync.syncNow();
 }

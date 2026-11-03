@@ -27,7 +27,7 @@ target_link_libraries(ut_core PUBLIC Qt6::Core Qt6::Sql Qt6::Network)
 
 qt_add_executable(UltimateTrackerMobile
     src/main.cpp
-    src/MobileApp.h src/MobileApp.cpp
+    src/MobileApp.h src/MobileApp.cpp src/MobileData.cpp
     src/AndroidBridge.h src/AndroidBridge.cpp
 )
 qt_add_qml_module(UltimateTrackerMobile
@@ -35,12 +35,30 @@ qt_add_qml_module(UltimateTrackerMobile
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/TodayPage.qml
+        qml/StatsPage.qml
+        qml/HitosPage.qml
+        qml/SettingsPage.qml
+        qml/NavBar.qml
         qml/TimerRing.qml
         qml/Tiles.qml
+        qml/BarChart.qml
+        qml/Sheet.qml
         qml/ActivitySheet.qml
+        qml/ActivityEditor.qml
+        qml/GoalSheet.qml
+        qml/PomodoroSheet.qml
         qml/SyncSheet.qml
         qml/UtButton.qml
         qml/Stepper.qml
+        qml/StepRow.qml
+        qml/Toggle.qml
+        qml/Pill.qml
+        qml/Card.qml
+        qml/Segmented.qml
+        qml/SectionLabel.qml
+        qml/Meter.qml
+        qml/Icon.qml
 )
 target_link_libraries(UltimateTrackerMobile PRIVATE ut_core Qt6::Gui Qt6::Qml Qt6::Quick)
 
@@ -56,6 +74,6 @@ if(ANDROID)
         QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android
         QT_ANDROID_TARGET_SDK_VERSION 34
         QT_ANDROID_MIN_SDK_VERSION 28
-        QT_ANDROID_VERSION_NAME "1.0-beta.1"
-        QT_ANDROID_VERSION_CODE 1)
+        QT_ANDROID_VERSION_NAME "1.0-beta.2"
+        QT_ANDROID_VERSION_CODE 2)
 endif()
