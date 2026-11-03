@@ -1,6 +1,10 @@
 #pragma once
 
+#include "core/FolderTree.h"
 #include "core/Goals.h"
+
+#include <QColor>
+#include <QHash>
 
 #include <QDate>
 #include <QFrame>
@@ -25,6 +29,7 @@ public:
     struct Progress {
         int    done = 0;        // pomodoros hechos ese día
         qint64 studiedSec = 0;
+        QHash<qint64, qint64> byFolder;   // B2: lo estudiado ese día por actividad
     };
 
     explicit GoalPanel(QWidget* parent = nullptr);
@@ -35,6 +40,8 @@ public:
     // M17: "buttons" (filas cantidad × minutos con − / +) o "text" ("3x30 + 2x25").
     void setComboStyle(const QString& style);
     void setProgress(const Progress& p);
+    // B2: actividades para elegir en cada fila del objetivo (y sus colores).
+    void setActivities(const FolderTree& tree, const QHash<qint64, QColor>& colors);
     QDate day() const { return m_day; }
 
 signals:
@@ -55,6 +62,8 @@ private:
     bool     m_recurring = false;   // la regla cargada se repite
     bool     m_offDay = false;      // ese día está marcado "sin meta"
     Progress m_progress;
+    FolderTree m_tree;
+    QHash<qint64, QColor> m_colors;
 
     QLabel*         m_date;
     QLineEdit*      m_dayTitle;
@@ -81,7 +90,8 @@ class GoalPreview : public QWidget {
     Q_OBJECT
 public:
     explicit GoalPreview(QWidget* parent = nullptr);
-    void setBlocks(const QVector<int>& blocks, int done, double partial = 0);
+    // B2: cuánto lleva cada bloque (0..1) y el color de su actividad (inválido = cualquiera).
+    void setBlocks(const QVector<int>& blocks, const QVector<double>& fills, const QVector<QColor>& colors = {});
     QSize sizeHint() const override;
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth(int w) const override;
@@ -91,9 +101,9 @@ protected:
     void resizeEvent(QResizeEvent*) override;
 
 private:
-    QVector<int> m_blocks;
-    int          m_done = 0;
-    double       m_partial = 0;
+    QVector<int>    m_blocks;
+    QVector<double> m_fills;
+    QVector<QColor> m_colors;
 };
 
 // M17: filas "[−] 3 [+]  ×  [−] 30m [+]" para armar el objetivo por pomodoros.
@@ -101,15 +111,18 @@ class ComboRows : public QWidget {
     Q_OBJECT
 public:
     explicit ComboRows(QWidget* parent = nullptr);
-    void    setSpec(const QString& spec, int defaultMin);   // "3x30+2x25"
+    void    setSpec(const QString& spec, int defaultMin);   // "3x30+2x25" (B2: "3x30@7" con actividad)
     QString spec() const;
+    void    setActivities(const FolderTree& tree, const QHash<qint64, QColor>& colors);
 
 signals:
     void changed();
 
 private:
-    struct Row { QWidget* w; int count; int minutes; class QLabel* countLabel; class QLabel* minLabel; };
-    void addRow(int count, int minutes);
+    struct Row { QWidget* w; int count; int minutes; class QLabel* countLabel; class QLabel* minLabel;
+                 qint64 folder = 0; class QToolButton* act = nullptr; };
+    void addRow(int count, int minutes, qint64 folder = 0);
+    void refreshActivityButton(Row& r);
     void removeRow(QWidget* w);
     void relayout();
 
@@ -117,4 +130,6 @@ private:
     class QScrollArea* m_scroll;
     QVector<Row>       m_rows;
     int                m_defaultMin = 25;
+    FolderTree         m_tree;
+    QHash<qint64, QColor> m_colors;
 };

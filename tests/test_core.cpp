@@ -547,6 +547,35 @@ private slots:
         QCOMPARE(f.partial, 0.0);
     }
 
+    // B2: objetivo con actividades
+    void goalByActivity()
+    {
+        QVector<Folder> fs{{1, 0, "Facultad", 0}, {2, 1, "AM2", 0}, {3, 1, "SO", 0}, {4, 0, "Inglés", 0}};
+        const FolderTree tree(fs);
+        QCOMPARE(goals::joinParts(goals::parts("1x25@2+3x30@3+2x25")), QString("1x25@2+3x30@3+2x25"));
+        QCOMPARE(goals::describe("1x25@2+3x30"), QString("1×25 + 3×30"));
+        const auto p = goals::parse("1x25@2+2x30@3+1x25", 25);
+        QCOMPARE(p.blocks, (QVector<int>{25, 30, 30, 25}));
+        QCOMPARE(p.folders, (QVector<qint64>{2, 3, 3, 0}));
+        // 40' de SO y 25' de Inglés: SO llena un bloque y un tercio del otro; Inglés llena "cualquiera"; AM2 nada.
+        QHash<qint64, qint64> st{{3, 40 * 60}, {4, 25 * 60}};
+        auto f = goals::fillByActivity(p, st, tree);
+        QCOMPARE(f[0], 0.0);
+        QCOMPARE(f[1], 1.0);
+        QVERIFY(qAbs(f[2] - 1.0 / 3) < 1e-9);
+        QCOMPARE(f[3], 1.0);
+        QVERIFY(!goals::allDone(f));
+        // Un bloque de "Facultad" acepta lo estudiado en sus materias.
+        const auto q = goals::parse("2x25@1", 25);
+        f = goals::fillByActivity(q, {{2, 25 * 60}, {3, 25 * 60}}, tree);
+        QVERIFY(goals::allDone(f));
+        // Sin actividades = como antes (por tiempo, en orden).
+        const auto r = goals::parse("2x25", 25);
+        f = goals::fillByActivity(r, {{4, 30 * 60}}, tree);
+        QCOMPARE(f[0], 1.0);
+        QVERIFY(qAbs(f[1] - 0.2) < 1e-9);
+    }
+
     // M25: color elegido por actividad
     void folderColorPersists()
     {

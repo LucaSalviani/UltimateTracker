@@ -101,6 +101,7 @@ private:
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel
     void updateObjectiveBand();
     void checkGoalReached();
+    QHash<qint64, qint64> studiedByFolder(const QVector<Pomodoro>& dayPomos, bool reserve) const;   // B2
     void checkShortTermMilestones();
     void maybeShowMonthSummary();
     void showDaySummaryIfNeeded();   // M44: marca del día, rachas, récords, meta semanal

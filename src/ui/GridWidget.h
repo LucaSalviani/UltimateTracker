@@ -37,7 +37,12 @@ public:
     void setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QString>& titles);
     // M7: minutos de los cuadraditos de la meta que todavía faltan en cada día;
     // se pintan "fantasma" después de los reales.
-    void setGoalBlocks(const QHash<QDate, QVector<int>>& blocks, const QHash<QDate, double>& firstPartial = {});
+    // B2: cada fantasma con su actividad (0 = cualquiera), cuánto lleva (0..1) y
+    // su lugar en el objetivo (para que no "salte" cuando se completa uno de adelante).
+    struct Ghost { int minutes = 0; qint64 folder = 0; double fill = 0; int index = 0; };
+    void setGoalBlocks(const QHash<QDate, QVector<Ghost>>& blocks);
+    // B2-1: "se fusiona": el fantasma que se completa vuela hasta el cuadradito hecho.
+    void setGhostMerge(bool on) { m_ghostMerge = on; }
     void setLive(const std::optional<Pomodoro>& running, double progress);
     void setFolderPaths(const QHash<qint64, QString>& paths) { m_paths = paths; }
     // M8: nombre corto y color de cada actividad, y si se agrupan los cuadraditos.
@@ -107,8 +112,11 @@ private:
     SizeMode m_sizeMode = SizeMode::Uniform;
 
     QVector<Pomodoro>            m_real;        // lo que viene de la base
-    QHash<QDate, QVector<int>>   m_goalBlocks;
-    QHash<QDate, double>         m_goalPartial;   // M21: cuánto lleva el primer fantasma
+    QHash<QDate, QVector<Ghost>> m_goalBlocks;
+    bool                         m_ghostMerge = false;
+    struct Dying { QRectF from; QDate day; qint64 folder = 0; int minutes = 0; qint64 at = 0; };
+    QVector<Dying>               m_dying;          // fantasmas fundiéndose en el hecho
+    void paintDying(QPainter& p, const QDate& day);
     QVector<Pomodoro>            m_pomos;       // reales + fantasmas (id < 0)
     QHash<QDate, QVector<int>>   m_byDay;
     QHash<QDate, QString>        m_titles;

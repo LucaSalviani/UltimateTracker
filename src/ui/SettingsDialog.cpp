@@ -211,6 +211,12 @@ QWidget* SettingsDialog::pageGeneral()
     m_goalInput->addItem(QStringLiteral("Texto (3x30 + 2x25)"), "text");
     m_goalInput->setCurrentIndex(m_db->setting("goal_input", "buttons").toString() == QLatin1String("text") ? 1 : 0);
     form->addRow(QStringLiteral("Objetivo por pomodoros"), m_goalInput);
+    // B2-1: qué pasa con el fantasma del objetivo cuando arrancás ese pomodoro.
+    m_goalRunning = new QComboBox(w);
+    m_goalRunning->addItem(QStringLiteral("Reemplaza al fantasma"));
+    m_goalRunning->addItem(QStringLiteral("Se funde con el fantasma al terminar"));
+    m_goalRunning->setCurrentIndex(qBound(0, m_db->setting("goal_running", 0).toInt(), 1));
+    form->addRow(QStringLiteral("Pomodoro del objetivo"), m_goalRunning);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("General"), w));
@@ -675,6 +681,7 @@ void SettingsDialog::accept()
     m_db->setSetting("date_format", m_dateFormat->currentIndex() == 0 ? "numeric" : "long");
     m_db->setSetting("day_start_hour", m_dayStart->value());
     m_db->setSetting("goal_input", m_goalInput->currentData().toString());
+    m_db->setSetting("goal_running", m_goalRunning->currentIndex());
 
     m_db->setSetting("timer_wheel", m_wheel->isChecked() ? 1 : 0);
     m_db->setSetting("timer_wheel_step", m_wheelStep->value());
@@ -779,6 +786,7 @@ void SettingsDialog::resetSection(int page)
         pick(m_dateFormat, 0);
         m_dayStart->setValue(4);
         pick(m_goalInput, 0);
+        pick(m_goalRunning, 0);
         break;
     case 1:   // Cronómetro
         m_wheel->setChecked(true);

@@ -113,10 +113,27 @@ void GridWidget::setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QStr
     rebuild();
 }
 
-void GridWidget::setGoalBlocks(const QHash<QDate, QVector<int>>& blocks, const QHash<QDate, double>& firstPartial)
+void GridWidget::setGoalBlocks(const QHash<QDate, QVector<Ghost>>& blocks)
 {
+    // B2-1: los fantasmas de hoy que desaparecen justo después de completar un
+    // pomodoro se "funden" en él (si está elegido): se recuerda dónde estaban.
+    if (m_ghostMerge) {
+        bool justCompleted = false;
+        for (auto it = m_completeAt.cbegin(); it != m_completeAt.cend(); ++it)
+            if (m_clock.elapsed() - it.value() < 5000) justCompleted = true;
+        if (justCompleted) {
+            QSet<qint64> keep;
+            for (const Ghost& g : blocks.value(m_today))
+                keep.insert(-(m_today.toJulianDay() * 100 + g.index + 1));
+            for (const Placed& pl : m_placed) {
+                if (pl.index < 0 || pl.index >= m_pomos.size()) continue;
+                const Pomodoro& pm = m_pomos[pl.index];
+                if (!isGhost(pm) || pm.day != m_today || keep.contains(pm.id)) continue;
+                m_dying.append({pl.rect, pm.day, pm.folderId, pm.plannedSec / 60, m_clock.elapsed()});
+            }
+        }
+    }
     m_goalBlocks = blocks;
-    m_goalPartial = firstPartial;
     rebuild();
 }
 
@@ -129,13 +146,14 @@ void GridWidget::rebuild()
     // Fantasmas: los cuadraditos de la meta que faltan, a continuación de los reales.
     // (MainWindow ya descontó los hechos: acá llegan solo los que faltan.)
     for (auto it = m_goalBlocks.cbegin(); it != m_goalBlocks.cend(); ++it) {
-        for (int k = 0; k < it.value().size(); ++k) {
+        for (const Ghost& gh : it.value()) {
             Pomodoro g;
-            g.id = -(it.key().toJulianDay() * 100 + k + 1);   // estable entre recargas
+            g.id = -(it.key().toJulianDay() * 100 + gh.index + 1);   // estable entre recargas
             g.day = it.key();
-            g.plannedSec = it.value()[k] * 60;
-            // M21: el primero que falta puede estar a medias (por tiempo acumulado).
-            g.studiedSec = k == 0 ? int(g.plannedSec * m_goalPartial.value(it.key(), 0.0)) : 0;
+            g.folderId = gh.folder;   // B2: con actividad va en su grupo
+            g.plannedSec = gh.minutes * 60;
+            // M21: puede estar a medias (por tiempo acumulado).
+            g.studiedSec = int(g.plannedSec * qBound(0.0, gh.fill, 1.0));
             g.status = PomoStatus::Completed;
             m_byDay[g.day].append(int(m_pomos.size()));
             m_pomos.append(g);
@@ -319,6 +337,7 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
     if (isGhost(pomo)) {
         t.state = tiles::State::Ghost;
         t.label = fmt::duration(pomo.plannedSec);
+        t.stripe = m_colors.value(pomo.folderId);   // B2: con actividad, el borde punteado toma su color
         t.progress = pomo.plannedSec > 0 ? double(pomo.studiedSec) / pomo.plannedSec : 0;
         tiles::paint(p, r, t, m_clock.elapsed());
         return;
@@ -363,7 +382,7 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         QHash<qint64, int> slot;
         for (int idx : all) {
             const Pomodoro& pm = m_pomos[idx];
-            if (isGhost(pm)) { ghosts.append(idx); continue; }
+            if (isGhost(pm) && pm.folderId <= 0) { ghosts.append(idx); continue; }
             auto it = slot.find(pm.folderId);
             if (it == slot.end()) {
                 it = slot.insert(pm.folderId, int(groups.size()));
@@ -464,7 +483,43 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         }
         m_placed.append(pl);
     }
+    paintDying(p, day);
     p.restore();
+}
+
+// B2-1: el fantasma vuela hasta el cuadradito recién hecho de su actividad y se apaga.
+void GridWidget::paintDying(QPainter& p, const QDate& day)
+{
+    constexpr int kMs = 650;
+    for (int i = int(m_dying.size()) - 1; i >= 0; --i) {
+        const Dying& d = m_dying[i];
+        const qint64 dt = m_clock.elapsed() - d.at;
+        if (dt > kMs) { m_dying.removeAt(i); continue; }
+        if (d.day != day) continue;
+        // Destino: el último hecho del día (de la misma actividad si la tiene).
+        QRectF target = d.from;
+        qint64 bestStart = -1;
+        for (const Placed& pl : m_placed) {
+            const Pomodoro& pm = m_pomos[pl.index];
+            if (isGhost(pm) || pm.day != day) continue;
+            if (d.folder > 0 && pm.folderId != d.folder) continue;
+            if (pm.startedAt > bestStart) { bestStart = pm.startedAt; target = pl.rect; }
+        }
+        const double u = QEasingCurve(QEasingCurve::InOutCubic).valueForProgress(double(dt) / kMs);
+        const QRectF r(d.from.left() + (target.left() - d.from.left()) * u, d.from.top() + (target.top() - d.from.top()) * u,
+                       d.from.width() + (target.width() - d.from.width()) * u,
+                       d.from.height() + (target.height() - d.from.height()) * u);
+        tiles::Tile t;
+        t.state = tiles::State::Ghost;
+        t.label = fmt::duration(d.minutes * 60);
+        t.progress = 1.0;
+        t.stripe = m_colors.value(d.folder);
+        p.save();
+        p.setOpacity(1.0 - u * 0.9);
+        tiles::paint(p, r, t, m_clock.elapsed());
+        p.restore();
+        m_animating = true;
+    }
 }
 
 // Título de un grupo: ● Sistemas Operativos  1h40
@@ -476,7 +531,7 @@ void GridWidget::paintHeader(QPainter& p, const Header& h) const
     p.setFont(f);
     const QRectF r = h.rect.adjusted(0, 0, 0, -3);
     double x = r.left();
-    if (!ghost) {
+    if (!ghost || h.folderId > 0) {   // B2: un grupo solo con fantasmas de una actividad lleva su punto
         const QColor c = m_colors.value(h.folderId, theme::textFaint);
         p.setPen(Qt::NoPen);
         p.setBrush(c);
@@ -484,7 +539,8 @@ void GridWidget::paintHeader(QPainter& p, const Header& h) const
         p.drawEllipse(QRectF(x, r.center().y() - d / 2 + 1, d, d));
         x += d + 5;
     }
-    QString name = ghost ? QStringLiteral("Objetivo · faltan %1").arg(h.ghosts)
+    QString name = ghost ? (h.folderId > 0 ? QStringLiteral("%1 · faltan %2").arg(m_names.value(h.folderId, m_paths.value(h.folderId))).arg(h.ghosts)
+                                           : QStringLiteral("Objetivo · faltan %1").arg(h.ghosts))
                          : m_names.value(h.folderId, m_paths.value(h.folderId, QStringLiteral("Sin actividad")));
     const QString dur = ghost ? QString() : fmt::duration(int(h.seconds));
     QFontMetricsF fm(f);

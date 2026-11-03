@@ -429,7 +429,8 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
     QColor runningHalo;
     switch (st) {
     case State::Ghost: {
-        QColor edge = theme::textFaint;
+        // B2: si el bloque es de una actividad, el punteado y el avance van en su color.
+        QColor edge = t.stripe.isValid() ? theme::mix(theme::textFaint, t.stripe, 0.75) : theme::textFaint;
         edge.setAlphaF(0.7);
         QPen pen(edge, bw, Qt::DashLine);
         pen.setDashPattern({3, 3});
@@ -441,8 +442,8 @@ void paint(QPainter& p, const QRectF& rIn, const Tile& t, qint64 now)
         if (t.progress > 0) {   // bloque del objetivo empezado (por tiempo acumulado)
             p.save();
             p.setClipPath(path);
-            QColor pf = theme::textFaint;
-            pf.setAlphaF(0.30);
+            QColor pf = t.stripe.isValid() ? t.stripe : theme::textFaint;
+            pf.setAlphaF(t.stripe.isValid() ? 0.35 : 0.30);
             p.setPen(Qt::NoPen);
             p.setBrush(pf);
             p.drawRect(QRectF(r.left(), r.top(), r.width() * qMin(1.0, t.progress), r.height()));

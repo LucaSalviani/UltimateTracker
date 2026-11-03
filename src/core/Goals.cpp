@@ -1,6 +1,7 @@
 #include "core/Goals.h"
 #include "core/Database.h"
 #include "core/Format.h"
+#include "core/FolderTree.h"
 
 #include <QRegularExpression>
 #include <QStringList>
@@ -47,19 +48,89 @@ Parsed parse(const QString& spec, int pomodoroMin)
         const int len = qMax(1, pomodoroMin);
         const int n = (out.totalMin + len - 1) / len;
         out.blocks = QVector<int>(qMin(n, 60), len);
+        out.folders = QVector<qint64>(out.blocks.size(), 0);
         out.ok = true;
         return out;
     }
-    for (const QString& part : s.split('+', Qt::SkipEmptyParts)) {
-        const QStringList nx = part.split('x');
-        const int count = nx.size() == 2 ? nx[0].toInt() : 1;
-        const int min = nx.size() == 2 ? nx[1].toInt() : nx[0].toInt();
-        if (count <= 0 || min <= 0) return Parsed{};
-        for (int i = 0; i < count && out.blocks.size() < 60; ++i) out.blocks.append(min);
-        out.totalMin += count * min;
+    for (const Part& pt : parts(s)) {
+        if (pt.count <= 0 || pt.minutes <= 0) return Parsed{};
+        for (int i = 0; i < pt.count && out.blocks.size() < 60; ++i) {
+            out.blocks.append(pt.minutes);
+            out.folders.append(pt.folder);
+        }
+        out.totalMin += pt.count * pt.minutes;
     }
     out.ok = !out.blocks.isEmpty();
     return out;
+}
+
+QVector<Part> parts(const QString& spec)
+{
+    QVector<Part> out;
+    if (spec.startsWith(QLatin1String("t:"))) return out;
+    for (const QString& raw : spec.split('+', Qt::SkipEmptyParts)) {
+        Part pt;
+        QString part = raw.trimmed();
+        const int at = part.indexOf('@');
+        if (at >= 0) {
+            pt.folder = part.mid(at + 1).toLongLong();
+            part = part.left(at);
+        }
+        const QStringList nx = part.split('x');
+        pt.count = nx.size() == 2 ? nx[0].toInt() : 1;
+        pt.minutes = nx.size() == 2 ? nx[1].toInt() : nx[0].toInt();
+        out.append(pt);
+    }
+    return out;
+}
+
+QString joinParts(const QVector<Part>& ps)
+{
+    QStringList out;
+    for (const Part& pt : ps) {
+        if (pt.count <= 0 || pt.minutes <= 0) continue;
+        QString s = QStringLiteral("%1x%2").arg(pt.count).arg(pt.minutes);
+        if (pt.folder > 0) s += QStringLiteral("@%1").arg(pt.folder);
+        out << s;
+    }
+    return out.join('+');
+}
+
+QVector<double> fillByActivity(const Parsed& p, const QHash<qint64, qint64>& studiedByFolder, const FolderTree& tree)
+{
+    QVector<double> fills(p.blocks.size(), 0.0);
+    QHash<qint64, qint64> left = studiedByFolder;
+    auto take = [&](qint64 need, const QSet<qint64>* only) {
+        qint64 got = 0;
+        for (auto it = left.begin(); it != left.end() && got < need; ++it) {
+            if (only && !only->contains(it.key())) continue;
+            const qint64 t = qMin(it.value(), need - got);
+            it.value() -= t;
+            got += t;
+        }
+        return got;
+    };
+    // Primero los que piden una actividad (si no, "cualquiera" se comería su tiempo).
+    for (int i = 0; i < p.blocks.size(); ++i) {
+        const qint64 f = i < p.folders.size() ? p.folders[i] : 0;
+        if (f <= 0) continue;
+        const QSet<qint64> sub = tree.contains(f) ? tree.subtree(f) : QSet<qint64>{f};
+        const qint64 need = qint64(p.blocks[i]) * 60;
+        fills[i] = need > 0 ? double(take(need, &sub)) / need : 1.0;
+    }
+    for (int i = 0; i < p.blocks.size(); ++i) {
+        const qint64 f = i < p.folders.size() ? p.folders[i] : 0;
+        if (f > 0) continue;
+        const qint64 need = qint64(p.blocks[i]) * 60;
+        fills[i] = need > 0 ? double(take(need, nullptr)) / need : 1.0;
+    }
+    return fills;
+}
+
+bool allDone(const QVector<double>& fills)
+{
+    for (double f : fills) if (f < 0.999) return false;
+    return !fills.isEmpty();
 }
 
 QString normalizeCombo(const QString& text)
@@ -91,6 +162,8 @@ QString describe(const QString& spec)
 {
     if (spec.startsWith(QLatin1String("t:"))) return fmt::duration(spec.mid(2).toInt() * 60);
     QString s = spec;
+    static const QRegularExpression at(QStringLiteral("@\\d+"));
+    s.remove(at);
     s.replace('x', QChar(0x00d7));
     s.replace('+', QStringLiteral(" + "));
     return s;

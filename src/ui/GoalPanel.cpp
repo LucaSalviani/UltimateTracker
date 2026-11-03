@@ -17,8 +17,10 @@
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <functional>
 
 namespace {
 const char* kDayLetters[] = {"L", "M", "X", "J", "V", "S", "D"};
@@ -109,6 +111,8 @@ GoalPanel::GoalPanel(QWidget* parent)
     connect(m_rows, &ComboRows::changed, this, [this] {
         // Las filas escriben en el mismo spec de texto (así el resto no cambia).
         m_combo->setText(m_rows->spec());
+        // Con más filas la página crece (antes quedaba con la altura vieja y se encimaba con lo de abajo).
+        if (m_mode->checkedId() == 1) QTimer::singleShot(0, this, [this] { showModePage(1); });
         if (m_mode->checkedId() == 1) showModePage(1);
     });
     cl->addWidget(m_rows);
@@ -264,6 +268,7 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
         QSignalBlocker b(m_rows);
         m_rows->setSpec(has && !timeMode ? spec : QString(), pomodoroMin);
     }
+    showModePage(timeMode ? 0 : 1);   // con las filas ya cargadas, la página mide lo que tiene que medir
 
     const int wd = rule ? rule->weekdays : 0;
     int repeatIdx = 0;
@@ -277,6 +282,14 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
     m_remove->setVisible(has);
     m_save->setText(has ? QStringLiteral("Guardar cambios") : QStringLiteral("Guardar objetivo"));
     m_offDay = rule && rule->weekdays == 0 && rule->spec.isEmpty();
+    refreshPreview();
+}
+
+void GoalPanel::setActivities(const FolderTree& tree, const QHash<qint64, QColor>& colors)
+{
+    m_tree = tree;
+    m_colors = colors;
+    m_rows->setActivities(tree, colors);
     refreshPreview();
 }
 
@@ -332,13 +345,19 @@ void GoalPanel::refreshPreview()
     m_comboHint->setText(comboTyped && !p.ok ? QStringLiteral("No entiendo eso. Ej: 3x30 + 2x25")
                                              : QStringLiteral("Cantidad x minutos, separados con +"));
     if (!p.ok) {
-        m_preview->setBlocks({}, 0);
+        m_preview->setBlocks({}, {});
         m_summary->setText(QString());
         m_status->setText(m_offDay ? QStringLiteral("Este día está marcado sin objetivo.") : QString());
         return;
     }
-    const auto fill = goals::fillBlocks(p.blocks, m_progress.studiedSec);   // M21: por tiempo
-    m_preview->setBlocks(p.blocks, fill.full, fill.partial);
+    // M21 → B2: por tiempo acumulado y, si las filas tienen actividad, por actividad.
+    QHash<qint64, qint64> by = m_progress.byFolder;
+    if (by.isEmpty() && m_progress.studiedSec > 0) by.insert(0, m_progress.studiedSec);
+    const QVector<double> fills = goals::fillByActivity(p, by, m_tree);
+    QVector<QColor> colors;
+    for (qint64 f : p.folders) colors.append(f > 0 ? m_colors.value(f) : QColor());
+    m_preview->setBlocks(p.blocks, fills, colors);
+    const bool done = goals::allDone(fills);
     m_summary->setText(p.timeMode
         ? QStringLiteral("≈ %1 %2 de %3").arg(p.blocks.size()).arg(p.blocks.size() == 1 ? "pomodoro" : "pomodoros")
               .arg(fmt::duration(m_pomoMin * 60))
@@ -347,7 +366,7 @@ void GoalPanel::refreshPreview()
 
     const qint64 target = qint64(p.totalMin) * 60;
     const int pct = target > 0 ? int(qMin<qint64>(100, m_progress.studiedSec * 100 / target)) : 0;
-    if (m_progress.studiedSec >= target && target > 0)
+    if (done && target > 0)
         m_status->setText(QStringLiteral("✓ Objetivo cumplido · %1").arg(fmt::duration(int(m_progress.studiedSec))));
     else
         m_status->setText(QStringLiteral("%1 de %2 · %3 %")
@@ -362,11 +381,11 @@ GoalPreview::GoalPreview(QWidget* parent)
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 }
 
-void GoalPreview::setBlocks(const QVector<int>& blocks, int done, double partial)
+void GoalPreview::setBlocks(const QVector<int>& blocks, const QVector<double>& fills, const QVector<QColor>& colors)
 {
     m_blocks = blocks;
-    m_done = done;
-    m_partial = partial;
+    m_fills = fills;
+    m_colors = colors;
     setFixedHeight(heightForWidth(width() > 60 ? width() : 260));
     update();
 }
@@ -397,32 +416,35 @@ void GoalPreview::paintEvent(QPaintEvent*)
     const int perRow = qMax(1, (width() + gap) / (side + gap));
     for (int i = 0; i < m_blocks.size(); ++i) {
         const QRectF r((i % perRow) * (side + gap) + 0.5, (i / perRow) * (side + gap) + 0.5, side - 1, side - 1);
-        if (i < m_done) {
-            p.setPen(QPen(theme::squareDoneEdge, 1));
+        const double fill = m_fills.value(i);
+        const bool full = fill >= 0.999;
+        const QColor act = m_colors.value(i);
+        if (full) {
+            p.setPen(QPen(act.isValid() ? act : theme::squareDoneEdge, 1));
             p.setBrush(theme::squareDone);
         } else {
-            QPen pen(theme::textFaint, 1, Qt::DashLine);
+            QPen pen(act.isValid() ? theme::mix(theme::textFaint, act, 0.75) : theme::textFaint, 1, Qt::DashLine);
             pen.setDashPattern({3, 3});
             p.setPen(pen);
             p.setBrush(Qt::NoBrush);
         }
         p.drawRoundedRect(r, 3.5, 3.5);
-        if (i == m_done && m_partial > 0) {   // el que va a medias
+        if (!full && fill > 0) {   // el que va a medias
             p.save();
             QPainterPath clip;
             clip.addRoundedRect(r, 3.5, 3.5);
             p.setClipPath(clip);
-            QColor pf = theme::textFaint;
+            QColor pf = act.isValid() ? act : theme::textFaint;
             pf.setAlphaF(0.4);
             p.setPen(Qt::NoPen);
             p.setBrush(pf);
-            p.drawRect(QRectF(r.left(), r.top(), r.width() * m_partial, r.height()));
+            p.drawRect(QRectF(r.left(), r.top(), r.width() * fill, r.height()));
             p.restore();
         }
         QFont f = theme::uiFont(7, QFont::DemiBold);
         f.setPixelSize(9);
         p.setFont(f);
-        p.setPen(i < m_done ? theme::textDim : theme::textFaint);
+        p.setPen(full ? theme::textDim : theme::textFaint);
         p.drawText(r, Qt::AlignCenter, QString::number(m_blocks[i]));
     }
 }
@@ -467,7 +489,7 @@ ComboRows::ComboRows(QWidget* parent)
     connect(add, &QPushButton::clicked, this, [this] {
         // La fila nueva arranca igual a la última (lo más común es repetir).
         const int min = m_rows.isEmpty() ? m_defaultMin : m_rows.last().minutes;
-        addRow(1, min);
+        addRow(1, min, m_rows.isEmpty() ? 0 : m_rows.last().folder);
         relayout();
         emit changed();
     });
@@ -490,10 +512,8 @@ void ComboRows::setSpec(const QString& spec, int defaultMin)
         r.w->deleteLater();
     }
     m_rows.clear();
-    for (const QString& part : spec.split('+', Qt::SkipEmptyParts)) {
-        const QStringList nx = part.split('x');
-        if (nx.size() == 2 && nx[0].toInt() > 0 && nx[1].toInt() > 0) addRow(nx[0].toInt(), nx[1].toInt());
-    }
+    for (const goals::Part& pt : goals::parts(spec))
+        if (pt.count > 0 && pt.minutes > 0) addRow(pt.count, pt.minutes, pt.folder);
     if (m_rows.isEmpty()) addRow(4, defaultMin);   // un punto de partida razonable
     relayout();
     emit changed();
@@ -501,12 +521,41 @@ void ComboRows::setSpec(const QString& spec, int defaultMin)
 
 QString ComboRows::spec() const
 {
-    QStringList parts;
-    for (const Row& r : m_rows) parts << QStringLiteral("%1x%2").arg(r.count).arg(r.minutes);
-    return parts.join('+');
+    QVector<goals::Part> ps;
+    for (const Row& r : m_rows) ps.append({r.count, r.minutes, r.folder});
+    return goals::joinParts(ps);
 }
 
-void ComboRows::addRow(int count, int minutes)
+// B2: el botón de actividad de cada fila: un puntito de color y el nombre corto.
+void ComboRows::refreshActivityButton(Row& r)
+{
+    if (!r.act) return;
+    const Folder* f = r.folder > 0 ? m_tree.find(r.folder) : nullptr;
+    if (!f) r.folder = 0;
+    QPixmap dot(20, 20);
+    dot.setDevicePixelRatio(2);
+    dot.fill(Qt::transparent);
+    {
+        QPainter g(&dot);
+        g.setRenderHint(QPainter::Antialiasing);
+        if (f) { g.setPen(Qt::NoPen); g.setBrush(m_colors.value(r.folder, theme::textDim)); }
+        else { g.setPen(QPen(theme::textFaint, 1, Qt::DashLine)); g.setBrush(Qt::NoBrush); }
+        g.drawEllipse(QRectF(1.5, 1.5, 7, 7));
+    }
+    r.act->setIcon(QIcon(dot));
+    const QString name = f ? f->name : QStringLiteral("Cualquiera");
+    r.act->setText(QFontMetrics(r.act->font()).elidedText(name, Qt::ElideRight, 170));
+    r.act->setToolTip(f ? QStringLiteral("Actividad: %1").arg(m_tree.path(r.folder)) : QStringLiteral("Cualquier actividad"));
+}
+
+void ComboRows::setActivities(const FolderTree& tree, const QHash<qint64, QColor>& colors)
+{
+    m_tree = tree;
+    m_colors = colors;
+    for (Row& r : m_rows) refreshActivityButton(r);
+}
+
+void ComboRows::addRow(int count, int minutes, qint64 folder)
 {
     auto* w = new QWidget(this);
     w->setObjectName("GoalRow");
@@ -524,6 +573,13 @@ void ComboRows::addRow(int count, int minutes)
     min->setObjectName("GoalRowValue");
     min->setAlignment(Qt::AlignCenter);
     min->setMinimumWidth(40);
+    auto* act = new QToolButton(w);
+    act->setObjectName("GoalRowActivity");
+    act->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    act->setIconSize(QSize(10, 10));
+    act->setCursor(Qt::PointingHandCursor);
+    act->setFocusPolicy(Qt::NoFocus);
+    act->setAutoRaise(true);
     auto* del = new QToolButton(w);
     del->setObjectName("GoalRowDelete");
     del->setText(QStringLiteral("✕"));
@@ -531,9 +587,17 @@ void ComboRows::addRow(int count, int minutes)
     del->setCursor(Qt::PointingHandCursor);
     del->setFocusPolicy(Qt::NoFocus);
 
-    auto* l = new QHBoxLayout(w);
+    // B2: dos renglones: cantidad × minutos arriba, la actividad abajo (no entra todo en uno).
+    auto* v = new QVBoxLayout(w);
+    v->setContentsMargins(0, 0, 0, 2);
+    v->setSpacing(2);
+    auto* l = new QHBoxLayout;
     l->setContentsMargins(0, 0, 0, 0);
     l->setSpacing(3);
+    v->addLayout(l);
+    auto* l2 = new QHBoxLayout;
+    l2->setContentsMargins(2, 0, 0, 0);
+    v->addLayout(l2);
     l->addWidget(cm);
     l->addWidget(cnt);
     l->addWidget(cp);
@@ -545,8 +609,39 @@ void ComboRows::addRow(int count, int minutes)
     l->addWidget(mp);
     l->addStretch();
     l->addWidget(del);
+    l2->addWidget(act);
+    l2->addStretch();
 
-    m_rows.append({w, count, minutes, cnt, min});
+    m_rows.append({w, count, minutes, cnt, min, folder, act});
+    refreshActivityButton(m_rows.last());
+    // B2: elegir la actividad de la fila (o "cualquiera").
+    connect(act, &QToolButton::clicked, this, [this, w, act] {
+        QMenu menu(this);
+        auto pick = [this, w](qint64 id) {
+            for (Row& r : m_rows)
+                if (r.w == w) { r.folder = id; refreshActivityButton(r); }
+            emit changed();
+        };
+        menu.addAction(QStringLiteral("Cualquier actividad"), this, [pick] { pick(0); });
+        menu.addSeparator();
+        std::function<void(qint64, int)> add = [&](qint64 parent, int depth) {
+            for (qint64 id : m_tree.children(parent)) {
+                QPixmap dot(20, 20);
+                dot.setDevicePixelRatio(2);
+                dot.fill(Qt::transparent);
+                QPainter g(&dot);
+                g.setRenderHint(QPainter::Antialiasing);
+                g.setPen(Qt::NoPen);
+                g.setBrush(m_colors.value(id, theme::textDim));
+                g.drawEllipse(QRectF(1.5, 1.5, 7, 7));
+                g.end();
+                menu.addAction(QIcon(dot), QString(depth * 3, QChar(' ')) + m_tree.find(id)->name, this, [pick, id] { pick(id); });
+                add(id, depth + 1);
+            }
+        };
+        add(0, 0);
+        menu.exec(act->mapToGlobal(QPoint(0, act->height())));
+    });
     auto refresh = [cnt, min, this, w] {
         for (const Row& r : m_rows)
             if (r.w == w) {

@@ -2010,6 +2010,7 @@ void MainWindow::openGoalPanel(const QDate& day)
         });
     }
     const bool wasOpen = m_goalPanel->isVisible();
+    m_goalPanel->setActivities(m_tree, ActivitiesWidget::colorsFor(m_db, m_tree));   // B2
     m_goalPanel->load(day, goals::resolve(m_db->goals(), day), m_db->dayTitle(day),
                       m_db->setting("work_min", 25).toInt(), day == m_today);
     if (!wasOpen) placeGoalPanel(true, true);
@@ -2048,42 +2049,55 @@ void MainWindow::placeGoalPanel(bool open, bool animate)
     m_goalAnim->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
+// B2: lo estudiado ese día por actividad. Con `reserve`, el pomodoro que está
+// corriendo cuenta como si ya estuviera hecho (B2-1 "reemplaza": ocupa su fantasma).
+QHash<qint64, qint64> MainWindow::studiedByFolder(const QVector<Pomodoro>& dayPomos, bool reserve) const
+{
+    QHash<qint64, qint64> by;
+    const auto cur = m_session->currentPomodoro();
+    for (const Pomodoro& p : dayPomos) {
+        qint64 sec = p.studiedSec;
+        if (cur && p.id == cur->id) {
+            sec = cur->studiedSec;
+            if (reserve) sec = qMax<qint64>(sec, cur->plannedSec);
+        }
+        by[p.folderId] += sec;
+    }
+    return by;
+}
+
 void MainWindow::refreshGoals()
 {
     const QVector<GoalRule> rules = m_db->goals();
     const int pomoMin = m_db->setting("work_min", 25).toInt();
-    // Hechos por día (todas las actividades: la meta es del día, no de una actividad).
+    const bool merge = m_db->setting("goal_running", 0).toInt() == 1;   // B2-1
+    m_grid->setGhostMerge(merge);
     const QDate from = m_grid->rangeStart(), to = m_grid->rangeEnd();
-    QHash<QDate, int> done;
-    QHash<QDate, qint64> studied;
-    for (const Pomodoro& p : m_db->pomodorosBetween(qMin(from, m_today), qMax(to, m_today))) {
-        done[p.day] += 1;
-        studied[p.day] += p.studiedSec;
-    }
-    QHash<QDate, QVector<int>> remaining;
-    QHash<QDate, double> partial;
+    QHash<QDate, QVector<Pomodoro>> byDay;
+    for (const Pomodoro& p : m_db->pomodorosBetween(qMin(from, m_today), qMax(to, m_today))) byDay[p.day].append(p);
+    QHash<QDate, QVector<GridWidget::Ghost>> ghosts;
     for (QDate d = from; d <= to; d = d.addDays(1)) {
         const auto r = goals::resolve(rules, d);
         if (!r) continue;
         const auto parsed = goals::parse(r->spec, pomoMin);
         if (!parsed.ok) continue;
-        // M21: por tiempo acumulado (dos de 3m no llenan dos bloques de 40m).
-        const auto fill = goals::fillBlocks(parsed.blocks, studied.value(d));
-        if (fill.full < parsed.blocks.size()) {
-            remaining.insert(d, parsed.blocks.mid(fill.full));
-            partial.insert(d, fill.partial);
-        }
+        // M21 → B2: por tiempo acumulado y por actividad.
+        const auto fills = goals::fillByActivity(parsed, studiedByFolder(byDay.value(d), d == m_today && !merge), m_tree);
+        QVector<GridWidget::Ghost> left;
+        for (int i = 0; i < parsed.blocks.size(); ++i)
+            if (fills[i] < 0.999) left.append({parsed.blocks[i], parsed.folders.value(i), fills[i], i});
+        if (!left.isEmpty()) ghosts.insert(d, left);
     }
-    m_grid->setGoalBlocks(remaining, partial);
+    m_grid->setGoalBlocks(ghosts);
     if (m_goalPanel && m_goalPanel->isVisible()) {
         const QDate d = m_goalPanel->day();
-        int n = done.value(d);
-        qint64 sec = studied.value(d);
-        if (d < qMin(from, m_today) || d > qMax(to, m_today)) {
-            n = 0; sec = 0;
-            for (const Pomodoro& p : m_db->pomodorosBetween(d, d)) { ++n; sec += p.studiedSec; }
-        }
-        m_goalPanel->setProgress({n, sec});
+        QVector<Pomodoro> dp = byDay.value(d);
+        if (d < qMin(from, m_today) || d > qMax(to, m_today)) dp = m_db->pomodorosBetween(d, d);
+        GoalPanel::Progress pr;
+        pr.done = int(dp.size());
+        for (const Pomodoro& p : dp) pr.studiedSec += p.studiedSec;
+        pr.byFolder = studiedByFolder(dp, d == m_today && !merge);   // igual que la grilla
+        m_goalPanel->setProgress(pr);
     }
     updateObjectiveBand();
 }
@@ -2109,10 +2123,12 @@ void MainWindow::checkGoalReached()
     if (!r) return;
     const auto parsed = goals::parse(r->spec, m_db->setting("work_min", 25).toInt());
     if (!parsed.ok) return;
+    QVector<Pomodoro> done;
     qint64 sec = 0;
     for (const Pomodoro& p : m_db->pomodorosBetween(m_today, m_today))
-        if (p.status != PomoStatus::Running && p.status != PomoStatus::Parked) sec += p.studiedSec;
-    if (sec < qint64(parsed.totalMin) * 60) return;
+        if (p.status != PomoStatus::Running && p.status != PomoStatus::Parked) { done.append(p); sec += p.studiedSec; }
+    // B2: con actividades, cada bloque tiene que estar hecho en la suya.
+    if (!goals::allDone(goals::fillByActivity(parsed, studiedByFolder(done, false), m_tree))) return;
     m_db->setSetting(key, QDateTime::currentDateTime().toString(Qt::ISODate));
     toast(QStringLiteral("🎯 ¡Objetivo del día cumplido! %1").arg(fmt::duration(int(sec))));
     celebrate(int(Celebration::Kind::Goal), QStringLiteral("Objetivo del día"), QStringLiteral("¡Cumplido!"),
@@ -2129,11 +2145,22 @@ void MainWindow::preloadFromGoal()
     if (!r) return;
     const auto parsed = goals::parse(r->spec, m_db->setting("work_min", 25).toInt());
     if (!parsed.ok || parsed.timeMode) return;   // por tiempo: queda la duración que uses
-    qint64 studied = 0;
-    for (const Pomodoro& p : m_db->pomodorosBetween(m_today, m_today)) studied += p.studiedSec;
-    const auto fill = goals::fillBlocks(parsed.blocks, studied);
-    if (fill.full >= parsed.blocks.size()) return;
-    m_session->setWorkSec(parsed.blocks[fill.full] * 60);
+    const auto fills = goals::fillByActivity(parsed, studiedByFolder(m_db->pomodorosBetween(m_today, m_today), false), m_tree);
+    // El próximo bloque: primero uno a medias o vacío de la actividad elegida; si no, el primero que falte.
+    int next = -1;
+    for (int i = 0; i < fills.size(); ++i)
+        if (fills[i] < 0.999 && parsed.folders.value(i) > 0 && m_tree.subtree(parsed.folders[i]).contains(m_session->folderId())) { next = i; break; }
+    if (next < 0)
+        for (int i = 0; i < fills.size(); ++i) if (fills[i] < 0.999) { next = i; break; }
+    if (next < 0) return;
+    m_session->setWorkSec(parsed.blocks[next] * 60);
+    // B2: si el bloque es de una actividad, también la deja elegida (sin dejar nada en pausa).
+    const qint64 f = parsed.folders.value(next);
+    if (f > 0 && m_tree.contains(f) && !m_tree.subtree(f).contains(m_session->folderId()) && !m_session->switchWouldPark(f)) {
+        m_session->setFolderId(f);
+        m_db->setSetting("last_folder", f);
+        rebuildFolderMenu();
+    }
     refreshDeck();
 }
 

@@ -1,11 +1,13 @@
 #pragma once
 
 #include <QDate>
+#include <QHash>
 #include <QString>
 #include <QVector>
 #include <optional>
 
 class Database;
+class FolderTree;
 
 // Metas diarias (M7). Una regla dice "qué meta hay" para un día o para varios:
 //  - weekdays == 0  → solo el día `start` (también sirve para pisar una regla
@@ -15,7 +17,8 @@ class Database;
 struct GoalRule {
     qint64  id = 0;
     QString title;       // texto libre de la meta (opcional)
-    QString spec;        // "t:240" (por tiempo, en minutos) o "3x30+2x25" (por pomodoros)
+    QString spec;        // "t:240" (por tiempo, en minutos) o "3x30+2x25" (por pomodoros);
+                         // B2: cada parte puede llevar actividad: "1x25@12+3x30@7" (@ = id de la actividad)
     QDate   start;
     QDate   end;         // inválida = sin fin
     int     weekdays = 0;
@@ -31,6 +34,7 @@ struct Parsed {
     bool         timeMode = false;
     int          totalMin = 0;   // minutos de la meta
     QVector<int> blocks;         // minutos de cada cuadradito fantasma
+    QVector<qint64> folders;     // B2: actividad de cada bloque (0 = cualquiera); mismo largo que blocks
 };
 
 // Interpreta el spec guardado. Por tiempo, los cuadraditos se calculan con la
@@ -51,6 +55,18 @@ struct BlockFill {
     double partial = 0;    // 0..1 del siguiente
 };
 BlockFill fillBlocks(const QVector<int>& blocksMin, qint64 studiedSec);
+
+// B2: cuánto de cada bloque está hecho cuando el objetivo tiene actividades.
+// Primero se llenan los bloques con actividad, cada uno con lo estudiado en esa
+// actividad o en sus subactividades; lo que sobra llena los bloques "cualquiera".
+// Devuelve un valor 0..1 por bloque. Sin actividades da lo mismo que fillBlocks.
+QVector<double> fillByActivity(const Parsed& p, const QHash<qint64, qint64>& studiedByFolder, const FolderTree& tree);
+bool allDone(const QVector<double>& fills);
+
+// Partes "3x30@7" → {3, 30, 7}. Para armar y desarmar el spec en la interfaz.
+struct Part { int count = 0; int minutes = 0; qint64 folder = 0; };
+QVector<Part> parts(const QString& spec);
+QString joinParts(const QVector<Part>& parts);
 
 bool appliesOn(const GoalRule& r, const QDate& d);
 // La regla que manda ese día (una puntual le gana a una que se repite; entre
