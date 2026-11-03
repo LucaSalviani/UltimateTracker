@@ -4,6 +4,7 @@
 #include "core/Format.h"
 #include "core/Export.h"
 #include "core/Milestones.h"
+#include "core/Goals.h"
 #include "ui/ActivitiesWidget.h"
 #include "ui/Fade.h"
 #include "ui/Icons.h"
@@ -50,6 +51,9 @@ struct StatsData {
     int jokers = 2;
     struct Row { QString name; int depth = 0; qint64 period = 0; qint64 total = 0; qint64 id = 0; };
     QVector<Row> rows;
+    // B2-3: objetivo de cada día (hasta hoy): meta, lo hecho, si se cumplió y cuánto faltó
+    struct GoalDay { qint64 target = 0; qint64 studied = 0; qint64 missing = 0; bool met = false; };
+    QMap<QDate, GoalDay> goals;
     // M44: hitos
     ms::Config ms;
     qint64 todaySec = 0, weekSec = 0, allSec = 0;
@@ -93,13 +97,28 @@ private:
     static constexpr double kRowH = 26;
     static constexpr double kChipH = 52;
 
-    bool hasChips() const { return data.ms.dayMark || data.ms.weekly || data.ms.streaks || data.ms.stages; }
+    bool goalChip() const { return data.period != StatsWidget::Period::Day && !data.goals.isEmpty(); }
+    bool hasChips() const { return data.ms.dayMark || data.ms.weekly || data.ms.streaks || data.ms.stages || goalChip(); }
 
     // M44: una fila de tarjetitas con los hitos de corto y largo plazo.
     double paintChips(QPainter& p, double L, double y, double W)
     {
         struct Chip { QString label, value; double frac = -1; int dots = -1; };
         QVector<Chip> chips;
+        if (goalChip()) {   // B2-3
+            int met = 0, counted = 0;
+            qint64 missing = 0;
+            for (auto it = data.goals.cbegin(); it != data.goals.cend(); ++it) {
+                if (it.key() == data.today && !it->met) continue;   // hoy todavía no terminó
+                ++counted;
+                if (it->met) ++met; else missing += it->missing;
+            }
+            if (counted > 0)
+                chips.append({QStringLiteral("Objetivos"),
+                              missing > 0 ? QStringLiteral("%1 de %2 · faltaron %3").arg(met).arg(counted).arg(fmt::hours(missing))
+                                          : QStringLiteral("%1 de %2 cumplidos").arg(met).arg(counted),
+                              double(met) / counted});
+        }
         if (data.ms.dayMark) {
             const int lvl = ms::dayMark(data.todaySec, data.ms.markMin);
             const QString next = lvl < 3 ? QStringLiteral(" · %1 a las %2").arg(ms::dayMarkName(lvl + 1),
@@ -118,7 +137,7 @@ private:
         if (data.ms.streaks) {
             QStringList parts;
             if (data.records.bestDay > 0) parts << QStringLiteral("día %1").arg(fmt::hours(data.records.bestDay));
-            if (data.records.bestWeek > 0) parts << QStringLiteral("semana %1").arg(fmt::hours(data.records.bestWeek));
+            if (data.records.bestWeek > 0) parts << QStringLiteral("sem. %1").arg(fmt::hours(data.records.bestWeek));
             parts << QStringLiteral("racha %1").arg(data.bestStreak);
             chips.append({QStringLiteral("Récords"), parts.join(QStringLiteral(" · "))});
         }
@@ -226,6 +245,12 @@ private:
                         .arg(data.streak.days)
                         .arg(data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
         s += QStringLiteral("   ·   comodines esta semana: %1 de %2").arg(data.streak.jokersThisWeek).arg(data.jokers);
+        if (data.period == StatsWidget::Period::Day && data.goals.contains(data.from)) {   // B2-3
+            const auto g = data.goals.value(data.from);
+            if (g.met) s += QStringLiteral("   ·   objetivo %1 cumplido").arg(fmt::hours(g.target));
+            else if (data.from == data.today) s += QStringLiteral("   ·   objetivo %1: faltan %2").arg(fmt::hours(g.target), fmt::hours(g.missing));
+            else s += QStringLiteral("   ·   objetivo %1: faltaron %2").arg(fmt::hours(g.target), fmt::hours(g.missing));
+        }
         if (data.ms.streaks && data.bestStreak > data.streak.days)
             s += QStringLiteral("   ·   récord: %1").arg(data.bestStreak);
         if (!data.streak.todayDone) s += QStringLiteral("   ·   hoy todavía no arrancaste");
@@ -308,6 +333,13 @@ private:
         const double bw = qMax(3.0, slot * 0.62);
         qint64 maxV = 3600;
         for (auto v : data.byDay) maxV = qMax(maxV, v);
+        for (const auto& g : data.goals) maxV = qMax(maxV, g.target);   // B2-3: que la rayita del objetivo entre
+        if (!data.goals.isEmpty()) {
+            p.setFont(theme::uiFont(7.5));
+            p.setPen(theme::textFaint);
+            p.drawText(QRectF(L, y - 24, W, 16), Qt::AlignRight | Qt::AlignVCenter,
+                       QStringLiteral("—  objetivo del día     verde = cumplido"));
+        }
 
         p.setPen(QPen(theme::line, 1));
         p.drawLine(QPointF(L, y + chartH), QPointF(L + W, y + chartH));
@@ -320,7 +352,14 @@ private:
             p.setPen(Qt::NoPen);
             // M35: barras en el color del tema; hoy, a pleno
             p.setBrush(d == data.today ? statsInk() : theme::mix(theme::surface, statsInk(), 0.55));
+            if (data.goals.value(d).met) p.setBrush(d == data.today ? theme::breakAccent : theme::mix(theme::surface, theme::breakAccent, 0.75));
             if (v > 0) p.drawRoundedRect(r, 2, 2);
+            if (data.goals.contains(d)) {   // B2-3: rayita a la altura del objetivo
+                const double gy = y + chartH - (chartH - labelRoom) * double(data.goals.value(d).target) / maxV;
+                p.setPen(QPen(theme::textDim, 1.5, Qt::SolidLine, Qt::FlatCap));
+                p.drawLine(QPointF(r.left() - 3, gy), QPointF(r.right() + 3, gy));
+                p.setPen(Qt::NoPen);
+            }
 
             p.setFont(theme::uiFont(8));
             if (v > 0 && slot > 30) {
@@ -372,7 +411,8 @@ private:
                 const QDate d = start.addDays(w * 7 + r);
                 if (d < data.from || d > data.to) continue;
                 const QRectF c(left + w * step, y + r * step, cell, cell);
-                p.setPen(d == data.today ? QPen(theme::squareFinal, 1.5) : Qt::NoPen);
+                p.setPen(d == data.today ? QPen(theme::squareFinal, 1.5)
+                         : data.goals.value(d).met ? QPen(theme::breakAccent, 1.2) : QPen(Qt::NoPen));   // B2-3
                 p.setBrush(d > data.today ? theme::bg.lighter(115) : shade(data.byDay.value(d)));
                 p.drawRoundedRect(c, 2, 2);
                 if (r == 0 || d.day() == 1) {
@@ -709,6 +749,31 @@ void StatsWidget::refresh()
         d.intervals = m_db->intervalsBetween(d.from, d.to);
     }
     d.colors = ActivitiesWidget::colorsFor(m_db, tree);
+    // B2-3: objetivos del período (hasta hoy). Las reglas guardan el pasado tal cual
+    // (cambiar una que se repite corta la vieja el día anterior), así que se resuelven acá.
+    {
+        const QVector<GoalRule> rules = m_db->goals();
+        const int pomoMin = m_db->setting("work_min", 25).toInt();
+        const QDate last = qMin(d.to, d.today);
+        if (!rules.isEmpty() && d.from <= last) {
+            QHash<QDate, QHash<qint64, qint64>> by;
+            for (const Pomodoro& p : m_db->pomodorosBetween(d.from, last)) by[p.day][p.folderId] += p.studiedSec;
+            for (QDate day = d.from; day <= last; day = day.addDays(1)) {
+                const auto rule = goals::resolve(rules, day);
+                if (!rule) continue;
+                const auto parsed = goals::parse(rule->spec, pomoMin);
+                if (!parsed.ok) continue;
+                const auto fills = goals::fillByActivity(parsed, by.value(day), tree);
+                StatsData::GoalDay g;
+                g.target = qint64(parsed.totalMin) * 60;
+                for (qint64 v : by.value(day)) g.studied += v;
+                for (int i = 0; i < fills.size(); ++i) g.missing += qint64((1.0 - qMin(1.0, fills[i])) * parsed.blocks[i] * 60);
+                if (parsed.timeMode) g.missing = qMax<qint64>(0, g.target - g.studied);
+                g.met = parsed.timeMode ? g.studied >= g.target : goals::allDone(fills);
+                d.goals.insert(day, g);
+            }
+        }
+    }
     // M44: hitos (siempre sobre todo, sin el filtro de actividad)
     d.ms = ms::Config::load(*m_db);
     if (d.ms.dayMark || d.ms.weekly || d.ms.streaks) {
