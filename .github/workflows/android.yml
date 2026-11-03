@@ -47,6 +47,9 @@ jobs:
       - name: NDK, SDK y Ninja
         run: |
           sudo apt-get install -y -q ninja-build > /dev/null
+          # OpenSSL de KDAB (mantiene Qt), fijado a un commit concreto
+          git clone -q https://github.com/KDAB/android_openssl.git "$RUNNER_TEMP/android_openssl"
+          git -C "$RUNNER_TEMP/android_openssl" checkout -q b71f1470962019bd89534a2919f5925f93bc5779
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.1.10909125" "platforms;android-34" "build-tools;34.0.0" > /dev/null
 
       # Llave para firmar el APK: siempre la misma, así cada versión se instala arriba de
@@ -88,7 +91,8 @@ jobs:
             -DQT_HOST_PATH="$QT_HOST" \
             -DANDROID_SDK_ROOT="$ANDROID_HOME" \
             -DANDROID_NDK_ROOT="$ANDROID_HOME/ndk/26.1.10909125" \
-            -DQT_ANDROID_SIGN_APK=ON
+            -DQT_ANDROID_SIGN_APK=ON \
+            -DANDROID_OPENSSL_ROOT="$RUNNER_TEMP/android_openssl"
           cmake --build build --target apk
           find build -name "*.apk" -print
           APK=$(find build -name "*.apk" | grep -i signed | head -1)

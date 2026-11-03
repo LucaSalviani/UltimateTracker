@@ -45,6 +45,13 @@ qt_add_qml_module(UltimateTrackerMobile
 target_link_libraries(UltimateTrackerMobile PRIVATE ut_core Qt6::Gui Qt6::Qml Qt6::Quick)
 
 if(ANDROID)
+    # Qt en Android necesita OpenSSL dentro del APK para HTTPS (si no: "TLS initialization failed").
+    if(DEFINED ANDROID_OPENSSL_ROOT)
+        include(${ANDROID_OPENSSL_ROOT}/android_openssl.cmake)
+        add_android_openssl_libraries(UltimateTrackerMobile)
+    else()
+        message(WARNING "Sin ANDROID_OPENSSL_ROOT: la sincronización no va a poder usar HTTPS")
+    endif()
     set_target_properties(UltimateTrackerMobile PROPERTIES
         QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android
         QT_ANDROID_TARGET_SDK_VERSION 34
