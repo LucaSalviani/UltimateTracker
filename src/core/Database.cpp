@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 6;
+constexpr int kSchemaVersion = 7;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -126,8 +126,62 @@ bool Database::migrate()
     if (version < 3) addColumnIfMissing("pomodoros", "note", "TEXT NOT NULL DEFAULT ''");      // M6: nota
     if (version < 5) addColumnIfMissing("folders", "prior_sec", "INTEGER NOT NULL DEFAULT 0"); // M11: horas previas
     if (version < 6) addColumnIfMissing("folders", "color", "TEXT NOT NULL DEFAULT ''");       // M25: color elegido
+    setupSync(version < 7);   // Celu: ids globales y registro de cambios para sincronizar
     if (version < kSchemaVersion) exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
     return true;
+}
+
+// Celu-3: cada fila de lo que se sincroniza tiene un id global (uid) y la hora de su
+// último cambio (updated_at, ms). Unos triggers anotan en sync_outbox todo lo que
+// cambia o se borra, así el resto del código no tiene que saber nada de esto.
+// Mientras se aplica lo que llega del servidor, sync_flag.applying = 1 y los
+// triggers no anotan nada (si no, se volvería a mandar).
+void Database::setupSync(bool firstTime)
+{
+    exec("CREATE TABLE IF NOT EXISTS sync_outbox (kind TEXT NOT NULL, uid TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, "
+         "at INTEGER NOT NULL, PRIMARY KEY (kind, uid)) WITHOUT ROWID");
+    exec("CREATE TABLE IF NOT EXISTS sync_flag (applying INTEGER NOT NULL)");
+    {
+        QSqlQuery c(m_db);
+        c.exec("SELECT COUNT(*) FROM sync_flag");
+        if (c.next() && c.value(0).toInt() == 0) { c.finish(); exec("INSERT INTO sync_flag(applying) VALUES(0)"); }
+    }
+    exec("UPDATE sync_flag SET applying = 0");   // por si la app se cerró en medio de una sincronización
+    const QString now = QStringLiteral("(CAST(strftime('%s','now') AS INTEGER) * 1000)");
+    const QString off = QStringLiteral("(SELECT applying FROM sync_flag LIMIT 1) = 0");
+    struct T { const char* table; const char* kind; const char* key; };   // key: columna que hace de uid
+    const T tables[] = {{"folders", "folder", "uid"}, {"pomodoros", "pomodoro", "uid"}, {"intervals", "interval", "uid"},
+                        {"goals", "goal", "uid"}, {"days", "day", "day"}};
+    for (const T& t : tables) {
+        const QString table = QString::fromLatin1(t.table), kind = QString::fromLatin1(t.kind), key = QString::fromLatin1(t.key);
+        addColumnIfMissing(table, "updated_at", "INTEGER NOT NULL DEFAULT 0");
+        if (key == QLatin1String("uid")) {
+            addColumnIfMissing(table, "uid", "TEXT");
+            exec(QStringLiteral("UPDATE %1 SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL").arg(table));
+            exec(QStringLiteral("CREATE UNIQUE INDEX IF NOT EXISTS %1_uid ON %1(uid)").arg(table));
+        }
+        if (firstTime) {
+            // Lo que ya había se manda la primera vez que se sincronice.
+            exec(QStringLiteral("UPDATE %1 SET updated_at = %2 WHERE updated_at = 0").arg(table, now));
+            exec(QStringLiteral("INSERT OR IGNORE INTO sync_outbox(kind, uid, deleted, at) SELECT '%1', %2, 0, updated_at FROM %3")
+                     .arg(kind, key, table));
+        }
+        const QString ins = key == QLatin1String("uid")
+            ? QStringLiteral("UPDATE %1 SET uid = COALESCE(NEW.uid, lower(hex(randomblob(16)))), updated_at = %2 WHERE rowid = NEW.rowid; ").arg(table, now)
+            : QStringLiteral("UPDATE %1 SET updated_at = %2 WHERE rowid = NEW.rowid; ").arg(table, now);
+        // Borrar + insertar (no INSERT OR REPLACE): dentro de las acciones de las claves
+        // foráneas (borrar una actividad pone en nulo sus pomodoros) SQLite ignora el REPLACE.
+        const QString note = QStringLiteral("DELETE FROM sync_outbox WHERE kind = '%1' AND uid = (SELECT %2 FROM %3 WHERE rowid = NEW.rowid); "
+                                            "INSERT INTO sync_outbox(kind, uid, deleted, at) SELECT '%1', %2, 0, updated_at FROM %3 WHERE rowid = NEW.rowid; ")
+                                 .arg(kind, key, table);
+        exec(QStringLiteral("CREATE TRIGGER IF NOT EXISTS sync_%1_ins AFTER INSERT ON %1 WHEN %2 BEGIN %3%4END").arg(table, off, ins, note));
+        exec(QStringLiteral("CREATE TRIGGER IF NOT EXISTS sync_%1_upd AFTER UPDATE ON %1 WHEN %2 BEGIN "
+                            "UPDATE %1 SET updated_at = %3 WHERE rowid = NEW.rowid; %4END").arg(table, off, now, note));
+        exec(QStringLiteral("CREATE TRIGGER IF NOT EXISTS sync_%1_del AFTER DELETE ON %1 WHEN %2 AND OLD.%3 IS NOT NULL BEGIN "
+                            "DELETE FROM sync_outbox WHERE kind = '%4' AND uid = OLD.%3; "
+                            "INSERT INTO sync_outbox(kind, uid, deleted, at) VALUES('%4', OLD.%3, 1, %5); END")
+                 .arg(table, off, key, kind, now));
+    }
 }
 
 void Database::addColumnIfMissing(const QString& table, const QString& column, const QString& decl)
@@ -182,7 +236,8 @@ bool Database::deleteFolder(qint64 id)
     QSqlQuery q(m_db);
     q.prepare("DELETE FROM folders WHERE id = ?");
     q.addBindValue(id);
-    return q.exec();
+    if (!q.exec()) { m_error = q.lastError().text(); return false; }
+    return true;
 }
 
 Database::FolderBackup Database::backupFolder(qint64 id) const

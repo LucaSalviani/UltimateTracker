@@ -92,7 +92,11 @@ public:
     QVariant setting(const QString& key, const QVariant& def = {}) const;
     void     setSetting(const QString& key, const QVariant& value);
 
+    // Celu-3: acceso directo para la sincronización (core/Sync).
+    QSqlDatabase& handle() { return m_db; }
+
 private:
+    void setupSync(bool firstTime);
     bool exec(const QString& sql);
     bool migrate();
     void addColumnIfMissing(const QString& table, const QString& column, const QString& decl);

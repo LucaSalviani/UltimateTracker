@@ -604,7 +604,7 @@ private slots:
         const qint64 pid = db.insertPomodoro(p);
         const auto backup = db.backupFolder(a);
         QCOMPARE(backup.rows.size(), 3);
-        QVERIFY(db.deleteFolder(a));
+        QVERIFY2(db.deleteFolder(a), qPrintable(db.lastError()));
         QCOMPARE(db.folders().size(), base);
         QCOMPARE(db.pomodoro(pid)->folderId, qint64(0));
         QVERIFY(db.restoreFolder(backup));

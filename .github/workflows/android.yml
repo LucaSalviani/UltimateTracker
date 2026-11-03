@@ -16,21 +16,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Qt 6.8 para Android (y el de escritorio que hace falta para compilar)
+      - name: Qt 6.8 de escritorio (hace falta para compilar la de Android)
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
           host: linux
+          target: desktop
+          arch: linux_gcc_64
+          dir: ${{ runner.temp }}/qt
+          cache: true
+          cache-key-prefix: qt-host
+          set-env: false
+
+      - name: Qt 6.8 para Android
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: all_os
           target: android
           arch: android_arm64_v8a
           dir: ${{ runner.temp }}/qt
-          autodesktop: true
           cache: true
+          cache-key-prefix: qt-android
 
       - name: NDK, SDK y Ninja
         run: |
