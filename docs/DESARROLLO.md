@@ -170,6 +170,10 @@ Cada cambio grande está en su propio commit de git. Para sacar uno: `git revert
 | `072e3fd` | M43 · proporcional a lo ancho prolijo |
 | `4b330b4` | M44 · hitos en tres plazos (lógica, menú ⋯ › Hitos, Ajustes › Hitos) |
 | `843cd32` | M45 · hitos a la vista (grilla, Estadísticas, resumen del mes) |
+| `ce9adb8` | B2-1/2 · objetivo por actividad; el pomodoro en curso reemplaza al fantasma o se funde con él |
+| `37691cb` | B2-1 · animación de fusión |
+| `aad5e2a` | B2-3 · estadísticas de objetivos cumplidos y no cumplidos |
+| `413d136` | B2-4 · saludo al despertar o desbloquear la PC; defaults para gente nueva; versión 1.0.0-beta.2 |
 
 ## Modo desarrollador
 

@@ -59,8 +59,8 @@ Sí: en **Actividades**, click derecho sobre la materia → **Horas previas…**
 **Me equivoqué con un pomodoro, ¿lo puedo corregir?**
 Sí: click derecho sobre el cuadradito para moverlo a otra actividad, corregir cuánto duró, agregarle una nota o borrarlo. Casi todo se puede deshacer con **Ctrl + Z**.
 
-**No quiero que arranque con Windows.**
-Viene prendido. Se apaga en **⋯ → Ajustes → Sistema → Iniciar con Windows**.
+**¿Puede abrirse sola cuando prendo la PC?**
+Sí: en **⋯ → Ajustes → Sistema** prendé *Iniciar con Windows* y, si querés, *Saludarme la primera vez que uso la PC en el día* (también al despertarla o desbloquearla). Vienen apagados.
 
 **¿Cómo la desinstalo?**
 En **Configuración → Aplicaciones → Aplicaciones instaladas → UltimateTracker**. Te pregunta si querés borrar también tus datos.

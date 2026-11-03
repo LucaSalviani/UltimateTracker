@@ -16,7 +16,7 @@ Windows 10 y 11 de 64 bits. No pide permisos de administrador. También hay una 
 - **⋯ → Actividades:** creá tus materias.
 - **Espacio:** arranca o pausa el pomodoro. Al terminar elegís recreo o seguir.
 - **G:** objetivo del día. **S:** estadísticas. **?:** todos los atajos.
-- **⋯ → Ajustes:** temas, estilos, sonidos y hitos. *Iniciar con Windows* viene prendido; se apaga en *Sistema*.
+- **⋯ → Ajustes:** temas, estilos, sonidos y hitos. En *Sistema* podés hacer que arranque con Windows y te salude al empezar el día.
 
 Tus datos quedan en tu compu (`%APPDATA%\UltimateTracker`). Para desinstalar: *Configuración → Aplicaciones*.
 

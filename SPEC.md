@@ -97,6 +97,8 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - La tarea del día (texto) también se edita ahí.
 - **Por tiempo** (ej. 4 h → se pasa a pomodoros con la duración que estés usando, redondeando para arriba) o **por pomodoros**: filas "[−] 3 [+] × [−] 30m [+]" con "+ Agregar" (scrollea si hay muchas), o escrito como `3x30 + 2x25` (se elige en Ajustes › General).
 - Por pomodoros, el reproductor viene precargado con la duración del próximo bloque del objetivo.
+- **Con actividad** (B2): cada fila elige su actividad ("1 de 25 para AM2 + 3 de 30 para SO") o "cualquiera". Se guarda como `1x25@<id>+3x30@<id>`. Los fantasmas toman el color de su actividad y van en su grupo; los bloques con actividad se llenan con lo estudiado en ella (o en sus subactividades) y lo que sobra llena los "cualquiera". El próximo pomodoro viene con la duración y la actividad del próximo bloque.
+- **El pomodoro en curso** (*Ajustes › General*): *reemplaza al fantasma* (por defecto: al dar play, el fantasma que le toca se oculta; si lo cortás antes, vuelve con lo que faltó) o *se funde con el fantasma al terminar* (el fantasma se va llenando y al terminar vuela hasta el cuadradito hecho).
 - **Repetir** como en Google Calendar: solo ese día, todos los días, de lunes a viernes o días elegidos. Cambiar una meta que se repite corta la anterior el día antes (el pasado no cambia). Quitar: "solo este día" o "desde este día en adelante".
 - Progreso en el panel; al cumplirla, festejo con sonido (una vez por día).
 
@@ -112,6 +114,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 ## Estadísticas
 - Por día, semana, mes y año, filtrables por actividad, con los cuatro contadores.
 - **Mapa de calor** anual (una celda por día, más intensa cuanto más se estudió).
+- **Objetivos** (B2): tarjeta "4 de 6 cumplidos · faltaron 2h30", rayita del objetivo en cada barra y barras verdes los días cumplidos, borde en el mapa de calor, y en el día "objetivo 4h: faltaron 50m".
 - **Racha**: día estudiado = al menos 1 pomodoro iniciado. 1 o 2 comodines por semana (configurable) que no la rompen.
 - **Colores**: barras y mapa de calor en el color del visor del cronómetro (el rojo suave en Gris); cada actividad con su color en las filas, la línea del día y el menú de actividades.
 - **Exportar a CSV** (botón ⤓): lo que estás viendo (período + actividad) o todo el historial. Separador `;`, coma decimal, UTF-8: abre directo en Excel en español.
@@ -154,8 +157,8 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - **Mini reproductor flotante** (M): ventanita siempre visible con pomodoro, actividad, tiempo, play/pausa, terminar y saltear recreo.
 
 ## Sistema
-- **Iniciar con Windows** (entrada en `HKCU\…\Run` con `--autostart`).
-- **Saludo**: al iniciar con Windows, una vez por día: "Buen día, ¿estás listo para ser productivo?" con una frase, la racha, lo de ayer y la meta. "A trabajar" se expande hasta la ventana y abre la meta del día; "Por ahora no" cierra el programa. Para verlo a mano: `UltimateTracker.exe --greeting`.
+- **Iniciar con Windows** (entrada en `HKCU\…\Run` con `--autostart`). Apagado por defecto para instalaciones nuevas.
+- **Saludo** (apagado por defecto): la primera vez que usás la PC en el día —al iniciar con Windows, al despertarla o al desbloquearla—, una vez por día. Con la app abierta lo detecta sola; cerrada, una tarea programada de Windows ("UltimateTracker - saludo") la abre con `--wake` y, si hoy ya saludó, no abre nada: "Buen día, ¿estás listo para ser productivo?" con una frase, la racha, lo de ayer y la meta. "A trabajar" se expande hasta la ventana y abre la meta del día; "Por ahora no" cierra el programa. Para verlo a mano: `UltimateTracker.exe --greeting`.
 - **Atajo global Ctrl + Alt + P**: pausar / seguir desde cualquier lado.
 - **Modo desarrollador**: trabaja sobre una copia de la base (al prenderlo o apagarlo en Ajustes la app se reinicia sola); botón 🧪 para completar ya, acelerar el tiempo y ver festejos, sonidos y saludo.
 - **Copia de seguridad diaria**: `%APPDATA%\UltimateTracker\backups` (o la carpeta que elijas), se guardan las últimas 7.
