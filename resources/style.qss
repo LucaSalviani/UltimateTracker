@@ -351,6 +351,10 @@ QLabel#GreetTitle { font-size: 15pt; font-weight: 600; color: @t1; }
 QLabel#GreetPhrase { font-size: 10.5pt; color: @t3; font-style: italic; }
 QLabel#GreetFacts { font-size: 9.5pt; color: @t2; }
 QWidget#GreetCard { background: transparent; }
+QWidget#TourBubble { background: transparent; }
+QLabel#TourCount { font-size: 8.5pt; color: @t3; letter-spacing: 1px; }
+QLabel#TourTitle { font-size: 12.5pt; font-weight: 600; color: @t1; }
+QLabel#TourText { font-size: 10pt; color: @t2; }
 QPushButton#GreetActivity { background: @s3; color: @t1; border: 1px solid @s6; border-radius: 9px; padding: 5px 12px; font-weight: 600; text-align: left; }
 QPushButton#GreetActivity:hover { border-color: @acc; }
 QPushButton#GreetGo { background: @acc; color: #ffffff; border: none; border-radius: 9px; padding: 9px 20px; font-weight: 600; font-size: 10.5pt; }

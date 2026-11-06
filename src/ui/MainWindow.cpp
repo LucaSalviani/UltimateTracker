@@ -9,6 +9,7 @@
 #include "ui/MiniPlayer.h"
 #include "ui/DevMode.h"
 #include "ui/Greeting.h"
+#include "ui/Tour.h"
 #include "ui/Celebration.h"
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
@@ -610,17 +611,20 @@ QWidget* MainWindow::buildTitleBar()
     connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMin(2, int(m_grid->zoom()) + 1))); });
 
     auto* goalBtn = iconButton(bar, icons::Id::Goal, QStringLiteral("Objetivo del día (G)"));
+    goalBtn->setObjectName("TbGoal");
     connect(goalBtn, &QToolButton::clicked, this, [this] {
         if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
         else openGoalPanel(m_grid->zoom() == GridWidget::Zoom::Day ? m_grid->anchor() : m_today);
     });
 
     auto* stats = iconButton(bar, icons::Id::Stats, QStringLiteral("Estadísticas"));
+    stats->setObjectName("TbStats");
     connect(stats, &QToolButton::clicked, this, [this] {
         showOverlay(m_overlay == Overlay::Stats ? Overlay::None : Overlay::Stats);
     });
 
     auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: actividades, ajustes, fijar, borde, pantalla completa, salir"));
+    menuBtn->setObjectName("TbMenu");
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
     menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
@@ -662,6 +666,7 @@ QWidget* MainWindow::buildTitleBar()
     });
     menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });
     menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);
+    menu->addAction(QStringLiteral("Ver tutorial"), this, [this] { startTour(); });   // Mejoras 2.0
     menu->addSeparator();
     menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
     connect(menuBtn, &QToolButton::clicked, this, [menuBtn, menu] {
@@ -2403,6 +2408,18 @@ void MainWindow::showEvent(QShowEvent* e)
         m_wake->attach(quintptr(winId()));
         if (m_db->setting("pinned", 0).toBool()) m_btnPin->setChecked(true);
         QTimer::singleShot(400, this, &MainWindow::maybeShowDaySummary);
+        // Mejoras 2.0: la primera vez, el mini tutorial (después de la tarjeta del día, si hay).
+        if (!m_db->setting("tutorial/done").toBool()) {
+            auto* wait = new QTimer(this);
+            wait->setInterval(900);
+            connect(wait, &QTimer::timeout, this, [this, wait] {
+                if (!isVisible() || m_docked || isMinimized()) return;
+                if (m_dayCard && m_dayCard->isVisible()) return;   // espera a que la cierres
+                wait->deleteLater();
+                if (!m_db->setting("tutorial/done").toBool()) startTour();
+            });
+            wait->start();
+        }
     }
 }
 
@@ -2513,6 +2530,44 @@ void MainWindow::editNote(qint64 id)
 // M37: panel con todos los atajos. Se cierra con cualquier tecla o click.
 // Mejoras 2.0: "Me voy". Termina la sesión: guarda lo que llevás y el tiempo
 // hasta que vuelvas no cuenta como recreo indebido.
+// Mejoras 2.0: mini tutorial (primera vez y desde ⋯ › Ver tutorial).
+void MainWindow::startTour()
+{
+    for (Tour* t : findChildren<Tour*>()) if (t->isVisible()) return;   // ya hay uno abierto
+    m_db->setSetting("tutorial/done", 1);
+    if (m_overlay != Overlay::None) showOverlay(Overlay::None);
+    if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
+    auto find = [this](const char* name) { return findChild<QWidget*>(QString::fromLatin1(name)); };
+    const QVector<Tour::Step> steps = {
+        {nullptr, QStringLiteral("Bienvenido a UltimateTracker"),
+         QStringLiteral("Cuenta tus horas de estudio con pomodoros, como el contador de horas de un juego. "
+                        "La meta: las 10.000 horas de un experto. Te muestro lo básico en un minuto.")},
+        {find("DeckActivity"), QStringLiteral("La actividad"),
+         QStringLiteral("En qué estás trabajando (materia, proyecto…). Click para elegir o crear una; "
+                        "se puede cambiar en cualquier momento, aunque el pomodoro esté corriendo.")},
+        {m_deck, QStringLiteral("El reloj"),
+         QStringLiteral("Antes de arrancar, ajustá la duración con − / + o la rueda sobre el tiempo. "
+                        "Play arranca (cada pomodoro se arranca a mano). Al terminar suena y elegís recreo o seguir.")},
+        {m_grid, QStringLiteral("Los cuadraditos"),
+         QStringLiteral("Cada pomodoro es un cuadradito, agrupados por actividad. Click derecho: nota, mover, corregir o borrar. "
+                        "Ctrl + click elige varios para moverlos juntos. Con la lupa ves la semana o el mes.")},
+        {m_liveStats, QStringLiteral("Lo de hoy"),
+         QStringLiteral("Pomodoros y tiempo de hoy, de todo el día o solo de la actividad actual (click en «ver…»). "
+                        "Los puntitos son la marca del día: bronce, plata y oro.")},
+        {find("TbGoal"), QStringLiteral("El objetivo del día"),
+         QStringLiteral("Cuánto querés estudiar hoy: por tiempo o por pomodoros (y de qué actividad). "
+                        "Se ve como cuadraditos fantasma que se van llenando; también se puede repetir.")},
+        {find("TbStats"), QStringLiteral("Estadísticas"),
+         QStringLiteral("Día, semana, mes y año: horas, recreos, objetivos cumplidos y por actividad.")},
+        {find("TbMenu"), QStringLiteral("Más"),
+         QStringLiteral("Actividades, hitos (etapas hacia las 10.000 h, rachas, récords), ajustes, sincronizar con el celu "
+                        "y este tutorial. Cuando te vas, «Me voy» debajo del reloj cierra la sesión.")},
+    };
+    auto* tour = new Tour(steps, this);
+    connect(tour, &Tour::finished, this, [this] { m_db->setSetting("tutorial/done", 1); });
+    tour->start();
+}
+
 void MainWindow::leaveSession()
 {
     if (!m_session->canEndSession()) {

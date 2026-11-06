@@ -36,6 +36,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/Theme.h             src/ui/Theme.cpp
     src/ui/Icons.h             src/ui/Icons.cpp
     src/ui/WheelGuard.h        src/ui/WheelGuard.cpp
+    src/ui/Tour.h              src/ui/Tour.cpp
     src/ui/Sounds.h            src/ui/Sounds.cpp
     src/ui/GridWidget.h        src/ui/GridWidget.cpp
     src/ui/EdgeTab.h           src/ui/EdgeTab.cpp

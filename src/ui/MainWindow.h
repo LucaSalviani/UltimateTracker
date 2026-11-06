@@ -40,6 +40,7 @@ public:
     void notifyWindows(const QString& title, const QString& text);
     void leaveSession();
     void showDayCard(bool startup, bool force);   // Mejoras 2.0: tarjeta del día sobre la app
+    void startTour();                             // Mejoras 2.0: mini tutorial
     void moveMany(const QList<qint64>& ids, qint64 folder);
     void showSelectionMenu(const QList<qint64>& ids, const QPoint& globalPos);
     void onWake();   // B2-4: la PC se despertó o se desbloqueó (saluda si es la primera vez en el día)
