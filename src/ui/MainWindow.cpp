@@ -1282,6 +1282,7 @@ void MainWindow::refreshLiveStats()
     // M44: marca del día (sobre todo el día) y meta semanal.
     qint64 dayTotal = cur ? cur->studiedSec : 0;
     for (const Pomodoro& p : m_todayPomos) dayTotal += p.studiedSec;
+    d.daySeconds = dayTotal;
     if (m_msCfg.dayMark && !m_liveActivityScope) d.dayLevel = ms::dayMark(dayTotal, m_msCfg.markMin);
     if (m_msCfg.weekly && m_msCfg.weeklyMin > 0) {
         const qint64 week = m_weekBeforeToday + dayTotal;

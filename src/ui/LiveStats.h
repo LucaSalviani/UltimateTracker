@@ -12,9 +12,11 @@ public:
         QString scopeName;             // nombre de la actividad (si activityScope)
         int     pomos = 0;
         qint64  seconds = 0;
-        // Tercer dato: en modo actividad, total histórico de la actividad;
-        // en modo día, cuántas actividades distintas tocaste hoy.
+        // Tercer dato: en modo actividad, qué parte del día fue esa actividad
+        // (el total histórico va chiquito en la cabecera); en modo día, cuántas
+        // actividades distintas tocaste hoy.
         qint64  activityTotalSec = 0;
+        qint64  daySeconds = 0;
         int     activities = 0;
         // M44: marca del día (−1 = oculta; 0..3) y avance de la meta semanal (−1 = oculta).
         int     dayLevel = -1;

@@ -43,16 +43,28 @@ void LiveStats::paintEvent(QPaintEvent*)
     p.setRenderHint(QPainter::Antialiasing);
 
     // Cabecera: alcance + toggle
+    // Mejoras 2.0: "esta actividad" es lo de HOY en esa actividad; el total
+    // histórico va aparte, chiquito, para que no se mezcle.
     const QString scope = m_data.activityScope
         ? QStringLiteral("HOY · %1").arg(m_data.scopeName.toUpper())
         : QStringLiteral("HOY · TODO EL DÍA");
+    const QString history = m_data.activityScope && m_data.activityTotalSec > 0
+        ? QStringLiteral("   en total: %1").arg(fmt::hours(m_data.activityTotalSec)) : QString();
     QFont hf = condensed(11, QFont::DemiBold);
     hf.setLetterSpacing(QFont::AbsoluteSpacing, 1.2);
     p.setFont(hf);
     p.setPen(theme::textDim);
     const QRectF tr = toggleRect();
-    p.drawText(QRectF(0, 2, tr.left() - 8, 16), Qt::AlignLeft | Qt::AlignVCenter,
-               QFontMetrics(hf).elidedText(scope, Qt::ElideRight, int(tr.left() - 8)));
+    const QString head = QFontMetrics(hf).elidedText(scope, Qt::ElideRight, int(tr.left() - 8));
+    p.drawText(QRectF(0, 2, tr.left() - 8, 16), Qt::AlignLeft | Qt::AlignVCenter, head);
+    if (!history.isEmpty()) {
+        const qreal hx = QFontMetricsF(hf).horizontalAdvance(head);
+        QFont nf = condensed(11, QFont::Normal);
+        p.setFont(nf);
+        p.setPen(theme::textFaint);
+        p.drawText(QRectF(hx, 2, qMax<qreal>(0, tr.left() - 8 - hx), 16), Qt::AlignLeft | Qt::AlignVCenter,
+                   QFontMetrics(nf).elidedText(history, Qt::ElideRight, int(qMax<qreal>(0, tr.left() - 8 - hx))));
+    }
 
     QFont tf = condensed(11, QFont::Normal);
     p.setFont(tf);
@@ -67,7 +79,8 @@ void LiveStats::paintEvent(QPaintEvent*)
         {QString::number(m_data.pomos), m_data.pomos == 1 ? QStringLiteral("pomodoro") : QStringLiteral("pomodoros")},
         {fmt::duration(m_data.seconds), QStringLiteral("estudiado")},
         m_data.activityScope
-            ? Block{fmt::duration(m_data.activityTotalSec), QStringLiteral("en total")}
+            ? Block{QStringLiteral("%1%").arg(m_data.daySeconds > 0 ? qRound(100.0 * m_data.seconds / m_data.daySeconds) : 0),
+                    QStringLiteral("del día")}
             : Block{QString::number(m_data.activities),
                     m_data.activities == 1 ? QStringLiteral("actividad") : QStringLiteral("actividades")},
     };
