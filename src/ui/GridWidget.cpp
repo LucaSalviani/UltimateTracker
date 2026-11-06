@@ -108,6 +108,12 @@ QDate GridWidget::rangeEnd() const
 
 void GridWidget::setData(const QVector<Pomodoro>& pomos, const QHash<QDate, QString>& titles)
 {
+    // Los elegidos que ya no están (borrados, otro día) se sueltan.
+    if (!m_selected.isEmpty()) {
+        QSet<qint64> still;
+        for (const Pomodoro& p : pomos) if (m_selected.contains(p.id)) still.insert(p.id);
+        if (still.size() != m_selected.size()) { m_selected = still; emit selectionChanged(int(m_selected.size())); }
+    }
     m_real = pomos;
     m_titles = titles;
     rebuild();
@@ -481,6 +487,14 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         } else {
             paintSquare(p, pl.rect, pm);
         }
+        // Mejoras 2.0: elegidos con Ctrl / Shift + click (para moverlos juntos).
+        if (m_selected.contains(pm.id)) {
+            p.save();
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(theme::text, 2));
+            p.drawRoundedRect(pl.rect.adjusted(-3, -3, 3, 3), 7, 7);
+            p.restore();
+        }
         m_placed.append(pl);
     }
     paintDying(p, day);
@@ -819,6 +833,12 @@ void GridWidget::contextMenuEvent(QContextMenuEvent* e)
         if (!pl.rect.contains(e->pos())) continue;
         const Pomodoro& pm = m_pomos[pl.index];
         if (isGhost(pm)) break;   // un fantasma es parte del día: menú del día
+        // Varios elegidos y el click es sobre uno de ellos: menú para todos.
+        if (m_selected.size() > 1 && m_selected.contains(pm.id)) {
+            emit selectionMenuRequested(QList<qint64>(m_selected.begin(), m_selected.end()), e->globalPos());
+            return;
+        }
+        clearSelection();
         emit pomodoroMenuRequested(pm.id, e->globalPos());
         return;
     }
@@ -826,8 +846,48 @@ void GridWidget::contextMenuEvent(QContextMenuEvent* e)
     if (d.isValid()) emit dayMenuRequested(d, e->globalPos());
 }
 
+void GridWidget::clearSelection()
+{
+    if (m_selected.isEmpty()) return;
+    m_selected.clear();
+    m_selectAnchor = 0;
+    update();
+    emit selectionChanged(0);
+}
+
 void GridWidget::mousePressEvent(QMouseEvent* e)
 {
+    // Mejoras 2.0: Ctrl + click elige o saca un cuadradito; Shift + click elige
+    // todos los del medio (del mismo día). Después, click derecho › Mover a…
+    if (e->button() == Qt::LeftButton && (e->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))) {
+        for (const Placed& pl : m_placed) {
+            if (!pl.rect.contains(e->position())) continue;
+            const Pomodoro& pm = m_pomos[pl.index];
+            if (isGhost(pm) || pm.status == PomoStatus::Running || pm.status == PomoStatus::Parked) return;
+            if ((e->modifiers() & Qt::ShiftModifier) && m_selectAnchor) {
+                int a = -1, b = -1;
+                for (int i = 0; i < m_pomos.size(); ++i) {
+                    if (m_pomos[i].id == m_selectAnchor) a = i;
+                    if (m_pomos[i].id == pm.id) b = i;
+                }
+                if (a >= 0 && b >= 0) {
+                    for (int i = qMin(a, b); i <= qMax(a, b); ++i) {
+                        const Pomodoro& q = m_pomos[i];
+                        if (q.day == pm.day && !isGhost(q) && q.status != PomoStatus::Running && q.status != PomoStatus::Parked)
+                            m_selected.insert(q.id);
+                    }
+                }
+            } else {
+                if (m_selected.contains(pm.id)) m_selected.remove(pm.id); else m_selected.insert(pm.id);
+                m_selectAnchor = pm.id;
+            }
+            update();
+            emit selectionChanged(int(m_selected.size()));
+            return;
+        }
+        return;
+    }
+    if (e->button() == Qt::LeftButton && !m_selected.isEmpty()) clearSelection();
     if (e->button() == Qt::LeftButton) {
         for (const Placed& pl : m_placed)
             if (pl.rect.contains(e->position()) && isGhost(m_pomos[pl.index])) {

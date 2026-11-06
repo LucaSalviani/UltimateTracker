@@ -44,6 +44,8 @@ public:
     // B2-1: "se fusiona": el fantasma que se completa vuela hasta el cuadradito hecho.
     void setGhostMerge(bool on) { m_ghostMerge = on; }
     void setLive(const std::optional<Pomodoro>& running, double progress);
+    void clearSelection();
+    bool hasSelection() const { return !m_selected.isEmpty(); }
     void setFolderPaths(const QHash<qint64, QString>& paths) { m_paths = paths; }
     // M8: nombre corto y color de cada actividad, y si se agrupan los cuadraditos.
     void setFolderLooks(const QHash<qint64, QString>& names, const QHash<qint64, QColor>& colors);
@@ -68,6 +70,9 @@ signals:
     // Click derecho en un día fuera de los cuadraditos, o click en un fantasma.
     void dayMenuRequested(const QDate& day, const QPoint& globalPos);
     void goalClicked(const QDate& day);
+    // Mejoras 2.0: varios elegidos (Ctrl / Shift + click) y click derecho sobre ellos.
+    void selectionMenuRequested(const QList<qint64>& ids, const QPoint& globalPos);
+    void selectionChanged(int count);
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -143,5 +148,7 @@ private:
 
     // Se reconstruyen en cada paint, para tooltips y clicks.
     QVector<Placed>               m_placed;
+    QSet<qint64>                  m_selected;      // Mejoras 2.0
+    qint64                        m_selectAnchor = 0;
     QVector<QPair<QRectF, QDate>> m_dayRects;
 };

@@ -400,6 +400,13 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         setZoom(GridWidget::Zoom::Day);
     });
     connect(m_grid, &GridWidget::pomodoroMenuRequested, this, &MainWindow::showPomodoroMenu);
+    connect(m_grid, &GridWidget::selectionMenuRequested, this, &MainWindow::showSelectionMenu);
+    connect(m_grid, &GridWidget::selectionChanged, this, [this](int n) {
+        if (n == 2 && !m_db->setting("tip/selection").toBool()) {   // la primera vez, cómo seguir
+            m_db->setSetting("tip/selection", 1);
+            toast(QStringLiteral("Elegiste varios: click derecho sobre uno › Mover a actividad"));
+        }
+    });
 
     // ---- Atajos
     auto* leave = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+Q")), this);
@@ -494,7 +501,8 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(f11, &QShortcut::activated, this, &MainWindow::toggleFullScreen);
     auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     connect(esc, &QShortcut::activated, this, [this] {
-        if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
+        if (m_grid->hasSelection()) m_grid->clearSelection();
+        else if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
         else if (m_overlay != Overlay::None) showOverlay(Overlay::None);   // M37
         else if (isFullScreen()) toggleFullScreen();
     });
@@ -1512,6 +1520,23 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
     });
     connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
     menu.addMenu(move);
+    // Mejoras 2.0: todos los de esta actividad en ese día, de una.
+    if (!running && !parked) {
+        QList<qint64> same;
+        for (const Pomodoro& q : m_db->pomodorosBetween(p->day, p->day))
+            if (q.folderId == p->folderId && q.status != PomoStatus::Running && q.status != PomoStatus::Parked) same.append(q.id);
+        if (same.size() > 1) {
+            auto* moveAll = new FolderMenu(&menu);
+            moveAll->setTitle(QStringLiteral("Mover los %1 de %2 de ese día a").arg(same.size())
+                                  .arg(m_tree.find(p->folderId) ? m_tree.find(p->folderId)->name : QStringLiteral("«sin actividad»")));
+            moveAll->rebuild(m_tree, p->folderId);
+            connect(moveAll, &FolderMenu::folderChosen, this, [this, same](qint64 folder) { moveMany(same, folder); });
+            menu.addMenu(moveAll);
+        }
+        menu.addAction(QStringLiteral("Elegir varios… (Ctrl + click)"), this, [this] {
+            toast(QStringLiteral("Ctrl + click elige uno por uno · Shift + click elige los del medio"));
+        });
+    }
     // M6: nota y duración
     menu.addAction(p->note.isEmpty() ? QStringLiteral("Agregar nota…") : QStringLiteral("Editar nota…"), this, [this, id] { editNote(id); });
     if (!running && !parked) {
@@ -1542,6 +1567,40 @@ void MainWindow::showPomodoroMenu(qint64 id, const QPoint& globalPos)
     menu.addSeparator();
     QAction* del = menu.addAction(running || parked ? QStringLiteral("Borrar pomodoro…") : QStringLiteral("Borrar pomodoro"));
     connect(del, &QAction::triggered, this, [this, id] { deletePomodoro(id); });
+    menu.exec(globalPos);
+}
+
+// Mejoras 2.0: mover varios cuadraditos a otra actividad de una (con deshacer).
+void MainWindow::moveMany(const QList<qint64>& ids, qint64 folder)
+{
+    QList<QPair<qint64, qint64>> before;   // id, actividad anterior
+    for (qint64 id : ids) {
+        const auto p = m_db->pomodoro(id);
+        if (!p || p->status == PomoStatus::Running || p->status == PomoStatus::Parked || p->folderId == folder) continue;
+        before.append({id, p->folderId});
+        m_db->setPomodoroFolder(id, folder);
+    }
+    m_grid->clearSelection();
+    reloadGrid();
+    if (before.isEmpty()) return;
+    toastAction(QStringLiteral("%1 %2 a %3").arg(before.size()).arg(before.size() == 1 ? "pomodoro movido" : "pomodoros movidos", m_tree.path(folder)),
+                QStringLiteral("Deshacer"), [this, before] {
+                    for (const auto& [id, from] : before) m_db->setPomodoroFolder(id, from);
+                    reloadGrid();
+                });
+}
+
+void MainWindow::showSelectionMenu(const QList<qint64>& ids, const QPoint& globalPos)
+{
+    QMenu menu(this);
+    auto* move = new FolderMenu(&menu);
+    move->setTitle(QStringLiteral("Mover los %1 a actividad").arg(ids.size()));
+    move->rebuild(m_tree, 0);
+    connect(move, &FolderMenu::folderChosen, this, [this, ids](qint64 folder) { moveMany(ids, folder); });
+    connect(move, &FolderMenu::manageRequested, this, [this] { showOverlay(Overlay::Activities); });
+    menu.addMenu(move);
+    menu.addSeparator();
+    menu.addAction(QStringLiteral("Soltar la selección (Esc)"), m_grid, &GridWidget::clearSelection);
     menu.exec(globalPos);
 }
 
