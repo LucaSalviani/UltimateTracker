@@ -3,6 +3,7 @@
 #include "ui/DevMode.h"
 #include "ui/Greeting.h"
 #include "ui/MainWindow.h"
+#include "ui/WheelGuard.h"
 #include "ui/SettingsDialog.h"
 #include "ui/Theme.h"
 
@@ -44,6 +45,7 @@ int main(int argc, char* argv[])
     // Vive en la bandeja: cerrar la ventana con algo en marcha no cierra la app.
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+    app.installEventFilter(new WheelGuard(&app));   // Mejoras 2.0: la rueda no cambia valores sin click
 
     // Datos en %APPDATA%\UltimateTracker (o ULTIMATETRACKER_DATA_DIR para pruebas).
     QString dataDir = qEnvironmentVariable("ULTIMATETRACKER_DATA_DIR");
