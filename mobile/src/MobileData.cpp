@@ -78,6 +78,9 @@ void MobileApp::reloadGoal()
     m_goal["targetMin"] = parsed.totalMin;
     m_goal["studied"] = fmt::duration(studied);
     m_goal["target"] = fmt::duration(qint64(parsed.totalMin) * 60);
+    // Mejoras 2.0: con los recreos en el medio
+    m_goal["withBreaks"] = parsed.blocks.size() > 1
+        ? fmt::duration(goals::withBreaksSec(parsed, goals::breakSecFor(*m_db, breakMin() * 60))) : QString();
     m_goal["progress"] = parsed.totalMin > 0 ? qMin(1.0, double(studied) / (parsed.totalMin * 60.0)) : 0.0;
     m_goal["complete"] = goals::allDone(doneFills);
     m_goal["repeats"] = r->weekdays != 0;
@@ -158,11 +161,20 @@ static QVector<goals::Part> toParts(const QVariantList& list)
 
 QString MobileApp::describeParts(bool timeMode, int totalMin, const QVariantList& parts) const
 {
-    if (timeMode) return fmt::duration(qint64(totalMin) * 60);
+    if (timeMode) {
+        const auto p = goals::parse(QStringLiteral("t:%1").arg(totalMin), workMin());
+        QString out = fmt::duration(qint64(totalMin) * 60) + QStringLiteral(" de estudio");
+        if (p.ok && p.blocks.size() > 1)
+            out += QStringLiteral(" · ≈ %1 con recreos").arg(fmt::duration(goals::withBreaksSec(p, goals::breakSecFor(*m_db, breakMin() * 60))));
+        return out;
+    }
     int total = 0, n = 0;
     for (const goals::Part& p : toParts(parts)) { total += p.count * p.minutes; n += p.count; }
     if (n == 0) return QStringLiteral("Sin bloques");
-    return QStringLiteral("%1 %2 · %3").arg(n).arg(n == 1 ? "cuadradito" : "cuadraditos", fmt::duration(qint64(total) * 60));
+    const int brk = goals::breakSecFor(*m_db, breakMin() * 60);
+    QString out = QStringLiteral("%1 %2 · %3").arg(n).arg(n == 1 ? "cuadradito" : "cuadraditos", fmt::duration(qint64(total) * 60));
+    if (n > 1) out += QStringLiteral(" · ≈ %1 con recreos").arg(fmt::duration(qint64(total) * 60 + qint64(n - 1) * brk));
+    return out;
 }
 
 void MobileApp::saveGoal(bool timeMode, int totalMin, const QVariantList& parts, int weekdays)

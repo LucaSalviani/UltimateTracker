@@ -67,6 +67,23 @@ Flickable {
                 onPlus: ut.nudgeBreak(1)
             }
             Divider {}
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: brkCol.implicitHeight + 12
+                ColumnLayout {
+                    id: brkCol
+                    width: parent.width
+                    spacing: 6
+                    Text { text: "Recreos del objetivo («≈ con recreos»)"; color: Theme.text; font.pixelSize: 15; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    Segmented {
+                        Layout.fillWidth: true
+                        options: [{key: "0", label: "Mi recreo"}, {key: "1", label: "Mi promedio real"}]
+                        current: String(page.num("goal_break_source", 0))
+                        onPicked: (k) => ut.setSetting("goal_break_source", parseInt(k))
+                    }
+                }
+            }
+            Divider {}
             Toggle {
                 Layout.fillWidth: true
                 text: "El pomodoro en curso ocupa un bloque del objetivo"

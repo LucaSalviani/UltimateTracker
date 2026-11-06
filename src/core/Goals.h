@@ -82,4 +82,13 @@ void save(Database& db, const QDate& d, const QString& title, const QString& spe
 void removeDay(Database& db, const QDate& d);
 void removeFromDay(Database& db, const QDate& d);
 
+// Mejoras 2.0: el objetivo con recreos. Un recreo entre bloque y bloque.
+qint64 withBreaksSec(const Parsed& p, int breakSec);
+// Recreo a usar para eso: el configurado (fuente 0) o el promedio real de las
+// últimas 4 semanas (fuente 1; si no hay recreos todavía, el configurado).
+int breakSecFor(Database& db, int configuredSec);
+// "3h30", "3:30", "3 h 30", "210" (minutos), "3.5h" → minutos; −1 si no se entiende.
+int parseDuration(const QString& text);
+QString formatDuration(int minutes);   // 210 → "3h30"
+
 } // namespace goals

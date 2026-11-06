@@ -67,6 +67,7 @@ private:
     QSpinBox*  m_dayStart;
     QComboBox* m_goalInput;   // M17
     QComboBox* m_goalRunning; // B2-1
+    QComboBox* m_goalBreak;   // Mejoras 2.0
 
     // Cronómetro
     QCheckBox* m_wheel;

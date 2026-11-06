@@ -92,7 +92,8 @@ Flickable {
                 }
                 Text {
                     visible: ut.goal.has === true
-                    text: ut.goal.complete ? "¡Cumplido!" : ut.goal.studied + " / " + ut.goal.target
+                    text: ut.goal.complete ? "¡Cumplido!" : ut.goal.studied + " / " + ut.goal.target + (ut.goal.withBreaks ? "\n≈ " + ut.goal.withBreaks + " c/ recreos" : "")
+                    horizontalAlignment: Text.AlignRight
                     color: ut.goal.complete ? Theme.good : Theme.text
                     font.pixelSize: 13; font.weight: Font.DemiBold
                 }

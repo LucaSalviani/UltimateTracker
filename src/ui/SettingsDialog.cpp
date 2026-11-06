@@ -217,6 +217,12 @@ QWidget* SettingsDialog::pageGeneral()
     m_goalRunning->addItem(QStringLiteral("Se funde con el fantasma al terminar"));
     m_goalRunning->setCurrentIndex(qBound(0, m_db->setting("goal_running", 0).toInt(), 1));
     form->addRow(QStringLiteral("Pomodoro del objetivo"), m_goalRunning);
+    // Mejoras 2.0: con qué recreo se calcula "≈ X con recreos" en el objetivo.
+    m_goalBreak = new QComboBox(w);
+    m_goalBreak->addItem(QStringLiteral("Mi duración de recreo"));
+    m_goalBreak->addItem(QStringLiteral("Mi promedio real (últimas 4 semanas)"));
+    m_goalBreak->setCurrentIndex(qBound(0, m_db->setting("goal_break_source", 0).toInt(), 1));
+    form->addRow(QStringLiteral("Recreos del objetivo"), m_goalBreak);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("General"), w));
@@ -691,6 +697,7 @@ void SettingsDialog::accept()
     m_db->setSetting("day_start_hour", m_dayStart->value());
     m_db->setSetting("goal_input", m_goalInput->currentData().toString());
     m_db->setSetting("goal_running", m_goalRunning->currentIndex());
+    m_db->setSetting("goal_break_source", m_goalBreak->currentIndex());
 
     m_db->setSetting("timer_wheel", m_wheel->isChecked() ? 1 : 0);
     m_db->setSetting("timer_wheel_step", m_wheelStep->value());

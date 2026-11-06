@@ -16,6 +16,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QWheelEvent>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QToolButton>
@@ -86,17 +87,19 @@ GoalPanel::GoalPanel(QWidget* parent)
     m_modePages = new QStackedWidget(this);
     // Por tiempo
     auto* timePage = new QWidget(m_modePages);
-    m_hours = new QSpinBox(timePage);
-    m_hours->setRange(0, 16);
-    m_hours->setSuffix(QStringLiteral(" h"));
-    m_minutes = new QSpinBox(timePage);
-    m_minutes->setRange(0, 55);
-    m_minutes->setSingleStep(5);
-    m_minutes->setSuffix(QStringLiteral(" min"));
-    auto* tl = new QHBoxLayout(timePage);
+    // Mejoras 2.0: el número es el campo: click y escribís ("3h30", "3:30", "210").
+    // Con el foco puesto, la rueda suma o resta de a 15 minutos.
+    m_time = new QLineEdit(timePage);
+    m_time->setObjectName("GoalField");
+    m_time->setPlaceholderText(QStringLiteral("Ej.: 3h30, 3:30 o 210"));
+    m_time->installEventFilter(this);
+    m_timeHint = new QLabel(QStringLiteral("Ej.: 3h30, 3:30, 4 (horas) o 210 (min)"), timePage);
+    m_timeHint->setProperty("dim", true);
+    auto* tl = new QVBoxLayout(timePage);
     tl->setContentsMargins(0, 0, 0, 0);
-    tl->addWidget(m_hours, 1);
-    tl->addWidget(m_minutes, 1);
+    tl->setSpacing(4);
+    tl->addWidget(m_time);
+    tl->addWidget(m_timeHint);
     // Por pomodoros
     auto* comboPage = new QWidget(m_modePages);
     m_combo = new QLineEdit(comboPage);
@@ -124,14 +127,17 @@ GoalPanel::GoalPanel(QWidget* parent)
         showModePage(id);
         // Al pasar de tiempo a pomodoros, se propone el equivalente.
         if (id == 1 && m_combo->text().trimmed().isEmpty()) {
-            const auto p = goals::parse(QStringLiteral("t:%1").arg(m_hours->value() * 60 + m_minutes->value()), m_pomoMin);
+            const auto p = goals::parse(QStringLiteral("t:%1").arg(qMax(0, goals::parseDuration(m_time->text()))), m_pomoMin);
             if (p.ok) m_combo->setText(QStringLiteral("%1x%2").arg(p.blocks.size()).arg(m_pomoMin));
             m_rows->setSpec(goals::normalizeCombo(m_combo->text()), m_pomoMin);
         }
         refreshPreview();
     });
-    connect(m_hours, &QSpinBox::valueChanged, this, &GoalPanel::refreshPreview);
-    connect(m_minutes, &QSpinBox::valueChanged, this, &GoalPanel::refreshPreview);
+    connect(m_time, &QLineEdit::textChanged, this, &GoalPanel::refreshPreview);
+    connect(m_time, &QLineEdit::editingFinished, this, [this] {   // se prolija: "330" → "5h30"
+        const int m = goals::parseDuration(m_time->text());
+        if (m > 0) { m_time->blockSignals(true); m_time->setText(goals::formatDuration(m)); m_time->blockSignals(false); }
+    });
     connect(m_combo, &QLineEdit::textChanged, this, &GoalPanel::refreshPreview);
 
     m_preview = new GoalPreview(this);
@@ -255,12 +261,9 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
     m_mode->button(timeMode ? 0 : 1)->setChecked(true);
     showModePage(timeMode ? 0 : 1);
     const int total = has && timeMode ? spec.mid(2).toInt() : (has ? 0 : 0);
-    m_hours->blockSignals(true);
-    m_minutes->blockSignals(true);
-    m_hours->setValue(total / 60);
-    m_minutes->setValue((total % 60) / 5 * 5);
-    m_hours->blockSignals(false);
-    m_minutes->blockSignals(false);
+    m_time->blockSignals(true);
+    m_time->setText(goals::formatDuration(total));
+    m_time->blockSignals(false);
     m_combo->blockSignals(true);
     m_combo->setText(has && !timeMode ? goals::describe(spec).replace(QChar(0x00d7), 'x') : QString());
     m_combo->blockSignals(false);
@@ -321,7 +324,7 @@ void GoalPanel::showModePage(int id)
 QString GoalPanel::currentSpec() const
 {
     if (m_mode->checkedId() == 0) {
-        const int total = m_hours->value() * 60 + m_minutes->value();
+        const int total = qMin(24 * 60, qMax(0, goals::parseDuration(m_time->text())));
         return total > 0 ? QStringLiteral("t:%1").arg(total) : QString();
     }
     return m_buttonsStyle ? m_rows->spec() : goals::normalizeCombo(m_combo->text());
@@ -344,6 +347,10 @@ void GoalPanel::refreshPreview()
     const bool comboTyped = m_mode->checkedId() == 1 && !m_combo->text().trimmed().isEmpty();
     m_comboHint->setText(comboTyped && !p.ok ? QStringLiteral("No entiendo eso. Ej: 3x30 + 2x25")
                                              : QStringLiteral("Cantidad x minutos, separados con +"));
+    const bool timeTyped = m_mode->checkedId() == 0 && !m_time->text().trimmed().isEmpty();
+    m_timeHint->setText(timeTyped && goals::parseDuration(m_time->text()) < 0
+                            ? QStringLiteral("No entiendo eso. Ej: 3h30, 3:30 o 210")
+                            : QStringLiteral("Ej.: 3h30, 3:30, 4 (horas) o 210 (min)"));
     if (!p.ok) {
         m_preview->setBlocks({}, {});
         m_summary->setText(QString());
@@ -358,11 +365,19 @@ void GoalPanel::refreshPreview()
     for (qint64 f : p.folders) colors.append(f > 0 ? m_colors.value(f) : QColor());
     m_preview->setBlocks(p.blocks, fills, colors);
     const bool done = goals::allDone(fills);
-    m_summary->setText(p.timeMode
+    // Mejoras 2.0: además del estudio, cuánto es con los recreos en el medio.
+    const qint64 withBreaks = goals::withBreaksSec(p, m_breakSec);
+    const QString breaks = p.blocks.size() > 1
+        ? QStringLiteral("\n%1 de estudio · ≈ %2 con recreos").arg(fmt::duration(p.totalMin * 60), fmt::duration(int(withBreaks)))
+        : QString();
+    m_summary->setText((p.timeMode
         ? QStringLiteral("≈ %1 %2 de %3").arg(p.blocks.size()).arg(p.blocks.size() == 1 ? "pomodoro" : "pomodoros")
               .arg(fmt::duration(m_pomoMin * 60))
         : QStringLiteral("%1 %2 · %3").arg(p.blocks.size()).arg(p.blocks.size() == 1 ? "pomodoro" : "pomodoros")
-              .arg(fmt::duration(p.totalMin * 60)));
+              .arg(fmt::duration(p.totalMin * 60))) + breaks);
+    m_summary->setToolTip(QStringLiteral("Con un recreo de %1 entre bloque y bloque (%2; se cambia en Ajustes › General).")
+                              .arg(fmt::duration(m_breakSec),
+                                   m_breakFromAverage ? QStringLiteral("tu promedio real") : QStringLiteral("tu duración de recreo")));
 
     const qint64 target = qint64(p.totalMin) * 60;
     const int pct = target > 0 ? int(qMin<qint64>(100, m_progress.studiedSec * 100 / target)) : 0;
@@ -690,4 +705,24 @@ void ComboRows::relayout()
     const int visible = qMin(3, int(m_rows.size()));
     m_scroll->setFixedHeight(visible * rowH + qMax(0, visible - 1) * m_list->spacing() + 4);
     updateGeometry();
+}
+
+void GoalPanel::setBreakSec(int sec, bool fromAverage)
+{
+    m_breakSec = sec;
+    m_breakFromAverage = fromAverage;
+    refreshPreview();
+}
+
+bool GoalPanel::eventFilter(QObject* obj, QEvent* e)
+{
+    // Rueda sobre el tiempo (con el foco puesto): de a 15 minutos.
+    if (obj == m_time && e->type() == QEvent::Wheel && m_time->hasFocus()) {
+        const auto* we = static_cast<QWheelEvent*>(e);
+        const int cur = qMax(0, goals::parseDuration(m_time->text()));
+        const int next = qBound(0, (cur / 15 + (we->angleDelta().y() > 0 ? 1 : (cur % 15 ? 0 : -1))) * 15, 16 * 60);
+        m_time->setText(goals::formatDuration(next));
+        return true;
+    }
+    return QWidget::eventFilter(obj, e);
 }

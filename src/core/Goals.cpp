@@ -1,5 +1,6 @@
 #include "core/Goals.h"
 #include "core/Database.h"
+#include "core/DayClock.h"
 #include "core/Format.h"
 #include "core/FolderTree.h"
 
@@ -261,6 +262,55 @@ void removeFromDay(Database& db, const QDate& d)
             db.updateGoal(*rec);
         }
     }
+}
+
+qint64 withBreaksSec(const Parsed& p, int breakSec)
+{
+    const int n = int(p.blocks.size());
+    return qint64(p.totalMin) * 60 + qint64(qMax(0, n - 1)) * qMax(0, breakSec);
+}
+
+int breakSecFor(Database& db, int configuredSec)
+{
+    if (db.setting("goal_break_source", 0).toInt() != 1) return configuredSec;
+    const QDate today = dayclock::today();
+    qint64 sum = 0;
+    int n = 0;
+    for (const Interval& iv : db.intervalsBetween(today.addDays(-28), today)) {
+        if (iv.kind != IntervalKind::Break || iv.seconds < 60 || iv.seconds > 3 * 3600) continue;
+        sum += iv.seconds;
+        ++n;
+    }
+    return n >= 3 ? int(sum / n) : configuredSec;
+}
+
+int parseDuration(const QString& text)
+{
+    QString t = text.trimmed().toLower();
+    t.remove(' ');
+    if (t.isEmpty()) return -1;
+    static const QRegularExpression colon(QStringLiteral("^(\\d{1,2}):(\\d{1,2})$"));
+    static const QRegularExpression hm(QStringLiteral("^(\\d{1,2})h(\\d{1,2})?(m|min)?$"));
+    static const QRegularExpression dec(QStringLiteral("^(\\d{1,2})[\\.,](\\d)h?$"));
+    static const QRegularExpression mins(QStringLiteral("^(\\d{1,4})(m|min)?$"));
+    QRegularExpressionMatch m;
+    if ((m = colon.match(t)).hasMatch()) return m.captured(1).toInt() * 60 + m.captured(2).toInt();
+    if ((m = hm.match(t)).hasMatch()) return m.captured(1).toInt() * 60 + m.captured(2).toInt();
+    if ((m = dec.match(t)).hasMatch()) return m.captured(1).toInt() * 60 + m.captured(2).toInt() * 6;
+    if ((m = mins.match(t)).hasMatch()) {
+        const int v = m.captured(1).toInt();
+        // Un número solo y chico ("3", "4") son horas; desde 13 son minutos.
+        return m.captured(2).isEmpty() && v <= 12 ? v * 60 : v;
+    }
+    return -1;
+}
+
+QString formatDuration(int minutes)
+{
+    if (minutes <= 0) return QString();
+    const int h = minutes / 60, mm = minutes % 60;
+    if (h == 0) return QStringLiteral("%1 min").arg(mm);
+    return mm ? QStringLiteral("%1h%2").arg(h).arg(mm, 2, 10, QChar('0')) : QStringLiteral("%1h").arg(h);
 }
 
 } // namespace goals

@@ -387,6 +387,23 @@ private slots:
         QCOMPARE(db.studyByFolder().value(0), 1500);
     }
 
+    void goalDurations()
+    {
+        QCOMPARE(goals::parseDuration("3h30"), 210);
+        QCOMPARE(goals::parseDuration("3:30"), 210);
+        QCOMPARE(goals::parseDuration(" 3 h 30 "), 210);
+        QCOMPARE(goals::parseDuration("4"), 240);
+        QCOMPARE(goals::parseDuration("210"), 210);
+        QCOMPARE(goals::parseDuration("45m"), 45);
+        QCOMPARE(goals::parseDuration("2.5h"), 150);
+        QCOMPARE(goals::parseDuration("hola"), -1);
+        QCOMPARE(goals::formatDuration(210), QString("3h30"));
+        QCOMPARE(goals::formatDuration(240), QString("4h"));
+        QCOMPARE(goals::formatDuration(45), QString("45 min"));
+        const auto p = goals::parse("4x25", 25);
+        QCOMPARE(goals::withBreaksSec(p, 5 * 60), qint64(100 * 60 + 15 * 60));   // 3 recreos entre 4 bloques
+    }
+
     void streakWithJokers()
     {
         // Semana del lun 19/10 al dom 25/10, hoy lun 26/10.

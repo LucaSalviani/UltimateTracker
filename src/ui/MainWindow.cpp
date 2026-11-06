@@ -2093,6 +2093,7 @@ void MainWindow::openGoalPanel(const QDate& day)
     }
     const bool wasOpen = m_goalPanel->isVisible();
     m_goalPanel->setActivities(m_tree, ActivitiesWidget::colorsFor(m_db, m_tree));   // B2
+    m_goalPanel->setBreakSec(goals::breakSecFor(*m_db, m_session->breakSec()), m_db->setting("goal_break_source", 0).toInt() == 1);
     m_goalPanel->load(day, goals::resolve(m_db->goals(), day), m_db->dayTitle(day),
                       m_db->setting("work_min", 25).toInt(), day == m_today);
     if (!wasOpen) placeGoalPanel(true, true);

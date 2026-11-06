@@ -33,6 +33,8 @@ public:
     };
 
     explicit GoalPanel(QWidget* parent = nullptr);
+    // Mejoras 2.0: el recreo con el que se calcula "≈ X con recreos".
+    void setBreakSec(int sec, bool fromAverage);
 
     // Carga el panel para un día. `rule` = la regla que manda ese día (si hay).
     void load(const QDate& day, const std::optional<GoalRule>& rule, const QString& dayTitle,
@@ -51,6 +53,9 @@ signals:
     void dayTitleEdited(const QDate& day, const QString& title);
     void closeRequested();
 
+protected:
+    bool eventFilter(QObject* obj, QEvent* e) override;
+
 private:
     QString currentSpec() const;
     int     currentWeekdays() const;
@@ -59,6 +64,8 @@ private:
 
     QDate    m_day;
     int      m_pomoMin = 25;
+    int      m_breakSec = 5 * 60;
+    bool     m_breakFromAverage = false;
     bool     m_recurring = false;   // la regla cargada se repite
     bool     m_offDay = false;      // ese día está marcado "sin meta"
     Progress m_progress;
@@ -69,8 +76,8 @@ private:
     QLineEdit*      m_dayTitle;
     QButtonGroup*   m_mode;
     QStackedWidget* m_modePages;
-    QSpinBox*       m_hours;
-    QSpinBox*       m_minutes;
+    QLineEdit*      m_time;          // Mejoras 2.0: "3h30" escrito directo
+    QLabel*         m_timeHint;
     QLineEdit*      m_combo;
     ComboRows*      m_rows = nullptr;
     bool            m_buttonsStyle = true;
