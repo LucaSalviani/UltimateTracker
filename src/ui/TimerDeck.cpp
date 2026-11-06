@@ -224,12 +224,26 @@ TimerDeck::TimerDeck(QWidget* parent)
         }
     });
 
+    // Mejoras 2.0: "Me voy": cierra la sesión y el tiempo hasta que vuelvas no
+    // cuenta como recreo indebido.
+    m_leave = new QToolButton(this);
+    m_leave->setObjectName("DeckLeave");
+    m_leave->setText(QStringLiteral("Me voy"));
+    m_leave->setFocusPolicy(Qt::NoFocus);
+    m_leave->setCursor(Qt::PointingHandCursor);
+    m_leave->setToolTip(QStringLiteral("Terminar la sesión (Ctrl+Shift+Q): guarda lo que llevás y el tiempo hasta que vuelvas no cuenta como recreo indebido"));
+    connect(m_leave, &QToolButton::clicked, this, &TimerDeck::leaveClicked);
+
     auto* transport = new QHBoxLayout;
     transport->setSpacing(12);
     transport->addStretch();
     transport->addWidget(m_secondary);
     transport->addWidget(m_primary);
     transport->addStretch();
+    auto* leaveRow = new QHBoxLayout;
+    leaveRow->setContentsMargins(0, 0, 0, 0);
+    leaveRow->addStretch();
+    leaveRow->addWidget(m_leave);
 
     auto* lay = new QVBoxLayout(this);
     lay->setContentsMargins(12, 10, 12, 12);
@@ -239,6 +253,7 @@ TimerDeck::TimerDeck(QWidget* parent)
     lay->addWidget(m_note);
     lay->addWidget(m_stepper);
     lay->addLayout(transport);
+    lay->addLayout(leaveRow);
 
     applyMode();
 }
@@ -399,6 +414,7 @@ void TimerDeck::applyMode()
     // Acción secundaria
     const icons::Ink ink = icons::Ink::Text;
     m_secondary->setVisible(m != Mode::Ready || blocked);
+    m_leave->setVisible(m_model.canLeave);
     m_secondary->setProperty("accent", brk ? "break" : "pomo");
     switch (m) {
     case Mode::Running:

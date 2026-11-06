@@ -105,6 +105,10 @@ public:
     // se guarda hasta donde llegó, y se retoma el tiempo pendiente de hoy.
     void recoverAfterRestart();
 
+    // Mejoras 2.0: "Me voy": termina la sesión; lo que sigue no es recreo indebido.
+    void endSession();
+    bool canEndSession() const { return m_state != State::Idle && m_state != State::Running; }
+
     // ---- En vivo ----------------------------------------------------------
     LiveState liveState() const;
     // Copia lo que hace el otro aparato (queda espejo). announce: si al

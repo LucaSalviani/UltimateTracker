@@ -297,6 +297,17 @@ QPushButton#DeckAction:hover { background: @s5; border-color: @acc; }
 QPushButton#DeckAction[accent="break"]:hover { border-color: @brk; }
 QPushButton#DeckAction:pressed { background: @s3; }
 
+/* Mejoras 2.0: "Me voy" (terminar la sesión), discreto */
+QToolButton#DeckLeave {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 6px 8px;
+    font-size: 9.5pt;
+    color: @t3;
+}
+QToolButton#DeckLeave:hover { color: @t1; border-color: @s6; background: @s3; }
+
 /* ---- Ajustes por secciones ---- */
 QListWidget#SettingsNav { background: transparent; border: none; border-right: 1px solid @s4; outline: 0; padding-right: 6px; }
 QListWidget#SettingsNav::item { padding: 8px 10px; border-radius: 6px; color: @t3; margin: 1px 0; }

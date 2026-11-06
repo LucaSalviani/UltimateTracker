@@ -730,3 +730,12 @@ void MobileApp::bump()
     ++m_revision;
     emit dataChanged();
 }
+
+void MobileApp::endSession()
+{
+    if (!m_session.canEndSession()) return;
+    m_session.endSession();
+    reloadToday();
+    bump();
+    emit toast(QStringLiteral("Sesión terminada. Hasta la vuelta"));
+}

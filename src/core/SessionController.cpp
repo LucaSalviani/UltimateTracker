@@ -372,9 +372,20 @@ void SessionController::recoverAfterRestart()
     }
     // Si cerraste la app hoy con tiempo muerto pendiente, sigue pendiente: si
     // volvés a estudiar hoy, cuenta como recreo indebido.
+    // Lo de antes de un "Me voy" no (ya quedó como inactivo).
     const QDate d = today();
+    const qint64 ended = m_db->setting("session/ended_at", 0).toLongLong();
     for (const Interval& i : m_db->intervalsBetween(d, d))
-        if (i.kind == IntervalKind::Pending) m_pendingIds.append(i.id);
+        if (i.kind == IntervalKind::Pending && i.startedAt >= ended) m_pendingIds.append(i.id);
+}
+
+// Mejoras 2.0: "Me voy". Cierra lo que haya (guarda el pomodoro si pasó un
+// minuto) y el tiempo hasta que vuelvas no cuenta como recreo indebido.
+void SessionController::endSession()
+{
+    takeOver();   // si lo manejaba el otro aparato, se cierra en los dos
+    closeDay(false);
+    m_db->setSetting("session/ended_at", now() / 1000);
 }
 
 // ---------------------------------------------------------------------------

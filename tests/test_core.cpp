@@ -387,6 +387,29 @@ private slots:
         QCOMPARE(db.studyByFolder().value(0), 1500);
     }
 
+    // "Me voy": después del recreo te vas; al volver, ese rato no es recreo indebido.
+    void endSessionNotUndue()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        std::unique_ptr<SessionController> s(make(db));
+        s->setWorkSec(25 * 60);
+        s->start();
+        advance(db, *s, 25 * 60 + 1);
+        QCOMPARE(s->state(), SessionController::State::WorkDone);
+        advance(db, *s, 10 * 60);                 // 10 min sin decidir (pendiente)
+        QVERIFY(s->canEndSession());
+        s->endSession();
+        QCOMPARE(s->state(), SessionController::State::Idle);
+        advance(db, *s, 2 * 3600);                // me fui 2 horas
+        s->start();                           // vuelvo y estudio
+        advance(db, *s, 60);
+        qint64 undue = 0;
+        for (const Interval& i : db.intervalsBetween(QDate(2026, 10, 26), QDate(2026, 10, 26)))
+            if (i.kind == IntervalKind::Undue) undue += i.seconds;
+        QCOMPARE(undue, qint64(0));
+    }
+
     void goalDurations()
     {
         QCOMPARE(goals::parseDuration("3h30"), 210);

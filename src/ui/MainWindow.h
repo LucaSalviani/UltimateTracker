@@ -38,6 +38,7 @@ public:
     ~MainWindow() override;
     void bringToFront();
     void notifyWindows(const QString& title, const QString& text);
+    void leaveSession();
     // M10: después del saludo: abrir con el panel de la meta, o salir.
     void openFromGreeting();
     void onWake();   // B2-4: la PC se despertó o se desbloqueó (saluda si es la primera vez en el día)

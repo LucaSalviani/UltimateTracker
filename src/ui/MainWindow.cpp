@@ -402,6 +402,8 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_grid, &GridWidget::pomodoroMenuRequested, this, &MainWindow::showPomodoroMenu);
 
     // ---- Atajos
+    auto* leave = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+Q")), this);
+    connect(leave, &QShortcut::activated, this, &MainWindow::leaveSession);
     auto* space = new QShortcut(QKeySequence(Qt::Key_Space), this);
     connect(space, &QShortcut::activated, this, &MainWindow::togglePlay);
     auto* zoomOut = new QShortcut(QKeySequence::ZoomOut, this);
@@ -792,6 +794,7 @@ QWidget* MainWindow::buildDeck()
     connect(m_deck, &TimerDeck::skipBreakClicked, m_session, &SessionController::skipBreak);
     connect(m_deck, &TimerDeck::endBreakClicked, m_session, &SessionController::endBreakEarly);
     connect(m_deck, &TimerDeck::silenceClicked, m_session, &SessionController::silenceAlarm);
+    connect(m_deck, &TimerDeck::leaveClicked, this, &MainWindow::leaveSession);
     connect(m_deck, &TimerDeck::goTodayClicked, this, &MainWindow::goToday);
     connect(m_deck, &TimerDeck::durationChanged, this, [this](int min) {
         // El − / + ajusta lo que está por arrancar: el pomodoro o el recreo.
@@ -810,6 +813,7 @@ void MainWindow::buildTray()
     auto* menu = new QMenu(this);
     menu->addAction(QStringLiteral("Mostrar"), this, &MainWindow::bringToFront);
     menu->addAction(QStringLiteral("Mini reproductor"), this, &MainWindow::toggleMini);
+    menu->addAction(QStringLiteral("Me voy (terminar la sesión)"), this, &MainWindow::leaveSession);
     menu->addSeparator();
     menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
     m_tray->setContextMenu(menu);
@@ -1255,6 +1259,7 @@ void MainWindow::refreshDeck()
     m.durationMin = (m.mode == M::BreakReady ? m_session->breakSec() : m_session->workSec()) / 60;
     // Los pomodoros se registran solo hoy: viendo otro día, el reproductor ofrece volver.
     m.canStart = m_grid->zoom() != GridWidget::Zoom::Day || m_grid->anchor() == m_today;
+    m.canLeave = m_session->canEndSession();
     m_deck->setModel(m);
     if (m_mini) m_mini->setModel(m);
 }
@@ -2434,6 +2439,20 @@ void MainWindow::editNote(qint64 id)
 }
 
 // M37: panel con todos los atajos. Se cierra con cualquier tecla o click.
+// Mejoras 2.0: "Me voy". Termina la sesión: guarda lo que llevás y el tiempo
+// hasta que vuelvas no cuenta como recreo indebido.
+void MainWindow::leaveSession()
+{
+    if (!m_session->canEndSession()) {
+        if (m_session->state() == SessionController::State::Running)
+            toast(QStringLiteral("Primero pausá o terminá el pomodoro"));
+        return;
+    }
+    m_session->endSession();
+    toast(QStringLiteral("Sesión terminada. Hasta la vuelta"));
+    reloadGrid();
+}
+
 void MainWindow::showShortcuts()
 {
     QDialog dlg(this);
@@ -2456,6 +2475,7 @@ void MainWindow::showShortcuts()
         {QStringLiteral("Esc"), QStringLiteral("Volver / cerrar")},
         {QStringLiteral("Ctrl + ,"), QStringLiteral("Ajustes")},
         {QStringLiteral("Ctrl + Z"), QStringLiteral("Deshacer lo último")},
+        {QStringLiteral("Ctrl + Shift + Q"), QStringLiteral("Me voy (terminar la sesión)")},
         {QStringLiteral("?"), QStringLiteral("Este panel")},
     };
     int r = 0;

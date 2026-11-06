@@ -229,6 +229,16 @@ Flickable {
             }
         }
 
+        // ---- Me voy: termina la sesión (lo que sigue no es recreo indebido)
+        Text {
+            visible: st !== "idle" && st !== "running"
+            Layout.alignment: Qt.AlignHCenter
+            text: "Me voy · terminar la sesión"
+            color: leaveMouse.pressed ? Theme.text : Theme.faint
+            font.pixelSize: 13
+            MouseArea { id: leaveMouse; anchors.fill: parent; anchors.margins: -10; onClicked: ut.endSession() }
+        }
+
         // ---- Los cuadraditos de hoy
         RowLayout {
             Layout.fillWidth: true

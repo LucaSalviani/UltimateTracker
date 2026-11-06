@@ -76,6 +76,7 @@ public:
     Q_INVOKABLE QString clock(int sec) const;   // "24:59"
     Q_INVOKABLE void appActivated();            // al volver a la app: ponerse al día
     Q_INVOKABLE void appDeactivated();
+    Q_INVOKABLE void endSession();              // Mejoras 2.0: "Me voy"
     void demoLive();                            // capturas: como si la PC tuviera un pomodoro corriendo          // a segundo plano: se pregunta menos seguido
     QString liveFrom() const { return m_live && m_live->mirroring() && m_session.state() != SessionController::State::Idle ? m_live->remoteLabel() : QString(); }
     bool    syncSignedIn() const { return m_sync.signedIn(); }
