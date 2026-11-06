@@ -430,6 +430,15 @@ QWidget* SettingsDialog::pageCelebrations()
     sform->addRow(QStringLiteral("Alarma del recreo"), alarmRow);
     sform->addRow(QStringLiteral("Volumen"), m_soundVolume);
     lay->addLayout(sform);
+    // Mejoras 2.0: al probar un sonido dice si salió y por qué salida.
+    m_soundResult = new QLabel(QStringLiteral("Tocá ▶ para probar: acá aparece por qué salida suena."), w);
+    m_soundResult->setObjectName("Hint");
+    m_soundResult->setWordWrap(true);
+    lay->addWidget(m_soundResult);
+    m_soundToast = new QCheckBox(QStringLiteral("Avisar también con una notificación de Windows al terminar el pomodoro o el recreo"), w);
+    m_soundToast->setChecked(m_db->setting("notify_toast", 1).toBool());
+    m_soundToast->setToolTip(QStringLiteral("Tiene su propio sonido: sirve de respaldo si el de la app no se escucha."));
+    lay->addWidget(m_soundToast);
     lay->addStretch();
     return w;
 }
@@ -693,6 +702,7 @@ void SettingsDialog::accept()
     m_db->setSetting("sound_achievement", m_soundAchievement->currentIndex());
     m_db->setSetting("sound_alarm", m_soundAlarm->currentIndex());
     m_db->setSetting("sound_volume", m_soundVolume->value());
+    if (m_soundToast) m_db->setSetting("notify_toast", m_soundToast->isChecked() ? 1 : 0);
 
     m_db->setSetting("accent_strong", m_strong->isChecked() ? 1 : 0);
     m_db->setSetting("theme_color", m_themeColor);
@@ -852,4 +862,10 @@ void SettingsDialog::resetSection(int page)
         break;
     default: break;
     }
+}
+
+void SettingsDialog::showSoundResult(bool ok, const QString& detail)
+{
+    if (!m_soundResult) return;
+    m_soundResult->setText((ok ? QStringLiteral("✓ ") : QStringLiteral("✗ ")) + detail);
 }

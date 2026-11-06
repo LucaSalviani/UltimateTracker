@@ -27,6 +27,8 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QStyle>
 #include <QInputDialog>
@@ -226,6 +228,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_session = new SessionController(m_db, devmode::active() ? devmode::clock() : SessionController::Clock{}, true, this);
     m_session->recoverAfterRestart();
     m_sounds = new Sounds(this);
+    m_sounds->setLogFile(QDir(QFileInfo(m_db->handle().databaseName()).absolutePath()).filePath(QStringLiteral("sonidos.log")));
     applySoundSettings();
     m_today = dayclock::today();
     m_jokers = m_db->setting("jokers_per_week", 2).toInt();
@@ -372,6 +375,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_session, &SessionController::studyRecorded, this, &MainWindow::onStudyRecorded);
     connect(m_session, &SessionController::pomodoroCompleted, this, [this](qint64 id) {
         m_sounds->playChime();
+        notifyWindows(QStringLiteral("Terminó el pomodoro"), QStringLiteral("Tomate un recreo o seguí con otro."));
         bringToFront();
         m_lastCompletedId = id;   // M18: el cuadradito espera a que termine el festejo grande
         // M8: animación de logro
@@ -385,6 +389,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     });
     connect(m_session, &SessionController::breakFinished, this, [this] {
         m_sounds->startAlarm();
+        notifyWindows(QStringLiteral("Terminó el recreo"), QStringLiteral("A seguir: dale play al próximo pomodoro."));
         bringToFront();
     });
 
@@ -1829,6 +1834,13 @@ void MainWindow::undock()
     group->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
+// Mejoras 2.0: notificación de Windows (con su propio sonido) de respaldo.
+void MainWindow::notifyWindows(const QString& title, const QString& text)
+{
+    if (!m_tray || !m_db->setting("notify_toast", 1).toBool()) return;
+    m_tray->showMessage(title, text, QSystemTrayIcon::Information, 6000);
+}
+
 void MainWindow::bringToFront()
 {
     // M9: si estás en pantalla completa (juego, presentación, video), no se
@@ -2369,6 +2381,7 @@ void MainWindow::openSettings(int page)
     win::applyChrome(&dlg);
     connect(&dlg, &SettingsDialog::tileSizePreview, this, [this](int pct) { m_grid->setBaseScale(pct / 100.0); });
     connect(&dlg, &SettingsDialog::soundPreview, m_sounds, &Sounds::preview);
+    connect(m_sounds, &Sounds::previewResult, &dlg, &SettingsDialog::showSoundResult);
     connect(&dlg, &SettingsDialog::visorPreview, m_deck, &TimerDeck::setVisorStyle);
     connect(&dlg, &SettingsDialog::groupPreview, this, [this](int g) { m_grid->setGroupStyle(GridWidget::GroupStyle(g)); });
     // La vista previa del tema repinta todo mientras el diálogo está abierto.

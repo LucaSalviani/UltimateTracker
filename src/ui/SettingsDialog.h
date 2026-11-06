@@ -7,6 +7,7 @@
 
 class QButtonGroup;
 class QCheckBox;
+class QLabel;
 class QComboBox;
 class QLineEdit;
 class QListWidget;
@@ -36,6 +37,9 @@ protected:
 signals:
     void tileSizePreview(int percent);   // M23: vista previa del tamaño base
     void soundPreview(int which, int index, int volume);   // M27
+public slots:
+    void showSoundResult(bool ok, const QString& detail);
+signals:
     void visorPreview(int style);                          // M34
     void groupPreview(int style);
 
@@ -75,6 +79,8 @@ private:
     QComboBox* m_soundAchievement;
     QComboBox* m_soundAlarm;
     QSpinBox*  m_soundVolume;
+    QCheckBox* m_soundToast = nullptr;     // Mejoras 2.0: también notificación de Windows
+    QLabel*    m_soundResult = nullptr;
 
     // Apariencia
     QButtonGroup* m_themes;
