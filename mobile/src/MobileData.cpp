@@ -763,3 +763,40 @@ QVariantList MobileApp::sameActivityThatDay(qint64 id) const
         if (q.folderId == p->folderId && q.status != PomoStatus::Running && q.status != PomoStatus::Parked) out.append(q.id);
     return out;
 }
+
+QVariantMap MobileApp::dayCard() const
+{
+    QVariantMap m;
+    const QDate today = dayclock::today();
+    m["show"] = m_db->setting("daycard/last").toString() != fmt::dayKey(today) && !m_db->studiedDays().isEmpty();
+    QDate last;
+    for (const QDate& d : m_db->studiedDays())
+        if (d < today && (!last.isValid() || d > last)) last = d;
+    if (last.isValid()) {
+        const auto t = stats::totals(*m_db, last, last, nullptr, dayclock::dayStart(last).addSecs(86399));
+        int pomos = 0;
+        for (const Pomodoro& p : m_db->pomodorosBetween(last, last))
+            if (p.status == PomoStatus::Completed || p.status == PomoStatus::Final) ++pomos;
+        m["last"] = (last == today.addDays(-1) ? QStringLiteral("Ayer") : cap(fmt::longDate(last))) +
+                    QStringLiteral(": %1 · %2 %3").arg(fmt::hours(t.study)).arg(pomos).arg(pomos == 1 ? "pomodoro" : "pomodoros");
+    }
+    const int jokers = m_db->setting("jokers_per_week", 2).toInt();
+    const auto st = stats::streak(m_db->studiedDays(), today, jokers);
+    const int left = qMax(0, jokers - st.jokersThisWeek);
+    if (st.days > 0) {
+        QString s = QStringLiteral("Racha: %1 %2").arg(st.days).arg(st.days == 1 ? "día" : "días");
+        if (jokers > 0) s += left == 0 ? QStringLiteral(" · sin comodines esta semana")
+                                       : QStringLiteral(" · te %1 %2 %3").arg(left == 1 ? "queda" : "quedan").arg(left).arg(left == 1 ? "comodín" : "comodines");
+        m["streak"] = s;
+        if (!st.todayDone)
+            m["warn"] = left == 0 ? QStringLiteral("Si hoy no estudiás, se corta la racha.") : QStringLiteral("Si hoy no estudiás, se usa un comodín.");
+        m["danger"] = !st.todayDone && left == 0;
+    }
+    return m;
+}
+
+void MobileApp::dismissDayCard()
+{
+    m_db->setSetting("daycard/last", fmt::dayKey(dayclock::today()));
+    bump();
+}

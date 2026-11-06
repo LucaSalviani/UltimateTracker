@@ -77,6 +77,9 @@ public:
     Q_INVOKABLE void appActivated();            // al volver a la app: ponerse al día
     Q_INVOKABLE void appDeactivated();
     Q_INVOKABLE void endSession();              // Mejoras 2.0: "Me voy"
+    // Mejoras 2.0: tarjeta del día (una vez por día): ayer, racha, comodines, actividad
+    Q_INVOKABLE QVariantMap dayCard() const;
+    Q_INVOKABLE void dismissDayCard();
     void demoLive();                            // capturas: como si la PC tuviera un pomodoro corriendo          // a segundo plano: se pregunta menos seguido
     QString liveFrom() const { return m_live && m_live->mirroring() && m_session.state() != SessionController::State::Idle ? m_live->remoteLabel() : QString(); }
     bool    syncSignedIn() const { return m_sync.signedIn(); }

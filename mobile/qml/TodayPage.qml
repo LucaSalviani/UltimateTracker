@@ -61,6 +61,52 @@ Flickable {
             }
         }
 
+        // ---- Mejoras 2.0: tarjeta del día (una vez por día)
+        Card {
+            id: dayCard
+            readonly property var d: { ut.revision; return ut.dayCard() }
+            visible: d.show === true
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.margin
+            Layout.rightMargin: Theme.margin
+            spacing: 6
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: { const h = new Date().getHours(); return h >= 5 && h < 13 ? "Buen día" : h >= 13 && h < 20 ? "Buenas tardes" : "Buenas noches" } color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                Rectangle {
+                    width: 30; height: 30; radius: 15
+                    color: dcx.pressed ? Theme.surfaceHi : "transparent"
+                    Icon { anchors.centerIn: parent; name: "close"; width: 14; height: 14; color: Theme.dim }
+                    MouseArea { id: dcx; anchors.fill: parent; onClicked: ut.dismissDayCard() }
+                }
+            }
+            Text { visible: !!dayCard.d.last; text: dayCard.d.last || ""; color: Theme.dim; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            Text { visible: !!dayCard.d.streak; text: dayCard.d.streak || ""; color: Theme.dim; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            Text { visible: !!dayCard.d.warn; text: dayCard.d.warn || ""; color: dayCard.d.danger ? Theme.accent : Theme.faint; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 8
+                Text { text: "Hoy arrancás con"; color: Theme.dim; font.pixelSize: 13 }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 34
+                    radius: 17
+                    color: dca.pressed ? Theme.surfaceHi : Theme.bg
+                    border.color: Theme.line
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 10
+                        spacing: 8
+                        Rectangle { width: 9; height: 9; radius: 4.5; color: ut.folderColor }
+                        Text { text: ut.folderName; color: Theme.text; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
+                        Icon { name: "chevron-down"; width: 14; height: 14; color: Theme.dim }
+                    }
+                    MouseArea { id: dca; anchors.fill: parent; onClicked: page.openActivity() }
+                }
+            }
+            Pill { Layout.alignment: Qt.AlignRight; text: "A trabajar"; strong: true; implicitHeight: 40; onClicked: ut.dismissDayCard() }
+        }
+
         // ---- ¿Qué querés lograr hoy? + objetivo
         Card {
             Layout.fillWidth: true
