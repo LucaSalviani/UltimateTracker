@@ -60,6 +60,7 @@ qt_add_qml_module(UltimateTrackerMobile
         qml/SectionLabel.qml
         qml/Meter.qml
         qml/Icon.qml
+        qml/Tutorial.qml
 )
 target_link_libraries(UltimateTrackerMobile PRIVATE ut_core Qt6::Gui Qt6::Qml Qt6::Quick)
 

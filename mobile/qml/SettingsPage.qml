@@ -7,6 +7,7 @@ import QtQuick.Templates as T
 Flickable {
     id: page
     signal openSync()
+    signal openTutorial()
     function editFirst() { if (ut.folders.length > 0) editor.show(ut.folders[0].id) }
     contentHeight: column.implicitHeight + 30
     boundsBehavior: Flickable.StopAtBounds
@@ -206,6 +207,7 @@ Flickable {
             }
         }
 
+        Pill { Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 8; text: "Ver tutorial"; onClicked: page.openTutorial() }
         Text {
             Layout.topMargin: 8
             Layout.fillWidth: true

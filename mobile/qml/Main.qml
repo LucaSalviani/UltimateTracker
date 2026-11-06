@@ -26,6 +26,9 @@ ApplicationWindow {
         if (a.indexOf("--demo-edit") >= 0 && ut.folders.length > 0) { tab = 3; settingsPage.editFirst() }
         if (a.indexOf("--demo-celebrate") >= 0) celebration.show("Marca del día", "Plata", "4h 10m hoy")
         if (a.indexOf("--demo-toast") >= 0) toast.show("Cuadradito borrado", true)
+        // Mejoras 2.0: la primera vez, el mini tutorial
+        if (a.indexOf("--demo-tutorial") >= 0 || (!ut.setting("tutorial/done", false) && a.indexOf("--no-tutorial") < 0 && !a.some(x => x.startsWith("--demo"))))
+            tutorial.start()
     }
 
     Timer {
@@ -62,7 +65,7 @@ ApplicationWindow {
             }
             StatsPage { id: statsPage; onOpenPomodoro: (id) => pomoSheet.show(id) }
             HitosPage { id: hitosPage }
-            SettingsPage { id: settingsPage; onOpenSync: syncSheet.open() }
+            SettingsPage { id: settingsPage; onOpenSync: syncSheet.open(); onOpenTutorial: tutorial.start() }
         }
         NavBar {
             Layout.fillWidth: true
@@ -72,6 +75,7 @@ ApplicationWindow {
         }
     }
 
+    Tutorial { id: tutorial; onGoTab: (t) => win.tab = t }
     SyncSheet { id: syncSheet }
     GoalSheet { id: goalSheet }
     PomodoroSheet { id: pomoSheet }
