@@ -34,6 +34,7 @@ public:
         int     durationMin = 25;    // lo que ajusta el − / + (pomodoro o recreo)
         bool    canStart = true;     // false viendo otro día: solo se registra hoy
         bool    canLeave = false;    // Mejoras 2.0: "Me voy" (hay sesión y no corre un pomodoro)
+        bool    activityHint = false;// Mejoras 2.0: primer pomodoro del día: ¿es esta la actividad?
     };
 
     // Formas de ajustar la duración antes de arrancar (Ajustes › Cronómetro).
@@ -98,6 +99,8 @@ private:
     int          m_wheelAccum = 0;
     QPushButton* m_secondary;
     QToolButton* m_leave = nullptr;
+    QTimer       m_hintTimer;
+    int          m_hintBlinks = 0;
     QToolButton* m_primary;
 };
 

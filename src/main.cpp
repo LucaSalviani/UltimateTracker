@@ -128,11 +128,10 @@ int main(int argc, char* argv[])
         const QStringList args = QCoreApplication::arguments();
         const bool forceGreeting = args.contains(QStringLiteral("--greeting"));
         const bool wake = args.contains(QStringLiteral("--wake"));
+        // Mejoras 2.0: el saludo es una tarjeta sobre la misma ventana.
         if (first && (forceGreeting || ((wake || args.contains(QStringLiteral("--autostart"))) && Greeting::shouldShow(db)))) {
-            auto* g = new Greeting(&db, w.geometry());
-            QObject::connect(g, &Greeting::accepted, &w, &MainWindow::openFromGreeting);
-            QObject::connect(g, &Greeting::declined, &w, &MainWindow::quitApp);
-            g->show();
+            w.show();
+            w.showDayCard(true, forceGreeting);
         } else {
             w.show();
         }

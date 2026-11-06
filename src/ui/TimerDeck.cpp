@@ -233,6 +233,13 @@ TimerDeck::TimerDeck(QWidget* parent)
     m_leave->setCursor(Qt::PointingHandCursor);
     m_leave->setToolTip(QStringLiteral("Terminar la sesión (Ctrl+Shift+Q): guarda lo que llevás y el tiempo hasta que vuelvas no cuenta como recreo indebido"));
     connect(m_leave, &QToolButton::clicked, this, &TimerDeck::leaveClicked);
+    m_hintTimer.setInterval(450);
+    connect(&m_hintTimer, &QTimer::timeout, this, [this] {
+        const bool on = (m_hintBlinks-- % 2) == 0;
+        m_activity->setProperty("hintOn", on && m_hintBlinks > 0);
+        repolish(m_activity);
+        if (m_hintBlinks <= 0) m_hintTimer.stop();
+    });
 
     auto* transport = new QHBoxLayout;
     transport->setSpacing(12);
@@ -360,7 +367,15 @@ void TimerDeck::setActivityMenu(QMenu* menu)
 
 void TimerDeck::setModel(const Model& m)
 {
-    const bool modeChanged = m_first || m.mode != m_model.mode || m.canStart != m_model.canStart;
+    const bool modeChanged = m_first || m.mode != m_model.mode || m.canStart != m_model.canStart || m.canLeave != m_model.canLeave;
+    // Mejoras 2.0 · 11: al empezar el día, la actividad titila suave unos segundos
+    // (¿es esto lo que querés hacer hoy?) y queda marcada hasta que arrancás.
+    if (m.activityHint != m_model.activityHint || m_first) {
+        m_activity->setProperty("hint", m.activityHint);
+        repolish(m_activity);
+        if (m.activityHint) { m_hintBlinks = 8; m_hintTimer.start(); }
+        else { m_hintTimer.stop(); m_activity->setProperty("hintOn", false); repolish(m_activity); }
+    }
     // M36: pasar de pomodoro a recreo (y vuelta) con un fundido corto
     const bool sideChanged = !m_first && isBreakMode(m.mode) != isBreakMode(m_model.mode);
     if (sideChanged) fade::cross(this, 240);

@@ -1003,6 +1003,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* ev)
 void MainWindow::resizeEvent(QResizeEvent* e)
 {
     QWidget::resizeEvent(e);
+    if (m_dayCard) m_dayCard->setGeometry(rect());
     if (m_goalPanel && m_goalPanel->isVisible()) placeGoalPanel(true, false);
     if (m_floatToast && m_floatToast->isVisible()) placeFloatToast();
     if (isFullScreen()) { updateDeckWidth(); return; }
@@ -1193,6 +1194,7 @@ void MainWindow::reloadFolders()
 
 void MainWindow::chooseFolder(qint64 id)
 {
+    m_activityConfirmed = m_today;   // elegiste la actividad: deja de titilar
     if (m_session->switchWouldPark(id)) {
         const auto cur = m_session->currentPomodoro();
         QMessageBox box(this);
@@ -1268,6 +1270,9 @@ void MainWindow::refreshDeck()
     // Los pomodoros se registran solo hoy: viendo otro día, el reproductor ofrece volver.
     m.canStart = m_grid->zoom() != GridWidget::Zoom::Day || m_grid->anchor() == m_today;
     m.canLeave = m_session->canEndSession();
+    // Mejoras 2.0 · 11: primer pomodoro del día y no tocaste la actividad: que se note cuál es.
+    m.activityHint = m_activityConfirmed != m_today && todayCount() == 0 && !m_session->currentPomodoro() &&
+                     (m_session->state() == SessionController::State::Idle || m_session->state() == SessionController::State::Ready);
     m_deck->setModel(m);
     if (m_mini) m_mini->setModel(m);
 }
@@ -1673,8 +1678,53 @@ void MainWindow::checkDayRollover()
 // Aparece la próxima vez que mirás la ventana, una sola vez por día.
 void MainWindow::maybeShowDaySummary()
 {
-    showDaySummaryIfNeeded();
-    maybeShowMonthSummary();   // M44
+    if (m_dayCard && m_dayCard->isVisible()) return;   // primero la tarjeta del día
+    showDayCard(false, false);        // Mejoras 2.0: el resumen va en la tarjeta del día (sobre la app)
+    if (!m_dayCard || !m_dayCard->isVisible()) maybeShowMonthSummary();   // M44
+}
+
+// Mejoras 2.0: la tarjeta del día, sobre la ventana (saludo y/o resumen del
+// día anterior, racha y comodines, objetivo y con qué actividad arrancás).
+void MainWindow::showDayCard(bool startup, bool force)
+{
+    if ((m_dayCard && m_dayCard->isVisible()) || m_docked || isMinimized()) return;
+    if (!isVisible() && !startup) return;
+    const bool full = force || Greeting::shouldShow(*m_db);
+    if (!full && !Greeting::summaryPending(*m_db)) return;
+    if (m_overlay != Overlay::None) showOverlay(Overlay::None);
+    m_dayCard = new Greeting(m_db, full, this);
+    auto setAct = [this] {
+        if (!m_dayCard) return;
+        const qint64 f = m_session->folderId();
+        m_dayCard->setActivity(m_tree.find(f) ? m_tree.path(f) : QString(), ActivitiesWidget::colorsFor(m_db, m_tree).value(f));
+    };
+    setAct();
+    connect(m_dayCard, &Greeting::activityMenuRequested, this, [this, setAct](const QPoint& pos) {
+        FolderMenu menu(this);
+        menu.rebuild(m_tree, m_session->folderId(), {}, ActivitiesWidget::colorsFor(m_db, m_tree));
+        connect(&menu, &FolderMenu::folderChosen, this, [this, setAct](qint64 f) {
+            m_session->setFolderId(f);
+            m_db->setSetting("last_folder", f);
+            m_activityConfirmed = m_today;
+            rebuildFolderMenu();
+            refreshDeck();
+            setAct();
+        });
+        menu.exec(pos);
+    });
+    connect(m_dayCard, &Greeting::accepted, this, [this, full] {
+        m_activityConfirmed = m_today;
+        refreshDeck();
+        if (full) QTimer::singleShot(80, this, [this] { openGoalPanel(m_today); });
+        QTimer::singleShot(400, this, &MainWindow::maybeShowMonthSummary);
+    });
+    connect(m_dayCard, &Greeting::declined, this, [this, startup, full] {
+        // Al prender la PC, "Ahora no" cierra el programa (como antes); si no, solo la tarjeta.
+        if (startup && full) { quitApp(); return; }
+        QTimer::singleShot(400, this, &MainWindow::maybeShowMonthSummary);
+    });
+    if (!isVisible()) show();
+    m_dayCard->popIn();
 }
 
 // M44: al empezar un mes nuevo, una tarjetita con cómo te fue en el anterior.
@@ -1718,28 +1768,6 @@ void MainWindow::maybeShowMonthSummary()
     box.setWindowTitle(QStringLiteral("Resumen del mes"));
     box.setText(QStringLiteral("<b>%1</b>").arg(fmt::monthYear(prevStart)));
     box.setInformativeText(lines.join(QLatin1Char('\n')));
-    box.setStandardButtons(QMessageBox::Ok);
-    win::applyChrome(&box);
-    box.exec();
-}
-
-void MainWindow::showDaySummaryIfNeeded()
-{
-    if (!isVisible() || m_docked || isMinimized()) return;
-    QDate last;
-    for (const QDate& d : m_db->studiedDays())
-        if (d < m_today && (!last.isValid() || d > last)) last = d;
-    if (!last.isValid()) return;
-    const QDate shown = QDate::fromString(m_db->setting("summary/last_shown").toString(), Qt::ISODate);
-    if (shown.isValid() && shown >= last) return;
-    m_db->setSetting("summary/last_shown", last.toString(Qt::ISODate));
-
-    const auto t = stats::totals(*m_db, last, last, nullptr, dayclock::dayStart(last).addSecs(86399));
-    QMessageBox box(this);
-    box.setWindowTitle(QStringLiteral("Resumen del día"));
-    box.setText(QStringLiteral("<b>Resumen del %1</b>").arg(fmt::longDate(last)));
-    box.setInformativeText(QStringLiteral("Estudiaste %1\nRecreos: %2\nRecreos indebidos: %3")
-                               .arg(fmt::hours(t.study), fmt::hours(t.breaks), fmt::hours(t.undue)));
     box.setStandardButtons(QMessageBox::Ok);
     win::applyChrome(&box);
     box.exec();
@@ -2039,11 +2067,7 @@ QToolButton* MainWindow::buildDevButton(QWidget* bar)
             QTimer::singleShot(3000, this, [this] { m_sounds->stopAlarm(); });
         });
     });
-    menu->addAction(QStringLiteral("Ver el saludo de inicio"), this, [this] {
-        auto* g = new Greeting(m_db, geometry());
-        connect(g, &Greeting::accepted, this, &MainWindow::openFromGreeting);
-        g->show();
-    });
+    menu->addAction(QStringLiteral("Ver el saludo de inicio"), this, [this] { showDayCard(false, true); });
     menu->addSeparator();
     menu->addAction(QStringLiteral("Volver a copiar mis datos reales (reinicia)"), this, &MainWindow::restartInPlace);
     menu->addAction(QStringLiteral("Salir del modo desarrollador (reinicia)"), this, [this] {
@@ -2090,20 +2114,9 @@ void MainWindow::runDailyBackup()
 void MainWindow::onWake()
 {
     checkDayRollover();   // por si el día cambió mientras dormía
-    if (m_greetingOpen || !Greeting::shouldShow(*m_db)) return;
-    auto* g = new Greeting(m_db, geometry());
-    m_greetingOpen = true;
-    connect(g, &Greeting::accepted, this, &MainWindow::openFromGreeting);
-    connect(g, &QObject::destroyed, this, [this] { m_greetingOpen = false; });
-    g->show();
-}
-
-void MainWindow::openFromGreeting()
-{
-    show();
-    raise();
-    activateWindow();
-    QTimer::singleShot(80, this, [this] { openGoalPanel(m_today); });
+    if ((m_dayCard && m_dayCard->isVisible()) || !Greeting::shouldShow(*m_db)) return;
+    bringToFront();
+    showDayCard(false, false);
 }
 
 void MainWindow::togglePin(bool on)

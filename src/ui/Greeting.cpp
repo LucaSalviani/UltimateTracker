@@ -8,16 +8,13 @@
 #include "ui/Theme.h"
 
 #include <QGraphicsOpacityEffect>
-#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QPainter>
-#include <QParallelAnimationGroup>
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QRandomGenerator>
-#include <QScreen>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -55,123 +52,218 @@ QString hello()
     if (h >= 13 && h < 20) return QStringLiteral("Buenas tardes");
     return QStringLiteral("Buenas noches");
 }
+
+QDate lastStudied(Database& db, const QDate& today)
+{
+    QDate last;
+    for (const QDate& d : db.studiedDays())
+        if (d < today && (!last.isValid() || d > last)) last = d;
+    return last;
+}
+
+QLabel* line(const QString& text, const char* name, QWidget* parent)
+{
+    auto* l = new QLabel(text, parent);
+    l->setObjectName(name);
+    l->setWordWrap(true);
+    l->setTextFormat(Qt::RichText);
+    return l;
+}
 } // namespace
 
 bool Greeting::shouldShow(Database& db)
 {
     if (!db.setting("greeting", 0).toBool()) return false;   // B2: apagado para la gente nueva
-    const QString last = db.setting("greeting/last").toString();
-    return last != fmt::dayKey(dayclock::today());
+    return db.setting("greeting/last").toString() != fmt::dayKey(dayclock::today());
 }
 
-Greeting::Greeting(Database* db, const QRect& appGeometry)
-    : QWidget(nullptr, Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
-    , m_db(db)
-    , m_target(appGeometry)
+bool Greeting::summaryPending(Database& db)
 {
-    setAttribute(Qt::WA_TranslucentBackground);
+    const QDate last = lastStudied(db, dayclock::today());
+    if (!last.isValid()) return false;
+    const QDate shown = QDate::fromString(db.setting("summary/last_shown").toString(), Qt::ISODate);
+    return !shown.isValid() || shown < last;
+}
+
+Greeting::Greeting(Database* db, bool full, QWidget* parent)
+    : QWidget(parent)
+    , m_db(db)
+{
     setAttribute(Qt::WA_DeleteOnClose);
-    setWindowTitle(QStringLiteral("UltimateTracker"));
-    setWindowIcon(icons::get(icons::Id::AppLogo));
-    m_db->setSetting("greeting/last", fmt::dayKey(dayclock::today()));
-
-    // ---- Datos para el saludo
+    setFocusPolicy(Qt::StrongFocus);
     const QDate today = dayclock::today();
-    const int n = int(sizeof(kPhrases) / sizeof(kPhrases[0]));
-    // La misma frase todo el día; cambia de un día a otro.
-    QRandomGenerator rng(quint32(today.toJulianDay()));
-    const QString phrase = QString::fromUtf8(kPhrases[rng.bounded(n)]);
+    if (full) m_db->setSetting("greeting/last", fmt::dayKey(today));
 
+    m_card = new QWidget(this);
+    m_card->setObjectName("GreetCard");
+    m_card->setAttribute(Qt::WA_StyledBackground);
+
+    // ---- Título (+ frase si es el saludo)
+    const QDate last = lastStudied(*m_db, today);
+    QString titleText;
+    if (full) {
+        titleText = QStringLiteral("%1, ¿listo para ser productivo?").arg(hello());
+    } else {
+        titleText = last == today.addDays(-1) ? QStringLiteral("Así te fue ayer")
+                                              : QStringLiteral("Así te fue el %1").arg(fmt::longDate(last));
+    }
+    auto* title = line(titleText.toHtmlEscaped(), "GreetTitle", m_card);
+    QLabel* quote = nullptr;
+    if (full) {
+        const int n = int(sizeof(kPhrases) / sizeof(kPhrases[0]));
+        QRandomGenerator rng(quint32(today.toJulianDay()));   // la misma frase todo el día
+        quote = line(QString::fromUtf8(kPhrases[rng.bounded(n)]).toHtmlEscaped(), "GreetPhrase", m_card);
+    }
+
+    // ---- El día anterior (lo que antes era el cartel de resumen)
     QStringList facts;
-    const auto st = stats::streak(m_db->studiedDays(), today, m_db->setting("jokers_per_week", 2).toInt());
-    if (st.days > 0) facts << QStringLiteral("Racha: %1 %2").arg(st.days).arg(st.days == 1 ? "día" : "días");
-    QDate last;
-    for (const QDate& d : m_db->studiedDays())
-        if (d < today && (!last.isValid() || d > last)) last = d;
     if (last.isValid()) {
-        qint64 sec = 0;
-        for (const Pomodoro& p : m_db->pomodorosBetween(last, last)) sec += p.studiedSec;
-        facts << (last == today.addDays(-1) ? QStringLiteral("Ayer: %1").arg(fmt::duration(int(sec)))
-                                            : QStringLiteral("Última vez: %1").arg(fmt::duration(int(sec))));
-        // El resumen del día anterior ya va acá: que no salte otro cartel después.
-        m_db->setSetting("summary/last_shown", last.toString(Qt::ISODate));
+        const auto t = stats::totals(*m_db, last, last, nullptr, dayclock::dayStart(last).addSecs(86399));
+        int pomos = 0;
+        for (const Pomodoro& p : m_db->pomodorosBetween(last, last))
+            if (p.status == PomoStatus::Completed || p.status == PomoStatus::Final) ++pomos;
+        const QString when = last == today.addDays(-1) ? QStringLiteral("Ayer") : (full ? QStringLiteral("La última vez") : QString());
+        QString s = (when.isEmpty() ? QString() : QStringLiteral("<b>%1:</b> ").arg(when)) +
+                    QStringLiteral("%1 · %2 %3 · recreos %4").arg(fmt::hours(t.study)).arg(pomos)
+                        .arg(pomos == 1 ? "pomodoro" : "pomodoros", fmt::hours(t.breaks));
+        if (t.undue > 0) s += QStringLiteral(" · indebidos %1").arg(fmt::hours(t.undue));
+        facts << s;
+        m_db->setSetting("summary/last_shown", last.toString(Qt::ISODate));   // no sale otro cartel
+    }
+
+    // ---- Racha y comodines (Mejoras 2.0)
+    const int jokers = m_db->setting("jokers_per_week", 2).toInt();
+    const auto st = stats::streak(m_db->studiedDays(), today, jokers);
+    const int left = qMax(0, jokers - st.jokersThisWeek);
+    if (st.days > 0) {
+        QString s = QStringLiteral("<b>Racha:</b> %1 %2").arg(st.days).arg(st.days == 1 ? "día" : "días");
+        if (jokers > 0)
+            s += left == 0 ? QStringLiteral(" · sin comodines esta semana")
+                           : QStringLiteral(" · te %1 %2 %3 esta semana").arg(left == 1 ? "queda" : "quedan").arg(left).arg(left == 1 ? "comodín" : "comodines");
+        facts << s;
+        if (!st.todayDone) {
+            const QString warn = left == 0 ? QStringLiteral("Si hoy no estudiás, se corta la racha.")
+                                           : QStringLiteral("Si hoy no estudiás, se usa un comodín.");
+            facts << QStringLiteral("<span style='color:%1'>%2</span>").arg(left == 0 ? theme::pomoAccent.name() : theme::textDim.name(), warn);
+        }
     }
     if (const auto g = goals::resolve(m_db->goals(), today); g && !g->spec.isEmpty())
-        facts << QStringLiteral("Objetivo de hoy: %1").arg(goals::describe(g->spec));
-
-    // ---- Contenido
-    m_content = new QWidget(this);
-    auto* logo = new QLabel(m_content);
-    logo->setPixmap(icons::get(icons::Id::AppLogo).pixmap(28, 28));
-    auto* title = new QLabel(QStringLiteral("%1, ¿estás listo para ser productivo?").arg(hello()), m_content);
-    title->setObjectName("GreetTitle");
-    title->setWordWrap(true);
-    auto* quote = new QLabel(phrase, m_content);
-    quote->setObjectName("GreetPhrase");
-    quote->setWordWrap(true);
-    auto* info = new QLabel(facts.join(QStringLiteral("   ·   ")), m_content);
-    info->setObjectName("GreetFacts");
-    info->setWordWrap(true);
+        facts << QStringLiteral("<b>Objetivo de hoy:</b> %1").arg(goals::describe(g->spec).toHtmlEscaped());
+    auto* info = line(facts.join(QStringLiteral("<br>")), "GreetFacts", m_card);
     info->setVisible(!facts.isEmpty());
 
-    auto* go = new QPushButton(QStringLiteral("A trabajar"), m_content);
+    // ---- Con qué actividad arrancás (Mejoras 2.0 · 11)
+    auto* actLabel = new QLabel(QStringLiteral("Hoy arrancás con"), m_card);
+    actLabel->setObjectName("GreetFacts");
+    m_activity = new QPushButton(m_card);
+    m_activity->setObjectName("GreetActivity");
+    m_activity->setCursor(Qt::PointingHandCursor);
+    m_activity->setToolTip(QStringLiteral("¿No es esa? Cambiala acá"));
+    connect(m_activity, &QPushButton::clicked, this, [this] {
+        emit activityMenuRequested(m_activity->mapToGlobal(QPoint(0, m_activity->height())));
+    });
+    auto* actRow = new QHBoxLayout;
+    actRow->setSpacing(8);
+    actRow->addWidget(actLabel);
+    actRow->addWidget(m_activity);
+    actRow->addStretch();
+
+    auto* go = new QPushButton(QStringLiteral("A trabajar"), m_card);
     go->setObjectName("GreetGo");
     go->setCursor(Qt::PointingHandCursor);
     go->setDefault(true);
-    auto* later = new QPushButton(QStringLiteral("Por ahora no"), m_content);
+    auto* later = new QPushButton(QStringLiteral("Ahora no"), m_card);
     later->setObjectName("GreetLater");
     later->setCursor(Qt::PointingHandCursor);
-    connect(go, &QPushButton::clicked, this, &Greeting::expandAndOpen);
-    connect(later, &QPushButton::clicked, this, [this] {
-        emit declined();
-        close();
-    });
-
+    connect(go, &QPushButton::clicked, this, [this] { finish(true); });
+    connect(later, &QPushButton::clicked, this, [this] { finish(false); });
     auto* buttons = new QHBoxLayout;
     buttons->addStretch();
     buttons->addWidget(later);
     buttons->addWidget(go);
 
-    auto* lay = new QVBoxLayout(m_content);
-    lay->setContentsMargins(28, 24, 28, 22);
-    lay->setSpacing(10);
-    lay->addWidget(logo);
-    lay->addSpacing(2);
+    auto* lay = new QVBoxLayout(m_card);
+    lay->setContentsMargins(24, 20, 24, 18);
+    lay->setSpacing(8);
     lay->addWidget(title);
-    lay->addWidget(quote);
-    lay->addStretch();
+    if (quote) lay->addWidget(quote);
+    lay->addSpacing(4);
     lay->addWidget(info);
+    lay->addSpacing(4);
+    lay->addLayout(actRow);
     lay->addSpacing(6);
     lay->addLayout(buttons);
 
-    auto* outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, 0, 0, 0);
-    outer->addWidget(m_content);
-    m_fade = new QGraphicsOpacityEffect(m_content);
-    m_fade->setOpacity(1.0);
-    m_content->setGraphicsEffect(m_fade);
-
-    // Centrada en la pantalla donde va a estar la app.
-    resize(460, 270);
-    QScreen* scr = QGuiApplication::screenAt(m_target.center());
-    if (!scr) scr = QGuiApplication::primaryScreen();
-    const QRect avail = scr->availableGeometry();
-    move(avail.center() - QPoint(width() / 2, height() / 2));
+    m_fade = new QGraphicsOpacityEffect(this);
+    m_fade->setOpacity(0.0);
+    setGraphicsEffect(m_fade);
     go->setFocus();
+}
+
+void Greeting::setActivity(const QString& name, const QColor& color)
+{
+    QPixmap dot(10, 10);
+    dot.fill(Qt::transparent);
+    QPainter p(&dot);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen);
+    p.setBrush(color.isValid() ? color : theme::textFaint);
+    p.drawEllipse(QRectF(1, 1, 8, 8));
+    p.end();
+    m_activity->setIcon(QIcon(dot));
+    m_activity->setText(QStringLiteral("%1  ▾").arg(name.isEmpty() ? QStringLiteral("Sin actividad") : name));
+}
+
+void Greeting::popIn()
+{
+    if (parentWidget()) setGeometry(parentWidget()->rect());
+    show();
+    raise();
+    setFocus();
+    auto* a = new QPropertyAnimation(m_fade, "opacity", this);
+    a->setDuration(220);
+    a->setStartValue(0.0);
+    a->setEndValue(1.0);
+    a->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void Greeting::finish(bool accepted)
+{
+    if (m_closing) return;
+    m_closing = true;
+    auto* a = new QPropertyAnimation(m_fade, "opacity", this);
+    a->setDuration(160);
+    a->setEndValue(0.0);
+    connect(a, &QAbstractAnimation::finished, this, [this, ok = accepted] {
+        if (ok) emit this->accepted(); else emit declined();
+        close();
+    });
+    a->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void Greeting::resizeEvent(QResizeEvent*)
+{
+    const int w = qMin(width() - 32, 440);
+    m_card->setFixedWidth(qMax(260, w));
+    m_card->adjustSize();
+    m_card->move((width() - m_card->width()) / 2, qMax(16, (height() - m_card->height()) / 2));
 }
 
 void Greeting::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-    p.setPen(QPen(theme::mix(theme::bg, theme::text, 0.14), 1));
-    p.setBrush(theme::bg);
+    QColor dim = theme::bg;
+    dim.setAlphaF(0.82);
+    p.fillRect(rect(), dim);
+    // La tarjeta: fondo, borde y un brillo muy suave arriba.
+    const QRectF r = QRectF(m_card->geometry()).adjusted(0.5, 0.5, -0.5, -0.5);
+    p.setPen(QPen(theme::mix(theme::bg, theme::text, 0.16), 1));
+    p.setBrush(theme::mix(theme::bg, theme::text, 0.04));
     p.drawRoundedRect(r, 12, 12);
-    // Un brillo muy suave arriba
-    QLinearGradient glow(r.topLeft(), QPointF(r.left(), r.top() + 120));
+    QLinearGradient glow(r.topLeft(), QPointF(r.left(), r.top() + 110));
     QColor a = theme::pomoAccent;
-    a.setAlphaF(m_expanding ? 0.0 : 0.07);
+    a.setAlphaF(0.08);
     glow.setColorAt(0, a);
     glow.setColorAt(1, Qt::transparent);
     p.setPen(Qt::NoPen);
@@ -181,45 +273,14 @@ void Greeting::paintEvent(QPaintEvent*)
 
 void Greeting::keyPressEvent(QKeyEvent* e)
 {
-    if (e->key() == Qt::Key_Escape) {
-        emit declined();
-        close();
-        return;
-    }
+    if (e->key() == Qt::Key_Escape) { finish(false); return; }
+    if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) { finish(true); return; }
     QWidget::keyPressEvent(e);
 }
 
 void Greeting::mousePressEvent(QMouseEvent* e)
 {
-    m_dragOffset = e->globalPosition().toPoint() - frameGeometry().topLeft();
-}
-
-void Greeting::mouseMoveEvent(QMouseEvent* e)
-{
-    if (e->buttons() & Qt::LeftButton) move(e->globalPosition().toPoint() - m_dragOffset);
-}
-
-// La tarjeta se "convierte" en la ventana: el texto se desvanece y el rectángulo
-// crece hasta el lugar de la app. Recién ahí aparece la app de verdad.
-void Greeting::expandAndOpen()
-{
-    if (m_expanding) return;
-    m_expanding = true;
-    auto* group = new QParallelAnimationGroup(this);
-    auto* fade = new QPropertyAnimation(m_fade, "opacity", group);
-    fade->setDuration(160);
-    fade->setEndValue(0.0);
-    auto* grow = new QPropertyAnimation(this, "geometry", group);
-    grow->setDuration(340);
-    grow->setEasingCurve(QEasingCurve::InOutCubic);
-    grow->setStartValue(geometry());
-    grow->setEndValue(m_target);
-    group->addAnimation(fade);
-    group->addAnimation(grow);
-    connect(group, &QAbstractAnimation::finished, this, [this] {
-        emit accepted();
-        // Un instante para que la app se pinte debajo antes de cerrar la tarjeta.
-        QTimer::singleShot(60, this, &QWidget::close);
-    });
-    group->start(QAbstractAnimation::DeleteWhenStopped);
+    // Click afuera de la tarjeta: como "Ahora no". Adentro no hace nada (ni arrastra la ventana).
+    if (!m_card->geometry().contains(e->position().toPoint())) finish(false);
+    e->accept();
 }

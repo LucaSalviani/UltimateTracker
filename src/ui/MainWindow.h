@@ -39,10 +39,9 @@ public:
     void bringToFront();
     void notifyWindows(const QString& title, const QString& text);
     void leaveSession();
+    void showDayCard(bool startup, bool force);   // Mejoras 2.0: tarjeta del día sobre la app
     void moveMany(const QList<qint64>& ids, qint64 folder);
     void showSelectionMenu(const QList<qint64>& ids, const QPoint& globalPos);
-    // M10: después del saludo: abrir con el panel de la meta, o salir.
-    void openFromGreeting();
     void onWake();   // B2-4: la PC se despertó o se desbloqueó (saluda si es la primera vez en el día)
     void quitApp();
     void restartInPlace();   // M34
@@ -109,7 +108,6 @@ private:
     QHash<qint64, qint64> studiedByFolder(const QVector<Pomodoro>& dayPomos, bool reserve) const;   // B2
     void checkShortTermMilestones();
     void maybeShowMonthSummary();
-    void showDaySummaryIfNeeded();   // M44: marca del día, rachas, récords, meta semanal
     void queueNotes(const QStringList& notes);
     QStringList m_pendingNotes;
     ms::Config  m_msCfg;              // M44 (se relee en reloadGrid)
@@ -174,9 +172,10 @@ private:
     class WakeWatcher*  m_wake = nullptr;     // B2-4
     class SyncClient*   m_sync = nullptr;     // Celu-4
     class LiveLink*     m_live = nullptr;     // en vivo con el celu
+    QPointer<class Greeting> m_dayCard;       // Mejoras 2.0
+    QDate               m_activityConfirmed;  // día en que elegiste/confirmaste la actividad
     bool                m_wasMirroring = false;
     QTimer*             m_wakeDebounce = nullptr;
-    bool                m_greetingOpen = false;
     class MiniPlayer* m_mini = nullptr;       // M19
     struct PendingCelebration { int kind = -1; QString kicker, title, subtitle; } m_pendingCelebration;
     QWidget*     m_titleBar = nullptr;

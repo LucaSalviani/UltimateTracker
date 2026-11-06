@@ -239,6 +239,8 @@ QToolButton#DeckActivity {
     text-align: left;
 }
 QToolButton#DeckActivity:hover { background: @s3; }
+QToolButton#DeckActivity[hint="true"] { border: 1px solid @s6; }
+QToolButton#DeckActivity[hintOn="true"] { border: 1px solid @acc; background: @s3; }
 
 QToolButton#DeckStep {
     background: @s3;
@@ -347,7 +349,10 @@ QPushButton#GoalRemove:hover { color: @t1; border-color: @s8; }
 /* ---- Saludo al iniciar (M10) ---- */
 QLabel#GreetTitle { font-size: 15pt; font-weight: 600; color: @t1; }
 QLabel#GreetPhrase { font-size: 10.5pt; color: @t3; font-style: italic; }
-QLabel#GreetFacts { font-size: 9pt; color: @t2; }
+QLabel#GreetFacts { font-size: 9.5pt; color: @t2; }
+QWidget#GreetCard { background: transparent; }
+QPushButton#GreetActivity { background: @s3; color: @t1; border: 1px solid @s6; border-radius: 9px; padding: 5px 12px; font-weight: 600; text-align: left; }
+QPushButton#GreetActivity:hover { border-color: @acc; }
 QPushButton#GreetGo { background: @acc; color: #ffffff; border: none; border-radius: 9px; padding: 9px 20px; font-weight: 600; font-size: 10.5pt; }
 QPushButton#GreetGo:hover { background: @accHi; }
 QPushButton#GreetLater { background: transparent; color: @t3; border: 1px solid @s5; border-radius: 9px; padding: 9px 16px; }
