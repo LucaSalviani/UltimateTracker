@@ -90,9 +90,12 @@ Streak streak(const QSet<QDate>& studied, const QDate& today, int jokersPerWeek)
             if (!studied.contains(x)) ++used;
         s.jokersThisWeek = used;
     }
+    // Mejoras 2.0: solo suman los días con algún pomodoro; los comodines
+    // sostienen la racha pero no la agrandan.
     const QDate end = s.todayDone ? today : today.addDays(-1);
-    s.days = int(earliestStudied.daysTo(end)) + 1;
-    if (!s.todayDone && s.days < 0) s.days = 0;
+    s.days = 0;
+    for (QDate x = earliestStudied; x <= end; x = x.addDays(1))
+        if (studied.contains(x)) ++s.days;
     return s;
 }
 

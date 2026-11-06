@@ -399,15 +399,15 @@ private slots:
 
         auto s = stats::streak(st, today, 2);
         QCOMPARE(s.todayDone, false);
-        QCOMPARE(s.days, 14);            // 12/10 → 25/10, cubierto por 2 comodines
+        QCOMPARE(s.days, 12);            // 12/10 → 25/10 con 2 comodines: 12 días estudiados
 
         auto s1 = stats::streak(st, today, 1);
-        QCOMPARE(s1.days, 4);            // el 23 usa el comodín, se corta el 21: 22 → 25
+        QCOMPARE(s1.days, 3);            // el 23 usa el comodín, se corta el 21: 22, 24 y 25
 
         st.insert(today);
         auto s2 = stats::streak(st, today, 2);
         QCOMPARE(s2.todayDone, true);
-        QCOMPARE(s2.days, 15);
+        QCOMPARE(s2.days, 13);
     }
 
     void milestones()

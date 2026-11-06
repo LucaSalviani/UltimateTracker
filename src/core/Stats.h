@@ -26,7 +26,7 @@ QMap<QDate, qint64> studyByDay(const Database& db, const QDate& from, const QDat
                                const QSet<qint64>* folders);
 
 struct Streak {
-    int  days            = 0;      // días corridos (incluye comodines en el medio)
+    int  days            = 0;      // días con pomodoro de la racha (los comodines no suman)
     int  jokersThisWeek  = 0;      // comodines gastados en la semana actual
     bool todayDone       = false;  // ya hay al menos un pomodoro hoy
 };
