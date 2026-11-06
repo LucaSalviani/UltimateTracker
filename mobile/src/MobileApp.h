@@ -101,6 +101,8 @@ public:
     Q_INVOKABLE QVariantMap pomodoroInfo(qint64 id) const;
     Q_INVOKABLE void setNote(qint64 id, const QString& note);
     Q_INVOKABLE void movePomodoro(qint64 id, qint64 folderId);
+    Q_INVOKABLE void movePomodoros(const QVariantList& ids, qint64 folderId);   // Mejoras 2.0
+    Q_INVOKABLE QVariantList sameActivityThatDay(qint64 id) const;           // los otros de esa actividad ese día
     Q_INVOKABLE void deletePomodoro(qint64 id);
     Q_INVOKABLE void undoDelete();
 

@@ -31,6 +31,16 @@ Sheet {
         MouseArea { id: am; anchors.fill: parent; onClicked: { picker.current = root.info.folder; picker.open() } }
     }
 
+    // Mejoras 2.0: los otros de la misma actividad ese día, de una
+    Text {
+        readonly property var others: root.pid ? ut.sameActivityThatDay(root.pid) : []
+        visible: others.length > 1 && !root.info.running
+        Layout.fillWidth: true
+        text: "Mover los " + others.length + " de esta actividad de ese día…"
+        color: Theme.accent; font.pixelSize: 13
+        MouseArea { anchors.fill: parent; onClicked: { pickerAll.current = root.info.folder; pickerAll.open() } }
+    }
+
     SectionLabel { text: "¿En qué trabajaste?"; Layout.topMargin: 4 }
     TextArea {
         id: note
@@ -63,6 +73,16 @@ Sheet {
         Pill { text: "Listo"; strong: true; onClicked: root.close() }
     }
 
+    ActivitySheet {
+        id: pickerAll
+        parent: T.Overlay.overlay
+        allowAdd: false
+        title: "Mover todos a…"
+        onChosen: (id) => {
+            if (id > 0) { ut.movePomodoros(ut.sameActivityThatDay(root.pid), id); root.info = ut.pomodoroInfo(root.pid) }
+            pickerAll.close()
+        }
+    }
     ActivitySheet {
         id: picker
         parent: T.Overlay.overlay

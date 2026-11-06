@@ -739,3 +739,27 @@ void MobileApp::endSession()
     bump();
     emit toast(QStringLiteral("Sesión terminada. Hasta la vuelta"));
 }
+
+void MobileApp::movePomodoros(const QVariantList& ids, qint64 folderId)
+{
+    int n = 0;
+    for (const QVariant& v : ids) {
+        const auto p = m_db->pomodoro(v.toLongLong());
+        if (!p || p->status == PomoStatus::Running || p->status == PomoStatus::Parked || p->folderId == folderId) continue;
+        m_db->setPomodoroFolder(p->id, folderId);
+        ++n;
+    }
+    reloadToday();
+    bump();
+    if (n > 0) emit toast(QStringLiteral("%1 %2 a %3").arg(n).arg(n == 1 ? "movido" : "movidos", m_tree.find(folderId) ? m_tree.find(folderId)->name : QStringLiteral("sin actividad")));
+}
+
+QVariantList MobileApp::sameActivityThatDay(qint64 id) const
+{
+    QVariantList out;
+    const auto p = m_db->pomodoro(id);
+    if (!p) return out;
+    for (const Pomodoro& q : m_db->pomodorosBetween(p->day, p->day))
+        if (q.folderId == p->folderId && q.status != PomoStatus::Running && q.status != PomoStatus::Parked) out.append(q.id);
+    return out;
+}

@@ -22,7 +22,7 @@ ApplicationWindow {
         if (a.indexOf("--demo-sync") >= 0) syncSheet.open()
         if (a.indexOf("--demo-acts") >= 0) actSheet.open()
         if (a.indexOf("--demo-goal") >= 0) goalSheet.open()
-        if (a.indexOf("--demo-pomo") >= 0 && ut.today.length > 0) pomoSheet.show(ut.today[0].id)
+        if (a.indexOf("--demo-pomo") >= 0) { for (const t of ut.today) if (!t.ghost) { pomoSheet.show(t.id); break } }
         if (a.indexOf("--demo-edit") >= 0 && ut.folders.length > 0) { tab = 3; settingsPage.editFirst() }
         if (a.indexOf("--demo-celebrate") >= 0) celebration.show("Marca del día", "Plata", "4h 10m hoy")
         if (a.indexOf("--demo-toast") >= 0) toast.show("Cuadradito borrado", true)

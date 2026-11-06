@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Templates as T
 
 // Hoy: el reloj, el objetivo y los cuadraditos.
 Flickable {
@@ -248,7 +249,25 @@ Flickable {
             SectionLabel { text: "Cuadraditos de hoy"; Layout.fillWidth: true }
             Text { visible: ut.goal.has === true; text: (ut.goal.full || 0) + " de " + (ut.goal.count || 0) + " del objetivo"; color: Theme.faint; font.pixelSize: 12 }
         }
+        // Varios elegidos: moverlos juntos
+        RowLayout {
+            visible: tiles.selecting
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.margin
+            Layout.rightMargin: Theme.margin
+            spacing: 10
+            Text { text: tiles.selected.length + (tiles.selected.length === 1 ? " elegido" : " elegidos"); color: Theme.text; font.pixelSize: 14; Layout.fillWidth: true }
+            Pill { text: "Soltar"; implicitHeight: 38; onClicked: tiles.selected = [] }
+            Pill { text: "Mover a…"; strong: true; implicitHeight: 38; onClicked: { movePicker.current = 0; movePicker.open() } }
+        }
+        Text {
+            visible: !tiles.selecting && ut.todayCount > 1
+            Layout.leftMargin: Theme.margin
+            text: "Mantené apretado un cuadradito para elegir varios"
+            color: Theme.faint; font.pixelSize: 11
+        }
         Tiles {
+            id: tiles
             Layout.fillWidth: true
             Layout.leftMargin: Theme.margin
             Layout.rightMargin: Theme.margin
@@ -256,5 +275,13 @@ Flickable {
             progress: ut.progress
             onTapped: (id) => page.openPomodoro(id)
         }
+    }
+
+    ActivitySheet {
+        id: movePicker
+        parent: T.Overlay.overlay
+        allowAdd: false
+        title: "Mover " + tiles.selected.length + " a…"
+        onChosen: (id) => { ut.movePomodoros(tiles.selected, id); tiles.selected = []; movePicker.close() }
     }
 }

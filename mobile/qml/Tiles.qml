@@ -8,6 +8,14 @@ Flow {
     property real progress: 0
     property string emptyText: "Todavía no hay cuadraditos. Dale play para sumar el primero."
     signal tapped(var id)
+    // Mejoras 2.0: mantener apretado elige varios (para moverlos juntos)
+    property var selected: []
+    readonly property bool selecting: selected.length > 0
+    function toggle(id) {
+        const s = selected.slice(); const i = s.indexOf(id)
+        if (i >= 0) s.splice(i, 1); else s.push(id)
+        selected = s
+    }
     spacing: 10
     readonly property int side: Math.floor((width - 4 * spacing) / 5)
 
@@ -77,7 +85,17 @@ Flow {
                     font.pixelSize: Math.round(root.side * 0.26)
                     font.weight: Font.DemiBold
                 }
-                MouseArea { anchors.fill: parent; enabled: !ghost; onClicked: root.tapped(modelData.id) }
+                Rectangle {   // elegido
+                    visible: root.selected.indexOf(modelData.id) >= 0
+                    anchors.fill: parent; anchors.margins: -3
+                    radius: 11; color: "transparent"; border.color: Theme.text; border.width: 2
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: !ghost
+                    onClicked: root.selecting ? (modelData.running ? null : root.toggle(modelData.id)) : root.tapped(modelData.id)
+                    onPressAndHold: if (!modelData.running) root.toggle(modelData.id)
+                }
             }
         }
     }
