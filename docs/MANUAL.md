@@ -22,8 +22,9 @@
 ## Lo que trae
 
 - **Pomodoros a tu medida:** la duración que quieras, y cada uno arranca cuando vos le das play.
-- **Recreos con alarma.** El tiempo muerto entre un pomodoro y otro, sin recreo ni estudio, se anota aparte como "recreo indebido" para que lo veas.
-- **Objetivo del día:** decí qué querés lograr hoy (tecla **G**) y la grilla te muestra lo que falta. Se puede repetir todos los días o algunos días de la semana.
+- **Recreos con alarma.** El tiempo muerto entre un pomodoro y otro, sin recreo ni estudio, se anota aparte como "recreo indebido" para que lo veas. Cuando terminás de estudiar, **Me voy** (debajo del reloj) cierra la sesión y lo que sigue no cuenta como recreo indebido.
+- **Objetivo del día:** decí qué querés lograr hoy (tecla **G**) y la grilla te muestra lo que falta. Te dice cuánto es de estudio y cuánto con los recreos. Se puede repetir todos los días o algunos días de la semana.
+- **Tarjeta del día:** la primera vez que abrís la app en el día, cómo te fue ayer, tu racha, los comodines que te quedan y con qué actividad arrancás.
 - **Estadísticas** por día, semana, mes y año, con mapa de calor, rachas y la opción de exportar todo a Excel (CSV).
 - **Hitos para motivarte:**
   - *Todos los días:* marca de bronce, plata y oro según las horas, rachas y récords personales.
@@ -45,6 +46,7 @@
 | **S** | Estadísticas |
 | **M** | Mini reproductor |
 | **Ctrl + Z** | Deshacer lo último |
+| **Ctrl + Shift + Q** | Me voy (terminar la sesión) |
 | **Ctrl + Alt + P** | Pausar o seguir desde cualquier programa |
 | **?** | Ver todos los atajos |
 
@@ -57,7 +59,13 @@ En tu compu, en `%APPDATA%\UltimateTracker`. No se suben a ningún lado. La app 
 Sí: en **Actividades**, click derecho sobre la materia → **Horas previas…**. Cuentan para el total, los hitos y las etapas.
 
 **Me equivoqué con un pomodoro, ¿lo puedo corregir?**
-Sí: click derecho sobre el cuadradito para moverlo a otra actividad, corregir cuánto duró, agregarle una nota o borrarlo. Casi todo se puede deshacer con **Ctrl + Z**.
+Sí: click derecho sobre el cuadradito para moverlo a otra actividad, corregir cuánto duró, agregarle una nota o borrarlo. Para mover varios juntos, **Ctrl + click** sobre cada uno y después click derecho. Casi todo se puede deshacer con **Ctrl + Z**.
+
+**No escucho el aviso al terminar un pomodoro.**
+En **⋯ → Ajustes → Festejos y sonidos** tocá ▶: te dice por qué salida de audio suena o si falló. También podés dejar prendida la notificación de Windows de respaldo. Si sigue pasando, mandanos el archivo `sonidos.log` de `%APPDATA%\UltimateTracker`.
+
+**¿Hay un tutorial?**
+Sí: sale la primera vez y está siempre en **⋯ → Ver tutorial**.
 
 **¿Puede abrirse sola cuando prendo la PC?**
 Sí: en **⋯ → Ajustes → Sistema** prendé *Iniciar con Windows* y, si querés, *Saludarme la primera vez que uso la PC en el día* (también al despertarla o desbloquearla). Vienen apagados.

@@ -40,7 +40,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## Stats en vivo
 - Abajo de la grilla: pomodoros, minutos // horas y un tercer dato.
-- Por defecto muestra la actividad actual (tercer dato: total histórico de la actividad); se puede cambiar a todo el día (tercer dato: cuántas actividades distintas).
+- Por defecto muestra la actividad actual: lo de **hoy** en esa actividad (tercer dato: qué parte del día fue; el total histórico va chiquito en la cabecera, "en total: 124h"); se puede cambiar a todo el día (tercer dato: cuántas actividades distintas).
 - El mismo toggle filtra los cuadraditos de la grilla (y su numeración) en todas las vistas.
 
 ## Tiempos
@@ -52,11 +52,12 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 | Horas inactivas | Todo lo demás del día (24 h − lo anterior), incluido el tiempo muerto después del último pomodoro. |
 
 ## Jornada (sesión)
-- La sesión es el día: no hay botón para terminarla.
+- La sesión es el día. **«Me voy»** (debajo del reproductor cuando no corre un pomodoro, en la bandeja, Ctrl+Shift+Q; en el celu, debajo de los botones) la termina antes: guarda lo que llevás y el tiempo hasta que vuelvas no cuenta como recreo indebido.
 - **El día de la app empieza a las 4 AM** (configurable de 0 a 6 en *Ajustes › General*): lo que estudies a las 2 AM cuenta para el día anterior.
 - Se cierra sola pasado el inicio del día (cuando no hay nada en marcha) o al salir de la app.
 - El tiempo muerto queda "pendiente": si volvés a estudiar, era recreo indebido; si no, era el final del día (inactivo).
-- Al día siguiente, la primera vez que mirás la ventana, aparece el resumen del día anterior con los recreos indebidos.
+- **Tarjeta del día** (sobre la misma ventana, una vez por día, la primera vez que la mirás): con el saludo activado, "Buen día, ¿listo para ser productivo?" y una frase; si no, "Así te fue ayer". Trae el día anterior (horas, pomodoros, recreos, indebidos), la racha y los comodines que quedan (avisa si hoy se usa un comodín o se corta), el objetivo de hoy y "Hoy arrancás con <actividad> ▾" para cambiarla ahí. En el celu, una tarjeta igual arriba de Hoy.
+- Hasta el primer pomodoro del día, la actividad del reproductor titila suave unos segundos y queda marcada (¿es esto lo que querés hacer hoy?).
 - Si la app se cierra o se cae con un pomodoro corriendo, al volver se guarda lo que llegó a correr.
 - Si se cruza la medianoche, el pomodoro cuenta para el día en que empezó.
 
@@ -95,12 +96,13 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - La barra de arriba muestra solo lo que escribiste en "¿Qué querés lograr hoy?" (vacía si no escribiste nada); click ahí, el botón de la diana o **G** abren el panel que sale desde la derecha. Para otros días dice "¿Qué querés lograr este día?".
 - **El progreso es por tiempo acumulado**: los minutos estudiados ese día van llenando los bloques en orden; el bloque que va a medias se ve lleno en parte (dos pomodoros de 3m no completan dos bloques de 40m). Click derecho en un día de la semana o el mes → "Poner meta…" para planearla.
 - La tarea del día (texto) también se edita ahí.
-- **Por tiempo** (ej. 4 h → se pasa a pomodoros con la duración que estés usando, redondeando para arriba) o **por pomodoros**: filas "[−] 3 [+] × [−] 30m [+]" con "+ Agregar" (scrollea si hay muchas), o escrito como `3x30 + 2x25` (se elige en Ajustes › General).
+- **Por tiempo** (se escribe directo en el número: `3h30`, `3:30`, `4` o `210`; con el foco, la rueda va de a 15 min; se pasa a pomodoros con la duración que estés usando, redondeando para arriba) o **por pomodoros**: filas "[−] 3 [+] × [−] 30m [+]" con "+ Agregar" (scrollea si hay muchas), o escrito como `3x30 + 2x25` (se elige en Ajustes › General).
 - Por pomodoros, el reproductor viene precargado con la duración del próximo bloque del objetivo.
 - **Con actividad** (B2): cada fila elige su actividad ("1 de 25 para AM2 + 3 de 30 para SO") o "cualquiera". Se guarda como `1x25@<id>+3x30@<id>`. Los fantasmas toman el color de su actividad y van en su grupo; los bloques con actividad se llenan con lo estudiado en ella (o en sus subactividades) y lo que sobra llena los "cualquiera". El próximo pomodoro viene con la duración y la actividad del próximo bloque.
 - **El pomodoro en curso** (*Ajustes › General*): *reemplaza al fantasma* (por defecto: al dar play, el fantasma que le toca se oculta; si lo cortás antes, vuelve con lo que faltó) o *se funde con el fantasma al terminar* (el fantasma se va llenando y al terminar vuela hasta el cuadradito hecho).
 - **Repetir** como en Google Calendar: solo ese día, todos los días, de lunes a viernes o días elegidos. Cambiar una meta que se repite corta la anterior el día antes (el pasado no cambia). Quitar: "solo este día" o "desde este día en adelante".
 - Progreso en el panel; al cumplirla, festejo con sonido (una vez por día).
+- **Con recreos**: debajo del total, "3h20 de estudio · ≈ 4h05 con recreos" (un recreo entre bloque y bloque). *Ajustes › General › Recreos del objetivo*: tu duración de recreo (por defecto) o tu promedio real de las últimas 4 semanas. También en el celu.
 
 ## Festejos
 - Al terminar un pomodoro, cumplir el objetivo o llegar a un hito, cada uno con su estilo (*Ajustes › Festejos y sonidos*):
@@ -110,12 +112,13 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 
 ## Sonidos
 - *Ajustes › Festejos y sonidos*, con ▶ para escuchar: fin de pomodoro (Arpegio, Suave, Campana, Madera, Digital, ninguno), logro (Obturador y arpegio, Acorde suave, ninguno), alarma del recreo (Despertador, Marimba, Campanitas) y volumen general. Los genera `tools/make_sounds.py`.
+- El reproductor sigue a la salida de audio actual de Windows (se rearma si cambia, si falló o si pasó mucho sin sonar, y reintenta si no sonó). Cada sonido o falla queda en `sonidos.log` junto a la base. Al probar uno, Ajustes dice por qué salida suena. Además, una notificación de Windows al terminar el pomodoro o el recreo (se puede apagar).
 
 ## Estadísticas
 - Por día, semana, mes y año, filtrables por actividad, con los cuatro contadores.
 - **Mapa de calor** anual (una celda por día, más intensa cuanto más se estudió).
 - **Objetivos** (B2): tarjeta "4 de 6 cumplidos · faltaron 2h30", rayita del objetivo en cada barra y barras verdes los días cumplidos, borde en el mapa de calor, y en el día "objetivo 4h: faltaron 50m".
-- **Racha**: día estudiado = al menos 1 pomodoro iniciado. 1 o 2 comodines por semana (configurable) que no la rompen.
+- **Racha**: cuentan solo los días con algún pomodoro guardado. 1 o 2 comodines por semana (configurable) la sostienen pero no suman días.
 - **Colores**: barras y mapa de calor en el color del visor del cronómetro (el rojo suave en Gris); cada actividad con su color en las filas, la línea del día y el menú de actividades.
 - **Exportar a CSV** (botón ⤓): lo que estás viendo (período + actividad) o todo el historial. Separador `;`, coma decimal, UTF-8: abre directo en Excel en español.
 - Cambiar de período o actividad hace un fundido corto; los períodos vacíos lo dicen ("Sin horas esta semana").
@@ -173,6 +176,11 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - Festejos (objetivo cumplido, marcas, rachas, récords, etapas y horas) como en la PC.
 - Con la pantalla apagada: notificación con la cuenta regresiva (servicio en primer plano, así Android no corta la app) y alarma exacta que suena y vibra al terminar el pomodoro o el recreo.
 - Se compila sola en GitHub Actions y se publica en Releases como `android-beta` (APK firmado siempre con la misma llave: cada versión se instala arriba de la anterior).
+
+## Ayudas
+- **Rueda del mouse**: los números, listas y deslizadores no cambian con la rueda mientras recorrés una página; solo si antes les hiciste click y el cursor está encima.
+- **Mover varios cuadraditos**: Ctrl + click elige uno por uno, Shift + click los del medio; click derecho › "Mover los N a actividad" (con deshacer). En el menú de un cuadradito: "Mover los N de <actividad> de ese día a…". En el celu, mantener apretado.
+- **Mini tutorial**: la primera vez que se abre y desde ⋯ › *Ver tutorial* (en el celu, Ajustes › *Ver tutorial*).
 
 ## Sincronización (PC ↔ celu)
 - Supabase (gratis): una tabla `records` con una fila por actividad, pomodoro, recreo, objetivo o título de día, protegida para que cada cuenta vea solo lo suyo (`tools/supabase.sql`).

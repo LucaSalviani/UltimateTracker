@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("UltimateTracker"));
     QGuiApplication::setOrganizationName(QStringLiteral("UltimateTracker"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("1.0.0-beta.2"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("1.0.0-beta.3"));
 
     QString dataDir = qEnvironmentVariable("ULTIMATETRACKER_DATA_DIR");
     if (dataDir.isEmpty()) dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
