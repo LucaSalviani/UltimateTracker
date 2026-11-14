@@ -96,7 +96,7 @@ Flickable {
                 ColumnLayout {
                     spacing: 0
                     Text { text: page.d.total; color: Theme.text; font.pixelSize: 34; font.weight: Font.Bold }
-                    Text { text: "estudiadas"; color: Theme.dim; font.pixelSize: 12 }
+                    Text { text: page.d.doneFem; color: Theme.dim; font.pixelSize: 12 }
                 }
                 Item { Layout.fillWidth: true }
                 ColumnLayout {
@@ -110,7 +110,7 @@ Flickable {
                 Layout.fillWidth: true
                 Stat { value: page.d.pomodoros; label: page.d.pomodoros === 1 ? "pomodoro" : "pomodoros" }
                 Stat { visible: page.period !== "day"; value: page.d.average; label: "promedio por día" }
-                Stat { visible: page.period !== "day"; value: page.d.studiedDays + "/" + page.d.days; label: "días con estudio" }
+                Stat { visible: page.period !== "day"; value: page.d.studiedDays + "/" + page.d.days; label: "días con " + page.d.noun }
                 Stat { visible: page.period === "day"; value: page.d.breaks; label: "recreos" }
             }
             BarChart {
@@ -209,7 +209,7 @@ Flickable {
             visible: page.period !== "day" || page.d.undue !== "0m"
             Layout.fillWidth: true
             Layout.topMargin: 4
-            SectionLabel { text: "Fuera del estudio" }
+            SectionLabel { text: "Fuera del " + (page.d.noun === "práctica" || page.d.noun === "lectura" ? "foco" : page.d.noun) }
             RowLayout {
                 Layout.fillWidth: true
                 Stat { value: page.d.breaks; label: "recreos" }

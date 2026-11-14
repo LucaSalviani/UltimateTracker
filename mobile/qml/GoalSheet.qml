@@ -123,7 +123,7 @@ Sheet {
         Layout.fillWidth: true
         StepRow {
             Layout.fillWidth: true
-            text: "Tiempo de estudio"
+            text: "Tiempo de " + ut.words.noun
             detail: "Los cuadraditos se arman con tu duración de pomodoro (" + ut.workMin + "m)"
             valueText: Math.floor(root.totalMin / 60) + "h" + (root.totalMin % 60 ? (root.totalMin % 60 < 10 ? "0" : "") + root.totalMin % 60 : "")
             onMinus: root.totalMin = Math.max(15, root.totalMin - (root.totalMin > 60 ? 30 : 15))

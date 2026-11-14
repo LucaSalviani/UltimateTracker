@@ -12,6 +12,7 @@
 
 #include <QHash>
 #include <QPointer>
+#include "core/Kinds.h"
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QWidget>
@@ -39,6 +40,7 @@ public:
     void bringToFront();
     void notifyWindows(const QString& title, const QString& text);
     void leaveSession();
+    kinds::Kind todayKind() const;   // Mejoras 3.0
     void showDayCard(bool startup, bool force);   // Mejoras 2.0: tarjeta del día sobre la app
     void startTour();                             // Mejoras 2.0: mini tutorial
     void moveMany(const QList<qint64>& ids, qint64 folder);

@@ -3,6 +3,7 @@
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "core/Goals.h"
+#include "core/Kinds.h"
 #include "core/Stats.h"
 #include "ui/Icons.h"
 #include "ui/Theme.h"
@@ -142,8 +143,9 @@ Greeting::Greeting(Database* db, bool full, QWidget* parent)
                            : QStringLiteral(" · te %1 %2 %3 esta semana").arg(left == 1 ? "queda" : "quedan").arg(left).arg(left == 1 ? "comodín" : "comodines");
         facts << s;
         if (!st.todayDone) {
-            const QString warn = left == 0 ? QStringLiteral("Si hoy no estudiás, se corta la racha.")
-                                           : QStringLiteral("Si hoy no estudiás, se usa un comodín.");
+            const QString vos = kinds::general(FolderTree(m_db->folders())).vos;   // "estudiás", "trabajás"…
+            const QString warn = left == 0 ? QStringLiteral("Si hoy no %1, se corta la racha.").arg(vos)
+                                           : QStringLiteral("Si hoy no %1, se usa un comodín.").arg(vos);
             facts << QStringLiteral("<span style='color:%1'>%2</span>").arg(left == 0 ? theme::pomoAccent.name() : theme::textDim.name(), warn);
         }
     }

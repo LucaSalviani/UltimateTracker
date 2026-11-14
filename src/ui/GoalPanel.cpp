@@ -1,4 +1,5 @@
 #include "ui/GoalPanel.h"
+#include "core/Kinds.h"
 #include "core/Format.h"
 #include "ui/Icons.h"
 #include "ui/Theme.h"
@@ -368,7 +369,11 @@ void GoalPanel::refreshPreview()
     // Mejoras 2.0: además del estudio, cuánto es con los recreos en el medio.
     const qint64 withBreaks = goals::withBreaksSec(p, m_breakSec);
     const QString breaks = p.blocks.size() > 1
-        ? QStringLiteral("\n%1 de estudio · ≈ %2 con recreos").arg(fmt::duration(p.totalMin * 60), fmt::duration(int(withBreaks)))
+        ? QStringLiteral("\n%1 de %2 · ≈ %3 con recreos").arg(fmt::duration(p.totalMin * 60), [&] {
+              QSet<qint64> ids;   // Mejoras 3.0: "de estudio", "de trabajo"… según las actividades del objetivo
+              for (qint64 f : p.folders) if (f > 0) ids.insert(f);
+              return (ids.isEmpty() ? kinds::general(m_tree) : kinds::common(m_tree, ids)).noun;
+          }(), fmt::duration(int(withBreaks)))
         : QString();
     m_summary->setText((p.timeMode
         ? QStringLiteral("≈ %1 %2 de %3").arg(p.blocks.size()).arg(p.blocks.size() == 1 ? "pomodoro" : "pomodoros")

@@ -32,6 +32,24 @@ Sheet {
         background: Rectangle { implicitHeight: 46; color: Theme.bg; radius: 12; border.color: name.activeFocus ? Theme.faint : Theme.line }
     }
 
+    // Mejoras 3.0: el tipo define el verbo (estudiado, trabajado, leído…)
+    SectionLabel { text: "Tipo · " + (root.info.kindName || ""); Layout.topMargin: 4 }
+    Flow {
+        Layout.fillWidth: true
+        spacing: 8
+        Repeater {
+            model: (root.info.root ? [] : [{id: "", name: "El de arriba"}]).concat(ut.kindChoices())
+            delegate: Rectangle {
+                readonly property bool on: (root.info.kind || "") === modelData.id || (root.info.root && !root.info.kind && modelData.id === "estudio")
+                width: kt.implicitWidth + 24; height: 34; radius: 17
+                color: on ? Theme.surfaceHi : "transparent"
+                border.color: on ? Theme.faint : Theme.line
+                Text { id: kt; anchors.centerIn: parent; text: modelData.name; color: parent.on ? Theme.text : Theme.dim; font.pixelSize: 13 }
+                MouseArea { anchors.fill: parent; onClicked: { ut.setFolderKind(root.fid, modelData.id); root.info = ut.folderInfo(root.fid) } }
+            }
+        }
+    }
+
     SectionLabel { text: "Color"; Layout.topMargin: 4 }
     Flow {
         Layout.fillWidth: true
@@ -54,7 +72,7 @@ Sheet {
         StepRow {
             Layout.fillWidth: true
             text: "Horas previas"
-            detail: "Lo que ya habías estudiado antes de usar la app."
+            detail: "Lo que ya tenías hecho antes de usar la app."
             valueText: (root.prior % 1 === 0 ? root.prior : root.prior.toFixed(1)) + " h"
             onMinus: root.prior = Math.max(0, root.prior - (root.prior > 20 ? 5 : 0.5))
             onPlus: root.prior = root.prior + (root.prior >= 20 ? 5 : 0.5)

@@ -122,7 +122,7 @@ Flickable {
                 }
                 Small {
                     Layout.fillWidth: true
-                    text: (m.streak.todayDone ? "Hoy ya sumaste." : "Hoy todavía no estudiaste.") +
+                    text: (m.streak.todayDone ? "Hoy ya sumaste." : "Hoy todavía no sumaste.") +
                           (m.streak.jokers > 0 ? " Comodines: " + m.streak.jokersLeft + " de " + m.streak.jokers + " esta semana." : "") +
                           (m.streak.next ? " Próxima: " + m.streak.next + "." : "")
                 }

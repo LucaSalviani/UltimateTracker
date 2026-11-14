@@ -1,4 +1,5 @@
 #include "ui/ActivitiesWidget.h"
+#include "core/Kinds.h"
 #include "core/FolderTree.h"
 #include "core/Format.h"
 #include "ui/Icons.h"
@@ -323,6 +324,43 @@ void ActivitiesWidget::showContextMenu(const QPoint& pos)
         menu.addAction(QStringLiteral("Agregar subactividad"), this, [this, item] { addChild(item); });
         menu.addAction(QStringLiteral("Renombrar"), this, [this, item] { m_tree->editItem(item, 0); });
         menu.addAction(QStringLiteral("Horas previas…"), this, [this, item] { editPriorHours(item); });
+        // Mejoras 3.0: tipo de actividad (define el verbo: estudiado, trabajado, leído…)
+        {
+            const qint64 id = item->data(0, kIdRole).toLongLong();
+            const FolderTree tree(m_db->folders());
+            const QString own = tree.find(id) ? tree.find(id)->kind : QString();
+            const kinds::Kind effective = kinds::of(tree, id);
+            auto* kindMenu = menu.addMenu(QStringLiteral("Tipo: %1").arg(effective.name));
+            auto add = [&](const QString& label, const QString& kindId, bool checked) {
+                QAction* a = kindMenu->addAction(label);
+                a->setCheckable(true);
+                a->setChecked(checked);
+                connect(a, &QAction::triggered, this, [this, id, kindId] {
+                    m_db->setFolderKind(id, kindId);
+                    refresh(id);
+                    emit activitiesChanged();
+                });
+            };
+            const bool root = tree.find(id) && tree.find(id)->parentId == 0;
+            if (!root) add(QStringLiteral("El de la actividad de arriba"), QString(), own.isEmpty());
+            for (const kinds::Kind& k : kinds::builtin())
+                add(k.name, k.id, own == k.id || (root && own.isEmpty() && k.id == QLatin1String("estudio")));
+            if (own.startsWith(QLatin1String("otro:"))) add(kinds::byId(own).name, own, true);
+            kindMenu->addSeparator();
+            kindMenu->addAction(QStringLiteral("Otro…"), this, [this, id] {
+                bool ok = false;
+                const QString name = QInputDialog::getText(this, QStringLiteral("Tipo de actividad"),
+                    QStringLiteral("Nombre del tipo (ej.: Entrenamiento):"), QLineEdit::Normal, QString(), &ok).trimmed();
+                if (!ok || name.isEmpty()) return;
+                const QString part = QInputDialog::getText(this, QStringLiteral("Tipo de actividad"),
+                    QStringLiteral("¿Cómo se dice lo hecho? (ej.: entrenado → «2h entrenado»)\nVacío: «2h de %1».").arg(name.toLower()),
+                    QLineEdit::Normal, QString(), &ok).trimmed();
+                if (!ok) return;
+                m_db->setFolderKind(id, kinds::customId(name, part));
+                refresh(id);
+                emit activitiesChanged();
+            });
+        }
         auto* colorMenu = menu.addMenu(QStringLiteral("Color"));
         fillColorMenu(colorMenu, item->data(0, kIdRole).toLongLong());
         menu.addSeparator();

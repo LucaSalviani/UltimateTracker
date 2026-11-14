@@ -5,6 +5,7 @@
 #include "core/Milestones.h"
 #include "core/Sync.h"
 #include "core/Live.h"
+#include "core/Kinds.h"
 #include <QSqlQuery>
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
@@ -512,6 +513,24 @@ private slots:
         s->start(); advance(db, *s, 25 * 60 + 1);
         s->setFolderId(other);
         QVERIFY(!s->skipWouldExtend());
+    }
+
+    void activityKinds()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 fac = db.addFolder(0, "Facultad"), so = db.addFolder(fac, "SO"), free = db.addFolder(0, "Freelance");
+        db.setFolderKind(free, "trabajo");
+        FolderTree t(db.folders());
+        QCOMPARE(kinds::of(t, so).done, QString("estudiado"));        // hereda (por defecto, estudio)
+        QCOMPARE(kinds::of(t, free).done, QString("trabajado"));
+        QCOMPARE(kinds::common(t, {so, fac}).noun, QString("estudio"));
+        QCOMPARE(kinds::common(t, {so, free}).noun, QString("foco")); // mezcla → neutro
+        db.setFolderKind(fac, kinds::customId("Entrenamiento", "entrenado"));
+        t = FolderTree(db.folders());
+        QCOMPARE(kinds::of(t, so).done, QString("entrenado"));
+        QCOMPARE(kinds::of(t, so).name, QString("Entrenamiento"));
+        QCOMPARE(kinds::of(t, so).doneFem, QString("entrenadas"));
     }
 
     void goalDurations()

@@ -16,6 +16,7 @@
 #include "core/Milestones.h"
 #include "core/Sync.h"
 #include "core/Live.h"
+#include "core/Kinds.h"
 #include "ui/SyncDialog.h"
 #include "ui/LiveStats.h"
 #include "ui/TimerDeck.h"
@@ -1306,10 +1307,12 @@ void MainWindow::refreshLiveStats()
     }
     if (cur && (!m_liveActivityScope || scope.contains(cur->folderId))) {
         d.pomos += cur->doneUnits();
+        activities.insert(cur->folderId);
         d.seconds += cur->studiedSec;       // el que corre suma minutos en vivo
         activities.insert(cur->folderId);
     }
     d.activities = int(activities.size());
+    d.doneWord = (m_liveActivityScope ? kinds::of(m_tree, folder) : kinds::common(m_tree, activities)).done;
     if (m_liveActivityScope) {
         // Total histórico de la actividad (lo que corre ya está guardado cada 5 s).
         d.activityTotalSec = m_tree.rollUp(m_db->studyByFolder()).value(folder);
@@ -1767,14 +1770,14 @@ void MainWindow::maybeShowMonthSummary()
         if (perFolder.value(id) > topSec) { topSec = perFolder.value(id); topId = id; }
 
     QStringList lines;
-    lines << QStringLiteral("Estudiaste %1 en %2 %3").arg(fmt::hours(total)).arg(days).arg(days == 1 ? "día" : "días");
+    lines << QStringLiteral("Sumaste %1 en %2 %3").arg(fmt::hours(total)).arg(days).arg(days == 1 ? "día" : "días");
     if (before > 0) {
         const int pct = int(std::lround(100.0 * (total - before) / before));
         lines << (pct >= 0 ? QStringLiteral("%1 % más que el mes anterior").arg(pct)
                            : QStringLiteral("%1 % menos que el mes anterior").arg(-pct));
     }
     if (topId && m_tree.find(topId))
-        lines << QStringLiteral("Lo que más estudiaste: %1 (%2)").arg(m_tree.find(topId)->name, fmt::hours(topSec));
+        lines << QStringLiteral("Lo que más %1: %2 (%3)").arg(kinds::of(m_tree, topId).past, m_tree.find(topId)->name, fmt::hours(topSec));
     if (bestDay.isValid()) lines << QStringLiteral("Tu mejor día: %1 (%2)").arg(fmt::hours(best), fmt::shortDate(bestDay));
     QMessageBox box(this);
     box.setWindowTitle(QStringLiteral("Resumen del mes"));
@@ -2304,7 +2307,17 @@ void MainWindow::checkGoalReached()
     m_db->setSetting(key, QDateTime::currentDateTime().toString(Qt::ISODate));
     toast(QStringLiteral("🎯 ¡Objetivo del día cumplido! %1").arg(fmt::duration(int(sec))));
     celebrate(int(Celebration::Kind::Goal), QStringLiteral("Objetivo del día"), QStringLiteral("¡Cumplido!"),
-              QStringLiteral("%1 estudiadas hoy").arg(fmt::duration(int(sec))));
+              QStringLiteral("%1 %2 hoy").arg(fmt::duration(int(sec)), todayKind().doneFem));
+}
+
+// Mejoras 3.0: el tipo (estudio, trabajo…) de lo que hiciste hoy; si hay mezcla, el neutro.
+kinds::Kind MainWindow::todayKind() const
+{
+    QSet<qint64> ids;
+    for (const Pomodoro& p : m_todayPomos) ids.insert(p.folderId);
+    if (const auto cur = m_session->currentPomodoro()) ids.insert(cur->folderId);
+    if (ids.isEmpty()) ids.insert(m_session->folderId());
+    return kinds::common(m_tree, ids);
 }
 
 // M17: el próximo pomodoro viene cargado con la duración que pide el objetivo

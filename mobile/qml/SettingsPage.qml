@@ -88,7 +88,7 @@ Flickable {
             Toggle {
                 Layout.fillWidth: true
                 text: "El pomodoro en curso ocupa un bloque del objetivo"
-                detail: "Apagado: el bloque se llena recién a medida que estudiás."
+                detail: "Apagado: el bloque se llena recién a medida que avanzás."
                 checked: page.num("goal_running", 0) === 0
                 onToggled: (v) => ut.setSetting("goal_running", v ? 0 : 1)
             }
@@ -102,7 +102,7 @@ Flickable {
             StepRow {
                 Layout.fillWidth: true
                 text: "El día empieza a las"
-                detail: "Lo que estudies antes de esa hora cuenta para el día anterior."
+                detail: "Lo que hagas antes de esa hora cuenta para el día anterior."
                 valueText: (page.num("day_start_hour", 4) < 10 ? "0" : "") + page.num("day_start_hour", 4) + ":00"
                 onMinus: ut.setSetting("day_start_hour", Math.max(0, page.num("day_start_hour", 4) - 1))
                 onPlus: ut.setSetting("day_start_hour", Math.min(12, page.num("day_start_hour", 4) + 1))
@@ -111,7 +111,7 @@ Flickable {
             StepRow {
                 Layout.fillWidth: true
                 text: "Comodines por semana"
-                detail: "Días sin estudiar que no cortan la racha."
+                detail: "Días sin pomodoros que no cortan la racha. Cambiarlos vale desde hoy, no hacia atrás."
                 valueText: page.num("jokers_per_week", 2)
                 onMinus: ut.setSetting("jokers_per_week", Math.max(0, page.num("jokers_per_week", 2) - 1))
                 onPlus: ut.setSetting("jokers_per_week", Math.min(7, page.num("jokers_per_week", 2) + 1))
@@ -125,7 +125,7 @@ Flickable {
             spacing: 2
             Repeater {
                 model: [
-                    {key: "ms_day", text: "Marca del día", detail: "Bronce, plata y oro según lo que estudiás en el día"},
+                    {key: "ms_day", text: "Marca del día", detail: "Bronce, plata y oro según las horas del día"},
                     {key: "ms_streaks", text: "Rachas y récords", detail: ""},
                     {key: "ms_weekly", text: "Meta semanal", detail: ""},
                     {key: "ms_hours", text: "Horas por actividad", detail: "Avisos al llegar a 1, 5, 10, 25, 50, 100 h…"},

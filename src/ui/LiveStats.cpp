@@ -77,7 +77,7 @@ void LiveStats::paintEvent(QPaintEvent*)
     // M32: un solo formato de tiempo ("1h40") y "pomodoros" con todas las letras.
     const Block blocks[3] = {
         {QString::number(m_data.pomos), m_data.pomos == 1 ? QStringLiteral("pomodoro") : QStringLiteral("pomodoros")},
-        {fmt::duration(m_data.seconds), QStringLiteral("estudiado")},
+        {fmt::duration(m_data.seconds), m_data.doneWord},
         m_data.activityScope
             ? Block{QStringLiteral("%1%").arg(m_data.daySeconds > 0 ? qRound(100.0 * m_data.seconds / m_data.daySeconds) : 0),
                     QStringLiteral("del día")}

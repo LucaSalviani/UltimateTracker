@@ -1,4 +1,5 @@
 #include "ui/StatsWidget.h"
+#include "core/Kinds.h"
 #include "core/FolderTree.h"
 #include "core/DayClock.h"
 #include "core/Format.h"
@@ -39,6 +40,7 @@ static QColor statsInk() { return theme::pomoAccent; }
 static QString roundHours(qint64 sec) { return QStringLiteral("%1 h").arg(QLocale().toString(qint64(std::llround(sec / 3600.0)))); }
 
 struct StatsData {
+    QString studyLabel = QStringLiteral("Estudio");   // Mejoras 3.0: según el tipo de actividad
     StatsWidget::Period period = StatsWidget::Period::Week;
     QDate from, to, today;
     stats::Totals totals;
@@ -214,7 +216,7 @@ private:
     {
         struct Card { QString label; qint64 sec; QColor accent; };
         const Card cards[4] = {
-            {QStringLiteral("Estudio"), data.totals.study, theme::text},
+            {data.studyLabel, data.totals.study, theme::text},
             {QStringLiteral("Recreos"), data.totals.breaks, theme::text},
             {QStringLiteral("Recreos indebidos"), data.totals.undue,
              data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text},
@@ -742,6 +744,7 @@ void StatsWidget::refresh()
         d.filterSet = tree.subtree(filterId);
         d.filter = &d.filterSet;
     }
+    d.studyLabel = (d.filter ? kinds::of(tree, filterId) : kinds::general(tree)).name;
     d.totals = stats::totals(*m_db, d.from, d.to, d.filter, now);
     d.byDay = stats::studyByDay(*m_db, d.from, d.to, d.filter);
     if (m_period == Period::Day) {

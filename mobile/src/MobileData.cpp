@@ -5,6 +5,7 @@
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "core/Goals.h"
+#include "core/Kinds.h"
 #include "core/Milestones.h"
 #include "core/Stats.h"
 
@@ -163,7 +164,7 @@ QString MobileApp::describeParts(bool timeMode, int totalMin, const QVariantList
 {
     if (timeMode) {
         const auto p = goals::parse(QStringLiteral("t:%1").arg(totalMin), workMin());
-        QString out = fmt::duration(qint64(totalMin) * 60) + QStringLiteral(" de estudio");
+        QString out = fmt::duration(qint64(totalMin) * 60) + QStringLiteral(" de %1").arg(kinds::general(m_tree).noun);
         if (p.ok && p.blocks.size() > 1)
             out += QStringLiteral(" · ≈ %1 con recreos").arg(fmt::duration(goals::withBreaksSec(p, goals::breakSecFor(*m_db, breakMin() * 60))));
         return out;
@@ -425,6 +426,8 @@ QVariantMap MobileApp::stats(const QString& period, int offset, qint64 folder) c
     out["dayGoalState"] = period == QLatin1String("day") ? goalState(from) : 0;
     out["dayTitle"] = period == QLatin1String("day") ? m_db->dayTitle(from) : QString();
     out["folderName"] = filtered ? m_tree.find(folder)->name : QString();
+    out["doneFem"] = (filtered ? kinds::of(m_tree, folder) : kinds::general(m_tree)).doneFem;
+    out["noun"] = (filtered ? kinds::of(m_tree, folder) : kinds::general(m_tree)).noun;
     return out;
 }
 
@@ -567,7 +570,7 @@ void MobileApp::afterSave(qint64 id)
             if (parsed.ok && goals::allDone(goals::fillByActivity(parsed, studiedByFolder(done, false), m_tree))) {
                 m_db->setSetting(key, QDateTime::currentDateTime().toString(Qt::ISODate));
                 emit celebrate(QStringLiteral("Objetivo del día"), QStringLiteral("¡Cumplido!"),
-                               QStringLiteral("%1 estudiadas hoy").arg(fmt::duration(sec)));
+                               QStringLiteral("%1 %2 hoy").arg(fmt::duration(sec), kinds::general(m_tree).doneFem));
             }
         }
     }
@@ -603,7 +606,7 @@ void MobileApp::afterSave(qint64 id)
         const int best = m_db->setting("ms/best_streak", 0).toInt();
         if (streak.days > best) m_db->setSetting("ms/best_streak", streak.days);
         if (ms::streakMarks().contains(streak.days) && once("ms/streak/" + dk))
-            emit celebrate(QStringLiteral("Racha"), QStringLiteral("%1 días").arg(streak.days), QStringLiteral("seguidos estudiando"));
+            emit celebrate(QStringLiteral("Racha"), QStringLiteral("%1 días").arg(streak.days), QStringLiteral("seguidos sumando"));
     }
     if (cfg.dayMark) {
         const int level = ms::dayMark(todaySec, cfg.markMin);
@@ -671,6 +674,9 @@ QVariantMap MobileApp::folderInfo(qint64 id) const
     m["prior"] = m_db->priorByFolder().value(id) / 3600.0;
     m["total"] = fmt::hours(m_tree.rollUp(m_db->studyByFolder()).value(id));
     m["children"] = int(m_tree.children(id).size());
+    m["kind"] = f->kind;                              // el propio ("" = hereda)
+    m["kindName"] = kinds::of(m_tree, id).name;       // el que vale
+    m["root"] = f->parentId == 0;
     return m;
 }
 
@@ -790,7 +796,7 @@ QVariantMap MobileApp::dayCard() const
                                        : QStringLiteral(" · te %1 %2 %3").arg(left == 1 ? "queda" : "quedan").arg(left).arg(left == 1 ? "comodín" : "comodines");
         m["streak"] = s;
         if (!st.todayDone)
-            m["warn"] = left == 0 ? QStringLiteral("Si hoy no estudiás, se corta la racha.") : QStringLiteral("Si hoy no estudiás, se usa un comodín.");
+            m["warn"] = (left == 0 ? QStringLiteral("Si hoy no %1, se corta la racha.") : QStringLiteral("Si hoy no %1, se usa un comodín.")).arg(kinds::general(m_tree).vos);
         m["danger"] = !st.todayDone && left == 0;
     }
     return m;
@@ -799,5 +805,26 @@ QVariantMap MobileApp::dayCard() const
 void MobileApp::dismissDayCard()
 {
     m_db->setSetting("daycard/last", fmt::dayKey(dayclock::today()));
+    bump();
+}
+
+QVariantMap MobileApp::words() const
+{
+    const kinds::Kind k = kinds::general(m_tree);
+    return {{"noun", k.noun}, {"done", k.done}, {"doneFem", k.doneFem}, {"vos", k.vos}, {"past", k.past}, {"inf", k.inf}};
+}
+
+QVariantList MobileApp::kindChoices() const
+{
+    QVariantList out;
+    for (const kinds::Kind& k : kinds::builtin()) out.append(QVariantMap{{"id", k.id}, {"name", k.name}});
+    return out;
+}
+
+void MobileApp::setFolderKind(qint64 id, const QString& kind)
+{
+    m_db->setFolderKind(id, kind);
+    reloadFolders();
+    emit changed();
     bump();
 }

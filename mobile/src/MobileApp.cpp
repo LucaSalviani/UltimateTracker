@@ -347,7 +347,7 @@ void MobileApp::syncAndroid()
         m_android->showRunning(title, !live.isEmpty() ? QStringLiteral("En vivo desde %1").arg(live)
                                       : brk ? QStringLiteral("Volvés en un rato") : QStringLiteral("A concentrarse"), end, brk);
         m_android->scheduleEnd(end, brk ? QStringLiteral("Terminó el recreo") : QStringLiteral("¡Pomodoro terminado!"),
-                               brk ? QStringLiteral("A seguir estudiando") : QStringLiteral("Elegí si tomás un recreo"));
+                               brk ? QStringLiteral("A seguir") : QStringLiteral("Elegí si tomás un recreo"));
     } else if (s == S::Paused) {
         m_android->cancelEnd();
         m_android->showRunning(QStringLiteral("Pomodoro en pausa · %1").arg(folderName()),

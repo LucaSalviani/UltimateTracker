@@ -76,6 +76,11 @@ public:
     Q_INVOKABLE QString clock(int sec) const;   // "24:59"
     Q_INVOKABLE void appActivated();            // al volver a la app: ponerse al día
     Q_INVOKABLE void appDeactivated();
+    // Mejoras 3.0: las palabras según el tipo de tus actividades (estudio, trabajo… o "foco" si hay mezcla)
+    Q_PROPERTY(QVariantMap words READ words NOTIFY changed)
+    QVariantMap words() const;
+    Q_INVOKABLE QVariantList kindChoices() const;
+    Q_INVOKABLE void setFolderKind(qint64 id, const QString& kind);
     // Mejoras 3.0: recreo guardado y pomodoro extendido
     Q_PROPERTY(int breakBankMin READ breakBankMin NOTIFY changed)
     Q_PROPERTY(bool canTakeBreak READ canTakeBreak NOTIFY changed)
