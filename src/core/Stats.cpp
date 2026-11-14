@@ -1,4 +1,6 @@
 #include "core/Stats.h"
+#include <QJsonArray>
+#include <QJsonDocument>
 #include "core/DayClock.h"
 #include "core/Format.h"
 
@@ -48,20 +50,75 @@ QMap<QDate, qint64> studyByDay(const Database& db, const QDate& from, const QDat
     return out;
 }
 
+int StreakRules::jokersOn(const QDate& d) const
+{
+    int n = jokers.isEmpty() ? 0 : jokers.first().second;
+    for (const auto& [from, count] : jokers) {
+        if (from > d) break;
+        n = count;
+    }
+    return n;
+}
+
+StreakRules StreakRules::fixed(int jokersPerWeek)
+{
+    StreakRules r;
+    r.jokers.append({QDate(2000, 1, 1), jokersPerWeek});
+    return r;
+}
+
+StreakRules StreakRules::load(const Database& db)
+{
+    StreakRules r;
+    const QJsonArray arr = QJsonDocument::fromJson(db.setting("jokers_history").toString().toUtf8()).array();
+    for (const QJsonValue& v : arr) {
+        const QJsonArray e = v.toArray();
+        const QDate d = QDate::fromString(e.at(0).toString(), Qt::ISODate);
+        if (d.isValid()) r.jokers.append({d, e.at(1).toInt()});
+    }
+    if (r.jokers.isEmpty()) r.jokers.append({QDate(2000, 1, 1), db.setting("jokers_per_week", 2).toInt()});
+    r.resetDay = QDate::fromString(db.setting("streak_reset").toString(), Qt::ISODate);
+    return r;
+}
+
+void setJokers(Database& db, int perWeek, const QDate& today)
+{
+    StreakRules r = StreakRules::load(db);
+    if (r.jokersOn(today) == perWeek) { db.setSetting("jokers_per_week", perWeek); return; }
+    while (!r.jokers.isEmpty() && r.jokers.last().first >= today) r.jokers.removeLast();
+    if (r.jokers.isEmpty() || r.jokers.last().second != perWeek) r.jokers.append({today, perWeek});
+    QJsonArray arr;
+    for (const auto& [from, count] : r.jokers) arr.append(QJsonArray{from.toString(Qt::ISODate), count});
+    db.setSetting("jokers_history", QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+    db.setSetting("jokers_per_week", perWeek);
+}
+
+void resetStreak(Database& db, const QDate& today)
+{
+    db.setSetting("streak_reset", today.isValid() ? today.toString(Qt::ISODate) : QString());
+}
+
+int jokersToday(const Database& db, const QDate& today) { return StreakRules::load(db).jokersOn(today); }
+
 Streak streak(const QSet<QDate>& studied, const QDate& today, int jokersPerWeek)
+{
+    return streak(studied, today, StreakRules::fixed(jokersPerWeek));
+}
+
+Streak streak(const QSet<QDate>& studied, const QDate& today, const StreakRules& rules)
 {
     Streak s;
     s.todayDone = studied.contains(today);
-    if (studied.isEmpty()) return s;
-
+    const QDate currentMonday = fmt::mondayOf(today);
     QDate earliestStudied;
-    QDate currentMonday = fmt::mondayOf(today);
     int jokersInWeek = 0;
     QDate weekMonday = currentMonday;
+    QVector<QDate> used;
 
     // Recorremos hacia atrás. Hoy sin estudiar no corta ni gasta comodín.
     QDate d = s.todayDone ? today : today.addDays(-1);
     for (int guard = 0; guard < 365 * 30; ++guard, d = d.addDays(-1)) {
+        if (rules.resetDay.isValid() && d < rules.resetDay) break;   // reiniciada a mano
         const QDate monday = fmt::mondayOf(d);
         if (monday != weekMonday) {
             weekMonday = monday;
@@ -71,31 +128,27 @@ Streak streak(const QSet<QDate>& studied, const QDate& today, int jokersPerWeek)
             earliestStudied = d;
             continue;
         }
-        if (jokersInWeek < jokersPerWeek) {
+        if (jokersInWeek < rules.jokersOn(d)) {   // los comodines que regían ese día
             ++jokersInWeek;
-            if (monday == currentMonday) ++s.jokersThisWeek;
+            used.append(d);
             continue;
         }
         break; // racha cortada
     }
 
-    if (!earliestStudied.isValid()) {
-        s.jokersThisWeek = 0;
-        return s;
-    }
+    if (!earliestStudied.isValid()) return s;
     // Los comodines usados antes del primer día estudiado no son parte de la racha.
-    if (fmt::mondayOf(earliestStudied) == currentMonday) {
-        int used = 0;
-        for (QDate x = earliestStudied; x < today; x = x.addDays(1))
-            if (!studied.contains(x)) ++used;
-        s.jokersThisWeek = used;
+    for (const QDate& x : used) {
+        if (x < earliestStudied) continue;
+        s.jokerDays.append(x);
+        if (fmt::mondayOf(x) == currentMonday) ++s.jokersThisWeek;
     }
-    // Mejoras 2.0: solo suman los días con algún pomodoro; los comodines
-    // sostienen la racha pero no la agrandan.
+    // Solo suman los días con algún pomodoro; los comodines sostienen la
+    // racha pero no la agrandan.
     const QDate end = s.todayDone ? today : today.addDays(-1);
-    s.days = 0;
     for (QDate x = earliestStudied; x <= end; x = x.addDays(1))
         if (studied.contains(x)) ++s.days;
+    s.since = earliestStudied;
     return s;
 }
 

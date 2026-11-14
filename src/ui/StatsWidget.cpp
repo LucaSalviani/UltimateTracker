@@ -785,7 +785,7 @@ void StatsWidget::refresh()
         d.bestStreak = qMax(m_db->setting("ms/best_streak", 0).toInt(), 0);
     }
     if (d.ms.stages) for (qint64 v : m_db->studyByFolder()) d.allSec += v;
-    d.streak = stats::streak(m_db->studiedDays(), d.today, m_jokers);
+    d.streak = stats::streak(m_db->studiedDays(), d.today, stats::StreakRules::load(*m_db));
     d.bestStreak = qMax(d.bestStreak, d.streak.days);
 
     const auto periodTotals = tree.rollUp(m_db->studyByFolder(d.from, d.to));

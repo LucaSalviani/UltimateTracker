@@ -1,4 +1,6 @@
 #include "ui/SettingsDialog.h"
+#include "core/DayClock.h"
+#include "core/Stats.h"
 #include "ui/Theme.h"
 #include "ui/Tiles.h"
 #include "ui/Celebration.h"
@@ -692,7 +694,7 @@ void SettingsDialog::accept()
 {
     m_db->setSetting("work_min", m_work->value());
     m_db->setSetting("break_min", m_break->value());
-    m_db->setSetting("jokers_per_week", m_jokers->value());
+    stats::setJokers(*m_db, m_jokers->value(), dayclock::today());   // Mejoras 3.0: desde hoy, no hacia atrás
     m_db->setSetting("date_format", m_dateFormat->currentIndex() == 0 ? "numeric" : "long");
     m_db->setSetting("day_start_hour", m_dayStart->value());
     m_db->setSetting("goal_input", m_goalInput->currentData().toString());

@@ -1471,7 +1471,7 @@ void MainWindow::checkShortTermMilestones()
             celebrate(int(Celebration::Kind::Goal), QStringLiteral("Récord personal"), QStringLiteral("Tu mejor semana"),
                       QStringLiteral("%1 (antes %2)").arg(fmt::hours(week), fmt::hours(rec.bestWeek)));
         }
-        const auto streak = stats::streak(m_db->studiedDays(), m_today, m_jokers);
+        const auto streak = stats::streak(m_db->studiedDays(), m_today, stats::StreakRules::load(*m_db));
         const int best = m_db->setting("ms/best_streak", 0).toInt();
         if (streak.days > best) {
             m_db->setSetting("ms/best_streak", streak.days);

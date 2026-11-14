@@ -132,8 +132,8 @@ Greeting::Greeting(Database* db, bool full, QWidget* parent)
     }
 
     // ---- Racha y comodines (Mejoras 2.0)
-    const int jokers = m_db->setting("jokers_per_week", 2).toInt();
-    const auto st = stats::streak(m_db->studiedDays(), today, jokers);
+    const int jokers = stats::jokersToday(*m_db, today);
+    const auto st = stats::streak(m_db->studiedDays(), today, stats::StreakRules::load(*m_db));
     const int left = qMax(0, jokers - st.jokersThisWeek);
     if (st.days > 0) {
         QString s = QStringLiteral("<b>Racha:</b> %1 %2").arg(st.days).arg(st.days == 1 ? "día" : "días");

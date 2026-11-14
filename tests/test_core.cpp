@@ -410,6 +410,42 @@ private slots:
         QCOMPARE(undue, qint64(0));
     }
 
+    // Mejoras 3.0: cambiar los comodines no cambia la racha hacia atrás; y se puede reiniciar.
+    void streakRulesNotRetroactive()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        db.setSetting("jokers_per_week", 0);
+        // lun 12/10 … dom 25/10/2026; falta el jue 15 y el mié 21
+        QSet<QDate> studied;
+        for (int d = 12; d <= 25; ++d) if (d != 15 && d != 21) studied.insert(QDate(2026, 10, d));
+        const QDate today(2026, 10, 25);
+        // Sin comodines: se cortó el 21 → 22, 23, 24, 25
+        QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db)).days, 4);
+        // Hoy paso a 2 comodines: lo de antes no revive
+        stats::setJokers(db, 2, today);
+        QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db)).days, 4);
+        QCOMPARE(stats::jokersToday(db, today), 2);
+        // Pero desde hoy sí cubren: falto el 26 y el 27 sigue la racha
+        studied.insert(QDate(2026, 10, 27));
+        const auto s = stats::streak(studied, QDate(2026, 10, 27), stats::StreakRules::load(db));
+        QCOMPARE(s.days, 5);
+        QCOMPARE(s.jokerDays.size(), 1);
+        QCOMPARE(s.since, QDate(2026, 10, 22));
+        // Y al revés: tenía 2, bajo a 0 hoy: los comodines ya usados siguen valiendo
+        Database db2;
+        QVERIFY(db2.open(":memory:"));
+        db2.setSetting("jokers_per_week", 2);
+        QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db2)).days, 12);
+        stats::setJokers(db2, 0, today);
+        QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db2)).days, 12);
+        // Reiniciar a mano: cuenta desde ese día; deshacer la devuelve
+        stats::resetStreak(db2, today);
+        QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db2)).days, 1);
+        stats::resetStreak(db2, QDate());
+        QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db2)).days, 12);
+    }
+
     void goalDurations()
     {
         QCOMPARE(goals::parseDuration("3h30"), 210);

@@ -503,7 +503,7 @@ QVariantMap MobileApp::milestones() const
     out["mark"] = mark;
 
     const int jokers = m_db->setting("jokers_per_week", 2).toInt();
-    const auto streak = stats::streak(m_db->studiedDays(), today, jokers);
+    const auto streak = stats::streak(m_db->studiedDays(), today, stats::StreakRules::load(*m_db));
     const int best = qMax(streak.days, m_db->setting("ms/best_streak", 0).toInt());
     int nextStreak = 0;
     for (int d : ms::streakMarks()) if (d > streak.days) { nextStreak = d; break; }
@@ -599,7 +599,7 @@ void MobileApp::afterSave(qint64 id)
         if (rec.bestWeek >= 2 * 3600 && week > rec.bestWeek && once("ms/rec_week/" + wk))
             emit celebrate(QStringLiteral("Récord personal"), QStringLiteral("Tu mejor semana"),
                            QStringLiteral("%1 (antes %2)").arg(fmt::hours(week), fmt::hours(rec.bestWeek)));
-        const auto streak = stats::streak(m_db->studiedDays(), today, m_db->setting("jokers_per_week", 2).toInt());
+        const auto streak = stats::streak(m_db->studiedDays(), today, stats::StreakRules::load(*m_db));
         const int best = m_db->setting("ms/best_streak", 0).toInt();
         if (streak.days > best) m_db->setSetting("ms/best_streak", streak.days);
         if (ms::streakMarks().contains(streak.days) && once("ms/streak/" + dk))
@@ -651,7 +651,8 @@ QVariant MobileApp::setting(const QString& key, const QVariant& def) const { ret
 
 void MobileApp::setSetting(const QString& key, const QVariant& value)
 {
-    m_db->setSetting(key, value);
+    if (key == QLatin1String("jokers_per_week")) stats::setJokers(*m_db, value.toInt(), dayclock::today());   // desde hoy
+    else m_db->setSetting(key, value);
     if (key == QLatin1String("day_start_hour")) dayclock::setStartHour(value.toInt());
     if (key == QLatin1String("break_min")) setBreakMin(value.toInt());
     reloadToday();
@@ -781,7 +782,7 @@ QVariantMap MobileApp::dayCard() const
                     QStringLiteral(": %1 · %2 %3").arg(fmt::hours(t.study)).arg(pomos).arg(pomos == 1 ? "pomodoro" : "pomodoros");
     }
     const int jokers = m_db->setting("jokers_per_week", 2).toInt();
-    const auto st = stats::streak(m_db->studiedDays(), today, jokers);
+    const auto st = stats::streak(m_db->studiedDays(), today, stats::StreakRules::load(*m_db));
     const int left = qMax(0, jokers - st.jokersThisWeek);
     if (st.days > 0) {
         QString s = QStringLiteral("Racha: %1 %2").arg(st.days).arg(st.days == 1 ? "día" : "días");
