@@ -37,11 +37,18 @@ public:
     void attach(quintptr windowId);   // la ventana que recibe los avisos de sesión
     bool nativeEventFilter(const QByteArray& type, void* message, qintptr* result) override;
 
+    bool locked() const { return m_locked; }
+
 signals:
-    void woke();
+    // why: "desbloqueo", "reanudar" (aviso de Windows) o "salto de reloj" (la app
+    // estuvo congelada: sirve en PCs con suspensión moderna, que no avisan).
+    void woke(const QString& why);
 
 private:
     quintptr m_hwnd = 0;
+    bool     m_locked = false;
+    qint64   m_lastBeat = 0;
+    class QTimer* m_beat = nullptr;
 };
 
 // Atajo global (Ctrl + Alt + P): funciona aunque la app no tenga el foco.

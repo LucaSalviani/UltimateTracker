@@ -45,6 +45,7 @@ public:
     void startTour();                             // Mejoras 2.0: mini tutorial
     void moveMany(const QList<qint64>& ids, qint64 folder);
     void showSelectionMenu(const QList<qint64>& ids, const QPoint& globalPos);
+    void logStart(const QString& line);   // Mejoras 3.0: arranque.log
     void onWake();   // B2-4: la PC se despertó o se desbloqueó (saluda si es la primera vez en el día)
     void quitApp();
     void restartInPlace();   // M34

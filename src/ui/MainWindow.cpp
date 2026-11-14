@@ -31,6 +31,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QTextStream>
+#include <QFile>
 #include <QHBoxLayout>
 #include <QStyle>
 #include <QInputDialog>
@@ -451,8 +453,14 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_wakeDebounce = new QTimer(this);
     m_wakeDebounce->setSingleShot(true);
     m_wakeDebounce->setInterval(4000);   // despertar + desbloquear llegan juntos: uno solo
-    connect(m_wake, &WakeWatcher::woke, m_wakeDebounce, qOverload<>(&QTimer::start));
+    connect(m_wake, &WakeWatcher::woke, this, [this](const QString& why) {
+        logStart(QStringLiteral("aviso: %1%2").arg(why, m_wake->locked() ? QStringLiteral(" (sesión bloqueada)") : QString()));
+        m_wakeDebounce->start();
+    });
     connect(m_wakeDebounce, &QTimer::timeout, this, &MainWindow::onWake);
+    // Mejoras 3.0: los avisos de Windows llegan a la ventana aunque nunca se haya
+    // mostrado (app abierta en la bandeja desde el inicio).
+    m_wake->attach(quintptr(winId()));
     // Celu-4: sincronización con el celu (cada minuto, al terminar un pomodoro y al abrir).
     // En el modo de pruebas no: es una copia de los datos.
     if (!devmode::active()) {
@@ -2126,12 +2134,36 @@ void MainWindow::runDailyBackup()
     sysint::dailyBackup(*m_db, qApp->property("dataDir").toString(), m_db->setting("backup_dir").toString());
 }
 
+// Mejoras 3.0: registro de por qué se abrió (o no) al despertar la PC: arranque.log,
+// junto a la base. Sirve para ver qué pasó si un día no saluda.
+void MainWindow::logStart(const QString& line)
+{
+    QFile f(QDir(QFileInfo(m_db->handle().databaseName()).absolutePath()).filePath(QStringLiteral("arranque.log")));
+    if (f.size() > 200 * 1024) f.remove();
+    if (!f.open(QIODevice::Append | QIODevice::Text)) return;
+    QTextStream(&f) << QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) << "  " << line << "\n";
+}
+
 void MainWindow::onWake()
 {
     checkDayRollover();   // por si el día cambió mientras dormía
-    if ((m_dayCard && m_dayCard->isVisible()) || !Greeting::shouldShow(*m_db)) return;
-    bringToFront();
+    if (m_dayCard && m_dayCard->isVisible()) { logStart(QStringLiteral("despertar: la tarjeta ya está a la vista")); return; }
+    if (!Greeting::shouldShow(*m_db)) {
+        logStart(m_db->setting("greeting", 0).toBool() ? QStringLiteral("despertar: hoy ya saludó, no hace nada")
+                                                       : QStringLiteral("despertar: el saludo está apagado en Ajustes › Sistema"));
+        return;
+    }
+    // Con la sesión bloqueada no tiene sentido mostrarse: al desbloquear llega otro aviso.
+    if (m_wake->locked()) { logStart(QStringLiteral("despertar: sesión bloqueada, espera al desbloqueo")); return; }
+    // Se muestra sí o sí: aunque esté minimizada, en la bandeja, escondida contra
+    // el borde o haya algo en pantalla completa (es el saludo del día).
+    if (m_docked) undock();
+    if (isMinimized()) showNormal();
+    show();
+    win::forceForeground(this, m_btnPin->isChecked());
     showDayCard(false, false);
+    logStart(m_dayCard && m_dayCard->isVisible() ? QStringLiteral("despertar: saludo mostrado")
+                                                 : QStringLiteral("despertar: NO se pudo mostrar el saludo"));
 }
 
 void MainWindow::togglePin(bool on)

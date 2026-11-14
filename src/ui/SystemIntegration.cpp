@@ -1,4 +1,6 @@
 #include "ui/SystemIntegration.h"
+#include <QTimer>
+#include <QDateTime>
 #include "core/Database.h"
 
 #include <QCoreApplication>
@@ -188,6 +190,18 @@ WakeWatcher::WakeWatcher(QObject* parent)
     : QObject(parent)
 {
     QCoreApplication::instance()->installNativeEventFilter(this);
+    // Mejoras 3.0: latido. Si entre dos latidos pasó mucho más de lo normal, la
+    // PC estuvo suspendida (o la app congelada), avise Windows o no.
+    m_lastBeat = QDateTime::currentMSecsSinceEpoch();
+    m_beat = new QTimer(this);
+    m_beat->setInterval(10000);
+    connect(m_beat, &QTimer::timeout, this, [this] {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 gap = now - m_lastBeat;
+        m_lastBeat = now;
+        if (gap > 120000) emit woke(QStringLiteral("salto de reloj (%1 min)").arg(gap / 60000));
+    });
+    m_beat->start();
 }
 
 WakeWatcher::~WakeWatcher()
@@ -216,9 +230,13 @@ bool WakeWatcher::nativeEventFilter(const QByteArray& type, void* message, qintp
 #ifdef Q_OS_WIN
     if (type == "windows_generic_MSG") {
         const MSG* msg = static_cast<MSG*>(message);
-        if (msg->message == WM_WTSSESSION_CHANGE && msg->wParam == WTS_SESSION_UNLOCK) emit woke();
+        if (msg->message == WM_WTSSESSION_CHANGE && msg->wParam == WTS_SESSION_LOCK) m_locked = true;
+        if (msg->message == WM_WTSSESSION_CHANGE && msg->wParam == WTS_SESSION_UNLOCK) {
+            m_locked = false;
+            emit woke(QStringLiteral("desbloqueo"));
+        }
         if (msg->message == WM_POWERBROADCAST && (msg->wParam == PBT_APMRESUMEAUTOMATIC || msg->wParam == PBT_APMRESUMESUSPEND))
-            emit woke();
+            emit woke(QStringLiteral("reanudar"));
     }
 #else
     Q_UNUSED(type);
