@@ -52,6 +52,7 @@ public:
         qint64   breakMs = 0;
         qint64   breakPlannedMs = 0;
         qint64   folderId = 0;
+        bool     midBreak = false; // recreo a mitad de pomodoro (el pomodoro sigue después)
     };
 
     using Clock = std::function<qint64()>; // milisegundos epoch
@@ -104,6 +105,17 @@ public:
     // Al abrir la app: un pomodoro que quedó "corriendo" (cierre o corte de luz)
     // se guarda hasta donde llegó, y se retoma el tiempo pendiente de hoy.
     void recoverAfterRestart();
+
+    // Mejoras 3.0: recreo guardado. Cada recreo que salteás se acumula y se
+    // puede tomar a mitad de un pomodoro: se pausa, corre el recreo (legítimo,
+    // no indebido) y al terminar seguís el mismo pomodoro.
+    int  breakBankSec() const { return m_bankSec; }
+    int  breakPlannedSec() const { return int(m_breakPlannedMs / 1000); }
+    bool canTakeBreak() const { return !m_passive && m_hasPomo && m_bankSec >= 60 && (m_state == State::Running || m_state == State::Paused); }
+    void takeBreakNow();
+    bool midBreak() const { return m_midBreak; }
+    // ¿"Seguir sin recreo" va a extender el pomodoro que terminó (en vez de abrir otro)?
+    bool skipWouldExtend() const;
 
     // Mejoras 2.0: "Me voy": termina la sesión; lo que sigue no es recreo indebido.
     void endSession();
@@ -174,6 +186,11 @@ private:
     qint64   m_pomoMs = 0;
     qint64   m_lastPomoId = 0;
     Pomodoro m_lastPomo;      // el último terminado (para mandarlo en vivo)
+
+    int      m_bankSec = 0;       // recreo guardado (de los salteados)
+    bool     m_midBreak = false;  // el recreo en curso es a mitad de pomodoro
+    void     setBank(int sec);
+    void     endMidBreak();
 
     bool     m_passive = false;
     bool     m_releasing = false;

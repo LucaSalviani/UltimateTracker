@@ -384,7 +384,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         if (!p) return;
         const qint64 total = m_tree.rollUp(m_db->studyByFolder()).value(p->folderId);
         celebrate(int(Celebration::Kind::Pomodoro),
-                  QStringLiteral("Pomodoro %1 completo").arg(m_todayPomos.size() + 1, 2, 10, QChar('0')),
+                  QStringLiteral("Pomodoro %1 completo").arg(todayCount(), 2, 10, QChar('0')),
                   fmt::duration(qMax(p->studiedSec, p->plannedSec)),
                   QStringLiteral("%1 · %2 en total").arg(m_tree.path(p->folderId), fmt::duration(int(total))));
     });
@@ -808,6 +808,7 @@ QWidget* MainWindow::buildDeck()
     connect(m_deck, &TimerDeck::endBreakClicked, m_session, &SessionController::endBreakEarly);
     connect(m_deck, &TimerDeck::silenceClicked, m_session, &SessionController::silenceAlarm);
     connect(m_deck, &TimerDeck::leaveClicked, this, &MainWindow::leaveSession);
+    connect(m_deck, &TimerDeck::takeBreakClicked, m_session, &SessionController::takeBreakNow);
     connect(m_deck, &TimerDeck::goTodayClicked, this, &MainWindow::goToday);
     connect(m_deck, &TimerDeck::durationChanged, this, [this](int min) {
         // El − / + ajusta lo que está por arrancar: el pomodoro o el recreo.
@@ -1242,9 +1243,9 @@ int MainWindow::todayCount() const
     const QSet<qint64> scope = m_tree.subtree(m_session->folderId());
     int n = 0;
     for (const Pomodoro& p : m_todayPomos)
-        if ((p.status == PomoStatus::Completed || p.status == PomoStatus::Final) &&
-            (!m_liveActivityScope || scope.contains(p.folderId)))
-            ++n;
+        if (!m_liveActivityScope || scope.contains(p.folderId)) n += p.doneUnits();   // Mejoras 3.0: por tramos
+    if (const auto cur = m_session->currentPomodoro(); cur && (!m_liveActivityScope || scope.contains(cur->folderId)))
+        n += cur->doneUnits();   // el que corre extendido ya trae tramos hechos
     return n;
 }
 
@@ -1270,7 +1271,12 @@ void MainWindow::refreshDeck()
     m.number = todayCount() + 1;
     if (m.mode == M::BreakReady || m.mode == M::Break) m.number = todayCount();
     m.remainingSec = m_session->remainingSec();
-    m.totalSec = cur ? cur->plannedSec : (m.mode == M::Break ? m_session->breakSec() : m_session->workSec());
+    m.totalSec = m.mode == M::Break || m.mode == M::BreakOver ? qMax(1, m_session->breakPlannedSec())
+               : cur ? cur->plannedSec : m_session->workSec();
+    m.bankSec = m_session->breakBankSec();
+    m.canTakeBreak = m_session->canTakeBreak();
+    m.willExtend = m_session->state() == S::WorkDone && m_session->skipWouldExtend();
+    m.midBreak = m_session->midBreak();
     m.durationMin = (m.mode == M::BreakReady ? m_session->breakSec() : m_session->workSec()) / 60;
     // Los pomodoros se registran solo hoy: viendo otro día, el reproductor ofrece volver.
     m.canStart = m_grid->zoom() != GridWidget::Zoom::Day || m_grid->anchor() == m_today;
@@ -1294,11 +1300,12 @@ void MainWindow::refreshLiveStats()
     QSet<qint64> activities;
     for (const Pomodoro& p : m_todayPomos) {
         if (m_liveActivityScope && !scope.contains(p.folderId)) continue;
-        if (p.status == PomoStatus::Completed || p.status == PomoStatus::Final) ++d.pomos;
+        d.pomos += p.doneUnits();
         d.seconds += p.studiedSec;          // los que están en pausa suman minutos
         activities.insert(p.folderId);
     }
     if (cur && (!m_liveActivityScope || scope.contains(cur->folderId))) {
+        d.pomos += cur->doneUnits();
         d.seconds += cur->studiedSec;       // el que corre suma minutos en vivo
         activities.insert(cur->folderId);
     }

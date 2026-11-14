@@ -112,6 +112,8 @@ QJsonObject LiveLink::snapshot() const
         o.insert("pomo_ended", s.pomo.endedAt);
         o.insert("pomo_planned", s.pomo.plannedSec);
         o.insert("pomo_linked", s.pomo.linked);
+        o.insert("pomo_segments", s.pomo.segments);
+        o.insert("mid_break", s.midBreak);
     }
     return o;
 }
@@ -204,6 +206,8 @@ void LiveLink::applyRemote(const QJsonObject& data, bool announce)
         s.pomo.endedAt = num(data, "pomo_ended");
         s.pomo.plannedSec = int(num(data, "pomo_planned"));
         s.pomo.linked = data.value("pomo_linked").toBool();
+        s.pomo.segments = data.value("pomo_segments").toString();
+        s.midBreak = data.value("mid_break").toBool();
         s.pomo.status = PomoStatus::Running;
         s.pomoMs = num(data, "pomo_ms");
         if (s.pomo.id <= 0 && m_sync) m_sync->syncNow();   // todavía no llegó: se pide

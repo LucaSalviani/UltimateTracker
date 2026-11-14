@@ -487,6 +487,21 @@ void GridWidget::paintSquares(QPainter& p, const QRectF& area, const QDate& day,
         } else {
             paintSquare(p, pl.rect, pm);
         }
+        // Mejoras 3.0: pomodoro extendido (sin recreo en el medio): una marquita por tramo.
+        if (const auto segs = pm.segmentList(); segs.size() > 1) {
+            const double total = qMax(1, pm.representedSec());
+            p.save();
+            p.setPen(QPen(theme::mix(theme::bg, theme::text, 0.55), 1));
+            int sum = 0;
+            for (int i = 0; i + 1 < segs.size(); ++i) {
+                sum += segs[i];
+                if (sum >= total) break;
+                const qreal x = pl.rect.left() + pl.rect.width() * (sum / total);
+                p.drawLine(QPointF(x, pl.rect.top() + 2), QPointF(x, pl.rect.top() + 7));
+                p.drawLine(QPointF(x, pl.rect.bottom() - 7), QPointF(x, pl.rect.bottom() - 2));
+            }
+            p.restore();
+        }
         // Mejoras 2.0: elegidos con Ctrl / Shift + click (para moverlos juntos).
         if (m_selected.contains(pm.id)) {
             p.save();
@@ -799,6 +814,7 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         else                                        status = QStringLiteral("cortado antes");
         if (isDayEnd(pm)) status += QStringLiteral(" · último del día");
         if (pm.linked) status += QStringLiteral(" · sin recreo antes");
+        if (const int n = int(pm.segmentList().size()); n > 1) status += QStringLiteral(" · %1 tramos seguidos, sin recreo").arg(n);
         QString tip = QString("#%1  %2\n%3 · %4 de %5 · %6")
                           .arg(m_number.value(pm.id))
                           .arg(m_paths.value(pm.folderId, QStringLiteral("Sin actividad")), start,

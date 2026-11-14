@@ -314,7 +314,7 @@ QVariantMap MobileApp::stats(const QString& period, int offset, qint64 folder) c
     for (const Pomodoro& p : pomos) {
         if (filtered && !sub.contains(p.folderId)) continue;
         const qint64 sec = (cur && cur->id == p.id) ? cur->studiedSec : p.studiedSec;
-        if (p.status != PomoStatus::Running && p.status != PomoStatus::Parked) ++count;
+        count += p.doneUnits();
         study += sec;
         byDay[p.day] += sec;
         direct[p.folderId] += sec;
@@ -777,7 +777,7 @@ QVariantMap MobileApp::dayCard() const
         const auto t = stats::totals(*m_db, last, last, nullptr, dayclock::dayStart(last).addSecs(86399));
         int pomos = 0;
         for (const Pomodoro& p : m_db->pomodorosBetween(last, last))
-            if (p.status == PomoStatus::Completed || p.status == PomoStatus::Final) ++pomos;
+            pomos += p.doneUnits();
         m["last"] = (last == today.addDays(-1) ? QStringLiteral("Ayer") : cap(fmt::longDate(last))) +
                     QStringLiteral(": %1 · %2 %3").arg(fmt::hours(t.study)).arg(pomos).arg(pomos == 1 ? "pomodoro" : "pomodoros");
     }

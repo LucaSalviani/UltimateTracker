@@ -193,14 +193,14 @@ private slots:
         s->start();
         advance(db, *s, 20 * 60);
         advance(db, *s, 10);
-        s->skipBreak();                               // arranca el siguiente directo
+        s->skipBreak();                               // Mejoras 3.0: sigue el mismo, más largo
         QCOMPARE(s->state(), SessionController::State::Running);
         advance(db, *s, 20 * 60);
         const QDate d(2026, 10, 26);
         const auto pomos = db.pomodorosBetween(d, d);
-        QCOMPARE(pomos.size(), 2);
-        QCOMPARE(pomos[0].linked, false);
-        QCOMPARE(pomos[1].linked, true);
+        QCOMPARE(pomos.size(), 1);
+        QCOMPARE(pomos[0].studiedSec, 40 * 60);
+        QCOMPARE(pomos[0].units(), 2);                // vale por dos
         QCOMPARE(sum(db, IntervalKind::Undue, d), 10);
     }
 
@@ -444,6 +444,74 @@ private slots:
         QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db2)).days, 1);
         stats::resetStreak(db2, QDate());
         QCOMPARE(stats::streak(studied, today, stats::StreakRules::load(db2)).days, 12);
+    }
+
+    // Mejoras 3.0: seguir sin recreo extiende el mismo pomodoro; el recreo salteado
+    // se guarda y se puede tomar a mitad.
+    void extendAndBreakBank()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        std::unique_ptr<SessionController> s(make(db));
+        const QDate day(2026, 10, 26);
+        QSignalSpy recorded(s.get(), &SessionController::studyRecorded);
+        s->setWorkSec(25 * 60);
+        s->setBreakSec(5 * 60);
+        s->start();
+        advance(db, *s, 25 * 60 + 1);
+        QCOMPARE(s->state(), SessionController::State::WorkDone);
+        QVERIFY(s->skipWouldExtend());
+        s->skipBreak();                                   // 25 → 50, mismo cuadradito
+        QCOMPARE(s->state(), SessionController::State::Running);
+        QCOMPARE(db.pomodorosBetween(day, day).size(), 1);
+        QCOMPARE(s->currentPomodoro()->plannedSec, 50 * 60);
+        QCOMPARE(s->remainingSec(), 25 * 60);
+        QCOMPARE(s->breakBankSec(), 5 * 60);
+        // A los 8 minutos del segundo tramo: tomar el recreo guardado
+        advance(db, *s, 8 * 60);
+        QVERIFY(s->canTakeBreak());
+        s->takeBreakNow();
+        QCOMPARE(s->state(), SessionController::State::Break);
+        advance(db, *s, 5 * 60 + 1);
+        QCOMPARE(s->state(), SessionController::State::BreakOver);
+        s->silenceAlarm();                                // vuelve al mismo pomodoro
+        QCOMPARE(s->state(), SessionController::State::Running);
+        QCOMPARE(s->breakBankSec(), 0);
+        QCOMPARE(s->remainingSec(), 17 * 60);
+        // Lo corto ahí: queda un cuadradito de 33m, no uno suelto de 8
+        s->endPomodoro();
+        auto all = db.pomodorosBetween(day, day);
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all.first().studiedSec, 33 * 60);
+        QCOMPARE(all.first().units(), 1);
+        // Las horas se anotaron una sola vez: 25 + 8
+        qint64 total = 0;
+        for (const auto& c : recorded) total += c.at(1).toLongLong();
+        QCOMPARE(total, qint64(33 * 60));
+        // El recreo fue recreo, no indebido
+        qint64 brk = 0;
+        for (const Interval& i : db.intervalsBetween(day, day)) if (i.kind == IntervalKind::Break) brk += i.seconds;
+        QCOMPARE(brk, qint64(5 * 60));
+        // Otra vez: extender y completar → vale 2
+        s->skipBreak();
+        advance(db, *s, 25 * 60 + 1);
+        all = db.pomodorosBetween(day, day);
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all.first().studiedSec, 58 * 60);
+        QCOMPARE(all.first().segments, QString("1500,480,1500"));
+        // Extender y arrepentirse a los 20 s: queda como estaba
+        s->skipBreak();
+        advance(db, *s, 20);
+        s->endPomodoro();
+        all = db.pomodorosBetween(day, day);
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all.first().studiedSec, 58 * 60);
+        QCOMPARE(all.first().status, PomoStatus::Completed);
+        // Con otra actividad no se extiende: pomodoro nuevo
+        const qint64 other = db.addFolder(0, "Otra");
+        s->start(); advance(db, *s, 25 * 60 + 1);
+        s->setFolderId(other);
+        QVERIFY(!s->skipWouldExtend());
     }
 
     void goalDurations()

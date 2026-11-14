@@ -38,6 +38,7 @@ public:
     // M25: color elegido para la actividad ("#rrggbb"; vacío = automático).
     QHash<qint64, QString> folderColors() const;
     void   setFolderColor(qint64 id, const QString& color);
+    void    setFolderKind(qint64 id, const QString& kind);   // Mejoras 3.0
     // M40: foto de una actividad y sus subactividades (filas + qué pomodoros eran
     // suyos) para poder deshacer el borrado tal cual estaba.
     struct FolderBackup {

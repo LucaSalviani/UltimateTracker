@@ -34,6 +34,10 @@ public:
         int     durationMin = 25;    // lo que ajusta el − / + (pomodoro o recreo)
         bool    canStart = true;     // false viendo otro día: solo se registra hoy
         bool    canLeave = false;    // Mejoras 2.0: "Me voy" (hay sesión y no corre un pomodoro)
+        int     bankSec = 0;         // Mejoras 3.0: recreo guardado (de los salteados)
+        bool    canTakeBreak = false;// se puede tomar ahora, a mitad del pomodoro
+        bool    willExtend = false;  // "seguir sin recreo" extiende el mismo pomodoro
+        bool    midBreak = false;    // el recreo en curso es a mitad de pomodoro
         bool    activityHint = false;// Mejoras 2.0: primer pomodoro del día: ¿es esta la actividad?
     };
 
@@ -68,7 +72,8 @@ signals:
     void durationChanged(int minutes);
     void goTodayClicked();
     void noteEdited(const QString& text);   // Enter o al salir de "¿recreo?"
-    void leaveClicked();                    // Mejoras 2.0: terminar la sesión
+    void leaveClicked();
+    void takeBreakClicked();                // Mejoras 3.0: recreo guardado a mitad de pomodoro                    // Mejoras 2.0: terminar la sesión
 
 protected:
     bool eventFilter(QObject* o, QEvent* e) override;
@@ -99,6 +104,7 @@ private:
     int          m_wheelAccum = 0;
     QPushButton* m_secondary;
     QToolButton* m_leave = nullptr;
+    QToolButton* m_takeBreak = nullptr;
     QTimer       m_hintTimer;
     int          m_hintBlinks = 0;
     QToolButton* m_primary;

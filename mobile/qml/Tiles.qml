@@ -73,6 +73,10 @@ Flow {
                     color: modelData.color || "transparent"
                     opacity: modelData.running ? 0 : ghost ? 0.55 : 0.9
                 }
+                Repeater {   // Mejoras 3.0: una marquita por tramo (pomodoro extendido)
+                    model: ghost ? [] : (modelData.marks || [])
+                    delegate: Rectangle { x: tile.width * modelData; y: 2; width: 1; height: 6; color: Theme.dim }
+                }
                 Rectangle {   // tiene nota
                     visible: !ghost && (modelData.note || "").length > 0
                     anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 6

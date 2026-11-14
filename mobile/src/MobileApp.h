@@ -76,6 +76,16 @@ public:
     Q_INVOKABLE QString clock(int sec) const;   // "24:59"
     Q_INVOKABLE void appActivated();            // al volver a la app: ponerse al día
     Q_INVOKABLE void appDeactivated();
+    // Mejoras 3.0: recreo guardado y pomodoro extendido
+    Q_PROPERTY(int breakBankMin READ breakBankMin NOTIFY changed)
+    Q_PROPERTY(bool canTakeBreak READ canTakeBreak NOTIFY changed)
+    Q_PROPERTY(bool midBreak READ midBreak NOTIFY changed)
+    Q_PROPERTY(bool willExtend READ willExtend NOTIFY changed)
+    int breakBankMin() const { return m_session.breakBankSec() / 60; }
+    bool canTakeBreak() const { return m_session.canTakeBreak(); }
+    bool midBreak() const { return m_session.midBreak(); }
+    bool willExtend() const { return m_session.state() == SessionController::State::WorkDone && m_session.skipWouldExtend(); }
+    Q_INVOKABLE void takeBreakNow() { m_session.takeBreakNow(); }
     Q_INVOKABLE void endSession();              // Mejoras 2.0: "Me voy"
     // Mejoras 2.0: tarjeta del día (una vez por día): ayer, racha, comodines, actividad
     Q_INVOKABLE QVariantMap dayCard() const;

@@ -90,16 +90,16 @@ QVector<SyncRecord> SyncStore::pending(int limit)
         if (!it.deleted) {
             QSqlQuery q(m_db.handle());
             if (it.kind == QLatin1String("folder")) {
-                q.prepare("SELECT name, COALESCE(parent_id, 0), sort, prior_sec, color, created_at, updated_at FROM folders WHERE uid = ?");
+                q.prepare("SELECT name, COALESCE(parent_id, 0), sort, prior_sec, color, created_at, updated_at, kind FROM folders WHERE uid = ?");
                 q.addBindValue(it.uid);
                 if (!q.exec() || !q.next()) { r.deleted = true; out.append(r); continue; }
                 const QString parent = uidOf("folders", q.value(1).toLongLong());
                 r.data = {{"name", q.value(0).toString()}, {"parent", parent.isEmpty() ? QJsonValue() : QJsonValue(parent)},
                           {"sort", q.value(2).toInt()}, {"prior_sec", q.value(3).toLongLong()}, {"color", q.value(4).toString()},
-                          {"created_at", q.value(5).toLongLong()}};
+                          {"created_at", q.value(5).toLongLong()}, {"kind", q.value(7).toString()}};
                 r.updatedAt = q.value(6).toLongLong();
             } else if (it.kind == QLatin1String("pomodoro")) {
-                q.prepare("SELECT COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, device, updated_at "
+                q.prepare("SELECT COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, device, updated_at, segments "
                           "FROM pomodoros WHERE uid = ?");
                 q.addBindValue(it.uid);
                 if (!q.exec() || !q.next()) { r.deleted = true; out.append(r); continue; }
@@ -108,7 +108,8 @@ QVector<SyncRecord> SyncStore::pending(int limit)
                           {"started_at", q.value(2).toLongLong()}, {"ended_at", q.value(3).toLongLong()},
                           {"planned_sec", q.value(4).toInt()}, {"studied_sec", q.value(5).toInt()}, {"status", q.value(6).toInt()},
                           {"linked", q.value(7).toBool()}, {"note", q.value(8).toString()},
-                          {"device", q.value(9).toString().isEmpty() ? device : q.value(9).toString()}};
+                          {"device", q.value(9).toString().isEmpty() ? device : q.value(9).toString()},
+                          {"segments", q.value(11).toString()}};
                 r.updatedAt = q.value(10).toLongLong();
             } else if (it.kind == QLatin1String("interval")) {
                 q.prepare("SELECT kind, day, started_at, seconds, updated_at FROM intervals WHERE uid = ?");
@@ -359,6 +360,22 @@ bool SyncStore::applyOne(const SyncRecord& r)
         q.addBindValue(r.updatedAt);
     }
     const bool ok = q.exec();
+    // Mejoras 3.0: campos nuevos. Si el otro aparato es una versión vieja y no
+    // los manda, se conserva lo que había acá.
+    if (ok && r.kind == QLatin1String("folder") && d.contains("kind")) {
+        QSqlQuery x(h);
+        x.prepare("UPDATE folders SET kind = ? WHERE uid = ?");
+        x.addBindValue(d.value("kind").toString());
+        x.addBindValue(r.uid);
+        x.exec();
+    }
+    if (ok && r.kind == QLatin1String("pomodoro") && d.contains("segments")) {
+        QSqlQuery x(h);
+        x.prepare("UPDATE pomodoros SET segments = ? WHERE uid = ?");
+        x.addBindValue(d.value("segments").toString());
+        x.addBindValue(r.uid);
+        x.exec();
+    }
     if (ok) dropOutbox();
     return ok;
 }

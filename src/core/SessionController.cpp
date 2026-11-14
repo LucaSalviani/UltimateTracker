@@ -1,4 +1,5 @@
 #include "core/SessionController.h"
+#include "core/Format.h"
 #include "core/DayClock.h"
 
 #include <QDateTime>
@@ -104,6 +105,14 @@ void SessionController::discardCurrent()
     takeOver();
     tick();
     if (!m_hasPomo) return;
+    m_midBreak = false;
+    if (m_pomo.baseSec() > 0) {
+        // Extendido: se descarta solo el tramo nuevo; lo anterior queda guardado.
+        m_pomoMs = qint64(m_pomo.baseSec()) * 1000;
+        finishPomodoro();
+        setState(State::Ready);
+        return;
+    }
     m_db->deletePomodoro(m_pomo.id);
     m_hasPomo = false;
     emit pomodoroSaved(0);
@@ -313,14 +322,68 @@ void SessionController::skipBreak()
     takeOver();
     tick();
     if (m_state != State::WorkDone) return;
-    if (restoreParked(m_folderId)) setState(State::Running);
-    else startPomodoro(true);
+    setBank(m_bankSec + m_breakSec);   // el recreo que no tomaste queda guardado
+    if (restoreParked(m_folderId)) { setState(State::Running); return; }
+    if (!skipWouldExtend()) { startPomodoro(true); return; }
+    // Mejoras 3.0: se sigue el mismo pomodoro, más largo (25 → 50 con 25 por delante).
+    Pomodoro p = *m_db->pomodoro(m_lastPomoId);
+    QVector<int> segs = p.segmentList();
+    if (segs.isEmpty()) segs.append(p.studiedSec);
+    else segs.last() = p.studiedSec - p.baseSec();   // lo que de verdad duró el último tramo
+    segs.append(m_workSec);
+    QStringList l;
+    for (int v : segs) l << QString::number(v);
+    p.segments = l.join(QLatin1Char(','));
+    p.plannedSec = p.studiedSec + m_workSec;
+    p.status = PomoStatus::Running;
+    m_db->updatePomodoro(p);
+    m_pomo = p;
+    m_pomoMs = qint64(p.studiedSec) * 1000;
+    m_hasPomo = true;
+    setState(State::Running);
+    emit pomodoroStarted(m_pomo.id);
+}
+
+bool SessionController::skipWouldExtend() const
+{
+    if (m_lastPomoId <= 0) return false;
+    const auto p = m_db->pomodoro(m_lastPomoId);
+    return p && p->status == PomoStatus::Completed && p->folderId == m_folderId && p->day == today();
+}
+
+void SessionController::setBank(int sec)
+{
+    m_bankSec = qBound(0, sec, 60 * 60);
+    m_db->setSetting("break_bank", QStringLiteral("%1|%2").arg(fmt::dayKey(today())).arg(m_bankSec));
+    emit pomodoroChanged();
+}
+
+void SessionController::takeBreakNow()
+{
+    takeOver();
+    tick();
+    if (!canTakeBreak()) return;
+    persist();
+    m_midBreak = true;
+    m_breakMs = 0;
+    m_breakPlannedMs = qint64(m_bankSec) * 1000;
+    setState(State::Break);
+}
+
+// Terminó (o se cortó) el recreo a mitad de pomodoro: se descuenta lo tomado
+// y el pomodoro sigue donde estaba.
+void SessionController::endMidBreak()
+{
+    m_midBreak = false;
+    setBank(m_bankSec - int((m_breakMs + 999) / 1000));
+    setState(m_hasPomo ? State::Running : State::Ready);
 }
 
 void SessionController::endBreakEarly()
 {
     takeOver();
     tick();
+    if (m_state == State::Break && m_midBreak) { endMidBreak(); return; }
     if (m_state == State::Break) setState(State::Ready);
 }
 
@@ -328,6 +391,7 @@ void SessionController::silenceAlarm()
 {
     takeOver();
     tick();
+    if (m_state == State::BreakOver && m_midBreak) { endMidBreak(); return; }
     if (m_state == State::BreakOver) setState(State::Ready);
 }
 
@@ -341,6 +405,8 @@ void SessionController::closeDay(bool endOfDay)
     }
     tick();
     if (endOfDay) finishParked();
+    if (endOfDay) setBank(0);
+    m_midBreak = false;
     if (m_state == State::Idle) return;
     finishPomodoro();
     // Lo que quedó pendiente no se confirma: era el final del día (inactivo).
@@ -351,6 +417,9 @@ void SessionController::closeDay(bool endOfDay)
 
 void SessionController::recoverAfterRestart()
 {
+    // El recreo guardado vale por el día.
+    const QStringList bank = m_db->setting("break_bank").toString().split(QLatin1Char('|'));
+    m_bankSec = bank.size() == 2 && bank[0] == fmt::dayKey(today()) ? qBound(0, bank[1].toInt(), 3600) : 0;
     for (Pomodoro p : m_db->pomodorosWithStatus(PomoStatus::Running)) {
         if (p.studiedSec < kMinStudySec) {
             m_db->deletePomodoro(p.id);
@@ -450,7 +519,26 @@ bool SessionController::finishPomodoro()
 {
     if (!m_hasPomo) return false;
     m_pomo.studiedSec = int((m_pomoMs + 500) / 1000);
-    if (m_pomo.studiedSec < kMinStudySec) {
+    // Mejoras 3.0: si es un pomodoro extendido, lo de antes ya estaba guardado.
+    const int base = m_pomo.baseSec();
+    if (m_pomo.studiedSec - base < kMinStudySec) {
+        if (base > 0) {
+            // El tramo nuevo duró menos de un minuto: queda como estaba antes de extenderlo.
+            auto segs = m_pomo.segmentList();
+            segs.removeLast();
+            QStringList l;
+            for (int v : segs) l << QString::number(v);
+            m_pomo.segments = segs.size() > 1 ? l.join(QLatin1Char(',')) : QString();
+            m_pomo.studiedSec = base;
+            m_pomo.plannedSec = base;
+            m_pomo.status = PomoStatus::Completed;
+            m_db->updatePomodoro(m_pomo);
+            m_lastPomoId = m_pomo.id;
+            m_lastPomo = m_pomo;
+            m_hasPomo = false;
+            emit pomodoroSaved(0);
+            return false;
+        }
         // Menos de un minuto: no se registra.
         m_db->deletePomodoro(m_pomo.id);
         m_hasPomo = false;
@@ -463,7 +551,7 @@ bool SessionController::finishPomodoro()
     m_lastPomoId = m_pomo.id;
     m_lastPomo = m_pomo;
     m_hasPomo = false;
-    emit studyRecorded(m_pomo.folderId, m_pomo.studiedSec);
+    emit studyRecorded(m_pomo.folderId, m_pomo.studiedSec - base);   // solo lo nuevo
     emit pomodoroSaved(m_pomo.id);
     return true;
 }
@@ -523,6 +611,7 @@ SessionController::LiveState SessionController::liveState() const
     s.folderId = m_folderId;
     s.breakMs = m_breakMs;
     s.breakPlannedMs = m_breakPlannedMs;
+    s.midBreak = m_midBreak;
     if (m_hasPomo) {
         s.pomo = m_pomo;
         s.pomoMs = m_pomoMs;
@@ -549,7 +638,8 @@ void SessionController::adoptRemote(const LiveState& s, bool announce)
     const State prev = m_state;
     if (s.folderId > 0) m_folderId = s.folderId;
     m_passiveUid = s.pomoUid;
-    m_hasPomo = s.state == State::Running || s.state == State::Paused;
+    m_midBreak = s.midBreak && (s.state == State::Break || s.state == State::BreakOver);
+    m_hasPomo = s.state == State::Running || s.state == State::Paused || m_midBreak;
     m_pomo = s.pomo;
     m_pomoMs = s.pomoMs;
     if (!m_hasPomo) {

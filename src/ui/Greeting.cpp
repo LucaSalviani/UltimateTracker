@@ -121,7 +121,7 @@ Greeting::Greeting(Database* db, bool full, QWidget* parent)
         const auto t = stats::totals(*m_db, last, last, nullptr, dayclock::dayStart(last).addSecs(86399));
         int pomos = 0;
         for (const Pomodoro& p : m_db->pomodorosBetween(last, last))
-            if (p.status == PomoStatus::Completed || p.status == PomoStatus::Final) ++pomos;
+            pomos += p.doneUnits();
         const QString when = last == today.addDays(-1) ? QStringLiteral("Ayer") : (full ? QStringLiteral("La última vez") : QString());
         QString s = (when.isEmpty() ? QString() : QStringLiteral("<b>%1:</b> ").arg(when)) +
                     QStringLiteral("%1 · %2 %3 · recreos %4").arg(fmt::hours(t.study)).arg(pomos)

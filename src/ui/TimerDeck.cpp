@@ -247,8 +247,15 @@ TimerDeck::TimerDeck(QWidget* parent)
     transport->addWidget(m_secondary);
     transport->addWidget(m_primary);
     transport->addStretch();
+    // Mejoras 3.0: el recreo que salteaste queda guardado y se puede tomar a mitad.
+    m_takeBreak = new QToolButton(this);
+    m_takeBreak->setObjectName("DeckLeave");
+    m_takeBreak->setFocusPolicy(Qt::NoFocus);
+    m_takeBreak->setCursor(Qt::PointingHandCursor);
+    connect(m_takeBreak, &QToolButton::clicked, this, &TimerDeck::takeBreakClicked);
     auto* leaveRow = new QHBoxLayout;
     leaveRow->setContentsMargins(0, 0, 0, 0);
+    leaveRow->addWidget(m_takeBreak);
     leaveRow->addStretch();
     leaveRow->addWidget(m_leave);
 
@@ -367,7 +374,9 @@ void TimerDeck::setActivityMenu(QMenu* menu)
 
 void TimerDeck::setModel(const Model& m)
 {
-    const bool modeChanged = m_first || m.mode != m_model.mode || m.canStart != m_model.canStart || m.canLeave != m_model.canLeave;
+    const bool modeChanged = m_first || m.mode != m_model.mode || m.canStart != m_model.canStart || m.canLeave != m_model.canLeave ||
+                             m.bankSec != m_model.bankSec || m.canTakeBreak != m_model.canTakeBreak ||
+                             m.willExtend != m_model.willExtend || m.midBreak != m_model.midBreak;
     // Mejoras 2.0 · 11: al empezar el día, la actividad titila suave unos segundos
     // (¿es esto lo que querés hacer hoy?) y queda marcada hasta que arrancás.
     if (m.activityHint != m_model.activityHint || m_first) {
@@ -430,6 +439,11 @@ void TimerDeck::applyMode()
     const icons::Ink ink = icons::Ink::Text;
     m_secondary->setVisible(m != Mode::Ready || blocked);
     m_leave->setVisible(m_model.canLeave);
+    m_takeBreak->setVisible(m_model.bankSec >= 60 && (m == Mode::Running || m == Mode::Paused || m == Mode::BreakReady));
+    m_takeBreak->setEnabled(m_model.canTakeBreak);
+    m_takeBreak->setText(m_model.canTakeBreak ? QStringLiteral("Tomar recreo guardado (%1m)").arg(m_model.bankSec / 60)
+                                              : QStringLiteral("Recreo guardado: %1m").arg(m_model.bankSec / 60));
+    m_takeBreak->setToolTip(QStringLiteral("Recreos que salteaste. Con un pomodoro en marcha: lo pausa, corre el recreo (cuenta como recreo, no como indebido) y después seguís el mismo pomodoro."));
     m_secondary->setProperty("accent", brk ? "break" : "pomo");
     switch (m) {
     case Mode::Running:
@@ -439,12 +453,14 @@ void TimerDeck::applyMode()
         m_secondary->setToolTip(QStringLiteral("Lo corta acá y guarda lo que llevás (si pasó 1 minuto)"));
         break;
     case Mode::BreakReady:
-        m_secondary->setText(QStringLiteral("Saltear recreo"));
+        m_secondary->setText(m_model.willExtend ? QStringLiteral("Seguir sin recreo") : QStringLiteral("Saltear recreo"));
         m_secondary->setIcon(icons::get(icons::Id::Skip, ink));
-        m_secondary->setToolTip(QStringLiteral("Arranca el siguiente pomodoro ya, pegado a este"));
+        m_secondary->setToolTip(m_model.willExtend
+            ? QStringLiteral("Sigue el mismo pomodoro, más largo (el cuadradito crece). El recreo que no tomás queda guardado para más tarde.")
+            : QStringLiteral("Arranca el siguiente pomodoro ya. El recreo que no tomás queda guardado para más tarde."));
         break;
     case Mode::Break:
-        m_secondary->setText(QStringLiteral("Terminar recreo"));
+        m_secondary->setText(m_model.midBreak ? QStringLiteral("Volver al pomodoro") : QStringLiteral("Terminar recreo"));
         m_secondary->setIcon(icons::get(icons::Id::Skip, ink));
         m_secondary->setToolTip(QStringLiteral("Cortar el recreo y volver"));
         break;

@@ -25,7 +25,7 @@ Flickable {
         case "running": return "POMODORO " + n
         case "paused": return "EN PAUSA"
         case "workdone": return "¡POMODORO TERMINADO!"
-        case "break": return "RECREO"
+        case "break": return ut.midBreak ? "RECREO · DESPUÉS SEGUÍS" : "RECREO"
         case "breakover": return "TERMINÓ EL RECREO"
         default: return "LISTO · POMODORO " + n
         }
@@ -250,7 +250,7 @@ Flickable {
                 lineColor: Theme.line
                 iconColor: Theme.text
                 icon: st === "workdone" ? "skip" : "stop"
-                caption: st === "workdone" ? "Seguir sin recreo" : "Terminar"
+                caption: st === "workdone" ? (ut.willExtend ? "Seguir sin recreo\n(mismo pomodoro)" : "Seguir sin recreo") : "Terminar"
                 captionColor: Theme.dim
                 onClicked: st === "workdone" ? ut.skipBreak() : ut.finishPomodoro()
             }
@@ -265,7 +265,7 @@ Flickable {
                 caption: st === "running" ? "Pausa"
                        : st === "paused" ? "Seguir"
                        : st === "workdone" ? "Empezar recreo"
-                       : st === "break" ? "Terminar recreo"
+                       : st === "break" ? (ut.midBreak ? "Volver al pomodoro" : "Terminar recreo")
                        : st === "breakover" ? "Listo" : "Empezar"
                 captionColor: Theme.dim
                 onClicked: {
@@ -274,6 +274,25 @@ Flickable {
                     else ut.primary()
                 }
             }
+        }
+
+        // ---- Mejoras 3.0: recreo guardado (de los que salteaste)
+        Rectangle {
+            visible: ut.breakBankMin > 0 && (st === "running" || st === "paused" || st === "workdone")
+            Layout.alignment: Qt.AlignHCenter
+            implicitWidth: bankText.implicitWidth + 28
+            implicitHeight: 34
+            radius: 17
+            color: bankMouse.pressed ? Theme.surfaceHi : "transparent"
+            border.color: ut.canTakeBreak ? Theme.brk : Theme.line
+            Text {
+                id: bankText
+                anchors.centerIn: parent
+                text: ut.canTakeBreak ? "Tomar recreo guardado (" + ut.breakBankMin + "m)" : "Recreo guardado: " + ut.breakBankMin + "m"
+                color: ut.canTakeBreak ? Theme.text : Theme.dim
+                font.pixelSize: 13
+            }
+            MouseArea { id: bankMouse; anchors.fill: parent; enabled: ut.canTakeBreak; onClicked: ut.takeBreakNow() }
         }
 
         // ---- Me voy: termina la sesión (lo que sigue no es recreo indebido)

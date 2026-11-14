@@ -44,6 +44,7 @@ MobileApp::MobileApp(Database* db, QObject* parent)
         bump();
     });
     connect(&m_session, &SessionController::studyRecorded, this, &MobileApp::onStudyRecorded);
+    connect(&m_session, &SessionController::pomodoroChanged, this, &MobileApp::changed);   // recreo guardado
     connect(&m_session, &SessionController::pomodoroStarted, this, [this] { reloadToday(); });
     connect(&m_session, &SessionController::pomodoroCompleted, this, [this] {
         m_android->vibrate(400);
@@ -120,7 +121,7 @@ double MobileApp::progress() const
     using S = SessionController::State;
     const S s = m_session.state();
     if (s == S::Running || s == S::Paused) return m_session.progress();
-    if (s == S::Break) return m_session.breakSec() > 0 ? 1.0 - double(m_session.remainingSec()) / m_session.breakSec() : 0;
+    if (s == S::Break) return m_session.breakPlannedSec() > 0 ? 1.0 - double(m_session.remainingSec()) / m_session.breakPlannedSec() : 0;
     return 0;
 }
 
@@ -210,6 +211,15 @@ void MobileApp::reloadToday()
         m["running"] = running;
         m["color"] = m_colors.value(p.folderId, QStringLiteral("#a8a8a8"));
         m["note"] = p.note;
+        m["units"] = p.doneUnits();
+        m["marks"] = QVariant::fromValue([&] {   // dónde termina cada tramo (0..1), para las marquitas
+            QVariantList out;
+            const auto segs = p.segmentList();
+            const double total = qMax(1, running ? cur->plannedSec : p.representedSec());
+            int sum = 0;
+            for (int i = 0; i + 1 < segs.size(); ++i) { sum += segs[i]; if (sum < total) out.append(sum / total); }
+            return out;
+        }());
         m["ghost"] = false;
         m_today.append(m);
     }
@@ -239,7 +249,7 @@ void MobileApp::reloadToday()
 int MobileApp::todayCount() const
 {
     int n = 0;
-    for (const QVariant& v : m_today) if (!v.toMap().value("running").toBool() && !v.toMap().value("ghost").toBool()) ++n;
+    for (const QVariant& v : m_today) if (!v.toMap().value("ghost").toBool()) n += v.toMap().value("units").toInt();
     return n;
 }
 
