@@ -1,6 +1,7 @@
 #include "ui/SettingsDialog.h"
 #include "core/DayClock.h"
 #include "core/Stats.h"
+#include "ui/FocusGuard.h"
 #include "ui/Theme.h"
 #include "ui/Tiles.h"
 #include "ui/Celebration.h"
@@ -265,6 +266,30 @@ QWidget* SettingsDialog::pageTimer()
     lay->addLayout(form);
     lay->addWidget(note(QStringLiteral("Sin los botones de paso fino, el − / + de siempre va de a 5 minutos "
                                        "arriba de 10 y de a 1 por debajo."), w));
+
+    // Mejoras 3.0: distracciones (Instagram, WhatsApp…) con un pomodoro corriendo
+    lay->addSpacing(10);
+    lay->addWidget(heading(QStringLiteral("Distracciones"), w));
+    m_guardOn = new QCheckBox(QStringLiteral("Avisarme si me voy a una distracción con un pomodoro corriendo"), w);
+    m_guardOn->setChecked(m_db->setting("guard_on", 0).toBool());
+    m_guardPause = new QCheckBox(QStringLiteral("Pausar el pomodoro (el rato cuenta como recreo indebido)"), w);
+    m_guardPause->setChecked(m_db->setting("guard_pause", 1).toBool());
+    m_guardGrace = spin(0, 300, m_db->setting("guard_grace", 20).toInt(), QStringLiteral(" s"), w);
+    m_guardWords = new QLineEdit(m_db->setting("guard_words", FocusGuard::defaultWords().join(QStringLiteral(", "))).toString(), w);
+    m_guardWords->setPlaceholderText(QStringLiteral("Instagram, WhatsApp, YouTube…"));
+    auto* gform = new QFormLayout;
+    gform->addRow(QStringLiteral("Tiempo de gracia"), m_guardGrace);
+    gform->addRow(QStringLiteral("Qué cuenta como distracción"), m_guardWords);
+    lay->addWidget(m_guardOn);
+    lay->addWidget(m_guardPause);
+    lay->addLayout(gform);
+    lay->addWidget(note(QStringLiteral("Mira solo la ventana que está al frente: el nombre del programa y el título (en el navegador, "
+                                       "el de la pestaña activa). Pasado el tiempo de gracia aparece un cartel rojo a pantalla completa. "
+                                       "Todo queda en tu PC y no se guarda qué mirabas. No ve pestañas de fondo ni el celular."), w));
+    for (QWidget* x : {static_cast<QWidget*>(m_guardPause), static_cast<QWidget*>(m_guardGrace), static_cast<QWidget*>(m_guardWords)}) {
+        x->setEnabled(m_guardOn->isChecked());
+        connect(m_guardOn, &QCheckBox::toggled, x, &QWidget::setEnabled);
+    }
 
     lay->addStretch();
     return w;
@@ -712,6 +737,10 @@ void SettingsDialog::accept()
     m_db->setSetting("sound_alarm", m_soundAlarm->currentIndex());
     m_db->setSetting("sound_volume", m_soundVolume->value());
     if (m_soundToast) m_db->setSetting("notify_toast", m_soundToast->isChecked() ? 1 : 0);
+    m_db->setSetting("guard_on", m_guardOn->isChecked() ? 1 : 0);
+    m_db->setSetting("guard_pause", m_guardPause->isChecked() ? 1 : 0);
+    m_db->setSetting("guard_grace", m_guardGrace->value());
+    m_db->setSetting("guard_words", m_guardWords->text());
 
     m_db->setSetting("accent_strong", m_strong->isChecked() ? 1 : 0);
     m_db->setSetting("theme_color", m_themeColor);

@@ -10,6 +10,7 @@
 #include "ui/DevMode.h"
 #include "ui/Greeting.h"
 #include "ui/Tour.h"
+#include "ui/FocusGuard.h"
 #include "ui/Celebration.h"
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
@@ -31,6 +32,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QTextStream>
 #include <QFile>
 #include <QHBoxLayout>
@@ -818,6 +820,35 @@ QWidget* MainWindow::buildDeck()
     connect(m_deck, &TimerDeck::silenceClicked, m_session, &SessionController::silenceAlarm);
     connect(m_deck, &TimerDeck::leaveClicked, this, &MainWindow::leaveSession);
     connect(m_deck, &TimerDeck::takeBreakClicked, m_session, &SessionController::takeBreakNow);
+    // Mejoras 3.0: distracciones (Instagram, WhatsApp…) con un pomodoro corriendo
+    m_guard = new FocusGuard(this);
+    m_guardAlarm = new FocusAlarm;
+    connect(this, &QObject::destroyed, m_guardAlarm, &QObject::deleteLater);
+    connect(m_session, &SessionController::stateChanged, this, [this](SessionController::State s) {
+        m_guard->setWatching(s == SessionController::State::Running && !m_session->passive());
+    });
+    connect(m_guard, &FocusGuard::distracted, this, [this](const QString& what) {
+        if (m_session->state() != SessionController::State::Running) return;
+        const bool pause = m_db->setting("guard_pause", 1).toBool();
+        m_guardPaused = pause;
+        if (pause) m_session->pause();
+        m_sounds->startAlarm();
+        QTimer::singleShot(2500, m_sounds, &Sounds::stopAlarm);
+        m_guardAlarm->showFor(what, pause);
+    });
+    connect(m_guardAlarm, &FocusAlarm::backToWork, this, [this] {
+        m_sounds->stopAlarm();
+        if (m_guardPaused && m_session->state() == SessionController::State::Paused) m_session->resume();
+        m_guardPaused = false;
+        bringToFront();
+    });
+    connect(m_guardAlarm, &FocusAlarm::needed, this, [this] {
+        m_sounds->stopAlarm();
+        m_guard->snooze(600);
+        if (m_guardPaused && m_session->state() == SessionController::State::Paused) m_session->resume();
+        m_guardPaused = false;
+    });
+    applyGuardSettings();
     connect(m_deck, &TimerDeck::goTodayClicked, this, &MainWindow::goToday);
     connect(m_deck, &TimerDeck::durationChanged, this, [this](int min) {
         // El − / + ajusta lo que está por arrancar: el pomodoro o el recreo.
@@ -2554,6 +2585,7 @@ void MainWindow::openSettings(int page)
     m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
     applySystemSettings();
     applySoundSettings();
+    applyGuardSettings();
     reloadFolders();   // M25: colores por actividad prendidos/apagados
     applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
     if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
@@ -2618,6 +2650,14 @@ void MainWindow::startTour()
     auto* tour = new Tour(steps, this);
     connect(tour, &Tour::finished, this, [this] { m_db->setSetting("tutorial/done", 1); });
     tour->start();
+}
+
+void MainWindow::applyGuardSettings()
+{
+    QStringList words;
+    for (const QString& w : m_db->setting("guard_words", FocusGuard::defaultWords().join(QStringLiteral(","))).toString().split(QRegularExpression(QStringLiteral("[,;\\n]")), Qt::SkipEmptyParts))
+        words << w.trimmed();
+    m_guard->configure(m_db->setting("guard_on", 0).toBool(), m_db->setting("guard_grace", 20).toInt(), words);
 }
 
 void MainWindow::leaveSession()

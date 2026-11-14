@@ -68,6 +68,10 @@ private:
     QComboBox* m_goalInput;   // M17
     QComboBox* m_goalRunning; // B2-1
     QComboBox* m_goalBreak;   // Mejoras 2.0
+    QCheckBox* m_guardOn = nullptr;      // Mejoras 3.0: distracciones
+    QCheckBox* m_guardPause = nullptr;
+    QSpinBox*  m_guardGrace = nullptr;
+    QLineEdit* m_guardWords = nullptr;
 
     // Cronómetro
     QCheckBox* m_wheel;

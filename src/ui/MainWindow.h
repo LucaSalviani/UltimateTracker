@@ -45,6 +45,7 @@ public:
     void startTour();                             // Mejoras 2.0: mini tutorial
     void moveMany(const QList<qint64>& ids, qint64 folder);
     void showSelectionMenu(const QList<qint64>& ids, const QPoint& globalPos);
+    void applyGuardSettings();            // Mejoras 3.0: distracciones
     void logStart(const QString& line);   // Mejoras 3.0: arranque.log
     void onWake();   // B2-4: la PC se despertó o se desbloqueó (saluda si es la primera vez en el día)
     void quitApp();
@@ -176,6 +177,9 @@ private:
     class WakeWatcher*  m_wake = nullptr;     // B2-4
     class SyncClient*   m_sync = nullptr;     // Celu-4
     class LiveLink*     m_live = nullptr;     // en vivo con el celu
+    class FocusGuard*   m_guard = nullptr;    // Mejoras 3.0
+    class FocusAlarm*   m_guardAlarm = nullptr;
+    bool                m_guardPaused = false;
     QPointer<class Greeting> m_dayCard;       // Mejoras 2.0
     QDate               m_activityConfirmed;  // día en que elegiste/confirmaste la actividad
     bool                m_wasMirroring = false;
