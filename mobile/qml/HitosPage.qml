@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
+import QtQuick.Templates as T
 // Hitos en tres plazos (como en la PC): hoy y la semana, el mes, y el camino a las 10.000 h.
 Flickable {
     id: page
@@ -126,6 +127,11 @@ Flickable {
                           (m.streak.jokers > 0 ? " Comodines: " + m.streak.jokersLeft + " de " + m.streak.jokers + " esta semana." : "") +
                           (m.streak.next ? " Próxima: " + m.streak.next + "." : "")
                 }
+                Text {
+                    text: m.streak.reset ? "Deshacer el reinicio" : "Reiniciar racha"
+                    color: Theme.faint; font.pixelSize: 12; font.underline: true
+                    MouseArea { anchors.fill: parent; anchors.margins: -10; onClicked: resetSheet.open() }
+                }
             }
             Card {
                 Layout.fillWidth: true
@@ -210,6 +216,21 @@ Flickable {
                 Meter { visible: cfg.stages; Layout.fillWidth: true; value: modelData.progress; fill: modelData.color }
                 Small { visible: cfg.hours && modelData.nextMark > 0; text: "Próxima marca: " + modelData.nextMark + " h" }
             }
+        }
+    }
+
+    Sheet {
+        id: resetSheet
+        parent: T.Overlay.overlay
+        title: m.streak.reset ? "Deshacer el reinicio" : "Reiniciar la racha"
+        subtitle: m.streak.reset ? "Vuelve a contar la racha con todos tus días de siempre."
+                                 : "Si sentís que no cumpliste, la racha vuelve a empezar hoy. El récord de la racha más larga se conserva."
+        UtButton {
+            Layout.alignment: Qt.AlignHCenter
+            icon: m.streak.reset ? "play" : "stop"
+            caption: m.streak.reset ? "Deshacer" : "Reiniciar"
+            diameter: 56
+            onClicked: { ut.resetStreak(m.streak.reset); resetSheet.close() }
         }
     }
 }

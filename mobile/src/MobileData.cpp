@@ -511,7 +511,8 @@ QVariantMap MobileApp::milestones() const
     int nextStreak = 0;
     for (int d : ms::streakMarks()) if (d > streak.days) { nextStreak = d; break; }
     out["streak"] = QVariantMap{{"days", streak.days}, {"best", best}, {"todayDone", streak.todayDone},
-                                {"jokersLeft", qMax(0, jokers - streak.jokersThisWeek)}, {"jokers", jokers}, {"next", nextStreak}};
+                                {"jokersLeft", qMax(0, jokers - streak.jokersThisWeek)}, {"jokers", jokers}, {"next", nextStreak},
+                                {"reset", stats::StreakRules::load(*m_db).resetDay.isValid()}};
     const ms::Records rec = ms::records(byDay, today.addDays(1));
     out["records"] = QVariantMap{{"bestDay", rec.bestDay > 0 ? fmt::hours(rec.bestDay) : QString()},
                                  {"bestDayDate", rec.bestDayDate.isValid() ? fmt::shortDate(rec.bestDayDate) : QString()},
@@ -658,6 +659,13 @@ void MobileApp::setSetting(const QString& key, const QVariant& value)
     else m_db->setSetting(key, value);
     if (key == QLatin1String("day_start_hour")) dayclock::setStartHour(value.toInt());
     if (key == QLatin1String("break_min")) setBreakMin(value.toInt());
+    reloadToday();
+    bump();
+}
+
+void MobileApp::resetStreak(bool undo)
+{
+    stats::resetStreak(*m_db, undo ? QDate() : dayclock::today());
     reloadToday();
     bump();
 }

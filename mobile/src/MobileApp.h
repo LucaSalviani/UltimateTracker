@@ -132,6 +132,8 @@ public:
     // ---- Ajustes y actividades
     Q_INVOKABLE QVariant setting(const QString& key, const QVariant& def) const;
     Q_INVOKABLE void setSetting(const QString& key, const QVariant& value);
+    // Mejoras 3.0: la racha vuelve a empezar hoy (o se deshace el reinicio).
+    Q_INVOKABLE void resetStreak(bool undo);
     Q_INVOKABLE QVariantMap folderInfo(qint64 id) const;
     Q_INVOKABLE void renameFolder(qint64 id, const QString& name);
     Q_INVOKABLE void setFolderColor(qint64 id, const QString& color);

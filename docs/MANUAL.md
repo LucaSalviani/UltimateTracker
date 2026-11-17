@@ -35,6 +35,14 @@
 
 ![Estadísticas](captura-estadisticas.png)
 
+### Novedades de la beta 4
+- **Estadísticas con detalle**: pasá el mouse por un dato para ver más; hacé click y se abre una ventanita con el detalle (Esc la cierra).
+- **Racha**: los comodines que cambies valen desde hoy. Si querés reiniciarla a mano: click en la racha › *Reiniciar racha…*.
+- **Seguir sin recreo** suma al mismo pomodoro (uno más largo) y guarda el recreo para tomarlo cuando quieras: botón *Tomar recreo guardado*.
+- **Tipo de actividad**: click derecho en una actividad › *Tipo* (Estudio, Trabajo, Lectura, Práctica u otro).
+- **Distracciones**: Ajustes › Cronómetro › Distracciones. Avisa con una pantalla roja si abrís Instagram o WhatsApp en pleno pomodoro. Se configura todo: activar, pausar o no, tiempo de gracia y palabras.
+- Si la app no abre después de suspender la PC, mirá `arranque.log` en la carpeta de datos.
+
 ## Atajos de teclado
 
 | Tecla | Qué hace |
