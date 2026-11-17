@@ -352,6 +352,7 @@ QLabel#GreetPhrase { font-size: 10.5pt; color: @t3; font-style: italic; }
 QLabel#GreetFacts { font-size: 9.5pt; color: @t2; }
 QWidget#GreetCard { background: transparent; }
 QWidget#TourBubble { background: transparent; }
+QLabel#DetailBody { font-size: 10pt; color: @t2; background: transparent; }
 QLabel#TourCount { font-size: 8.5pt; color: @t3; letter-spacing: 1px; }
 QLabel#TourTitle { font-size: 12.5pt; font-weight: 600; color: @t1; }
 QLabel#TourText { font-size: 10pt; color: @t2; }

@@ -1,5 +1,6 @@
 #include "ui/StatsWidget.h"
 #include "core/Kinds.h"
+#include "ui/DetailCard.h"
 #include "core/FolderTree.h"
 #include "core/DayClock.h"
 #include "core/Format.h"
@@ -24,6 +25,8 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QToolTip>
+#include <QMouseEvent>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <cmath>
@@ -67,8 +70,14 @@ struct StatsData {
 
 class StatsCanvas : public QWidget {
 public:
-    explicit StatsCanvas(QWidget* parent) : QWidget(parent) {}
+    explicit StatsCanvas(QWidget* parent) : QWidget(parent) { setMouseTracking(true); }
     StatsData data;
+    // Mejoras 3.0: cada dato es una zona: al pasar el mouse muestra más detalle
+    // y al hacer click abre su mini ventana.
+    struct Zone { QRectF rect; QString key; QString tip; };
+    QVector<Zone> zones;
+    std::function<void(const QString&)> onZone;
+    std::function<QString(const QString&)> tipFor;
 
     void relayout()
     {
@@ -79,6 +88,39 @@ public:
 protected:
     void resizeEvent(QResizeEvent*) override { setMinimumHeight(contentHeight(width())); }
 
+    const Zone* zoneAt(const QPointF& pos) const
+    {
+        for (const Zone& z : zones) if (z.rect.contains(pos)) return &z;
+        return nullptr;
+    }
+    void mouseMoveEvent(QMouseEvent* e) override
+    {
+        const Zone* z = zoneAt(e->position());
+        setCursor(z ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        const QString key = z ? z->key : QString();
+        if (key != m_hoverKey) { m_hoverKey = key; update(); }
+        if (z && tipFor) QToolTip::showText(e->globalPosition().toPoint(), tipFor(z->key), this, z->rect.toRect());
+        else QToolTip::hideText();
+    }
+    void leaveEvent(QEvent*) override { if (!m_hoverKey.isEmpty()) { m_hoverKey.clear(); update(); } }
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        if (e->button() != Qt::LeftButton) return;
+        if (const Zone* z = zoneAt(e->position()); z && onZone) onZone(z->key);
+    }
+    void zone(const QRectF& r, const QString& key, QPainter& p)
+    {
+        zones.append({r, key, QString()});
+        if (key == m_hoverKey) {   // se nota que se puede tocar
+            p.save();
+            p.setPen(QPen(theme::textFaint, 1));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
+            p.restore();
+        }
+    }
+    QString m_hoverKey;
+
     void paintEvent(QPaintEvent*) override
     {
         QPainter p(this);
@@ -86,6 +128,7 @@ protected:
         p.fillRect(rect(), theme::bg);
         const double L = 16, W = width() - 32;
         double y = 8;
+        zones.clear();
 
         y = paintCards(p, L, y, W) + 10;
         y = paintStreak(p, L, y, W) + 18;
@@ -102,10 +145,12 @@ private:
     bool goalChip() const { return data.period != StatsWidget::Period::Day && !data.goals.isEmpty(); }
     bool hasChips() const { return data.ms.dayMark || data.ms.weekly || data.ms.streaks || data.ms.stages || goalChip(); }
 
-    // M44: una fila de tarjetitas con los hitos de corto y largo plazo.
-    double paintChips(QPainter& p, double L, double y, double W)
+    // M44: tarjetitas con los hitos de corto y largo plazo.
+    // Mejoras 3.0: si no entran en una fila (ventana chica) bajan a dos o más, así el
+    // texto se lee entero; cada una abre su detalle.
+    struct Chip { QString key, label, value; double frac = -1; int dots = -1; };
+    QVector<Chip> buildChips() const
     {
-        struct Chip { QString label, value; double frac = -1; int dots = -1; };
         QVector<Chip> chips;
         if (goalChip()) {   // B2-3
             int met = 0, counted = 0;
@@ -116,7 +161,7 @@ private:
                 if (it->met) ++met; else missing += it->missing;
             }
             if (counted > 0)
-                chips.append({QStringLiteral("Objetivos"),
+                chips.append({QStringLiteral("goals"), QStringLiteral("Objetivos"),
                               missing > 0 ? QStringLiteral("%1 de %2 · faltaron %3").arg(met).arg(counted).arg(fmt::hours(missing))
                                           : QStringLiteral("%1 de %2 cumplidos").arg(met).arg(counted),
                               double(met) / counted});
@@ -126,55 +171,79 @@ private:
             const QString next = lvl < 3 ? QStringLiteral(" · %1 a las %2").arg(ms::dayMarkName(lvl + 1),
                                                                                  fmt::hours(qint64(data.ms.markMin[lvl]) * 60))
                                          : QString();
-            chips.append({QStringLiteral("Marca de hoy"),
+            chips.append({QStringLiteral("mark"), QStringLiteral("Marca de hoy"),
                           (lvl ? ms::dayMarkName(lvl).left(1).toUpper() + ms::dayMarkName(lvl).mid(1) : QStringLiteral("Todavía no"))
                               + next, -1, lvl});
         }
         if (data.ms.weekly && data.ms.weeklyMin > 0) {
             const qint64 goal = qint64(data.ms.weeklyMin) * 60;
-            chips.append({QStringLiteral("Meta semanal"),
+            chips.append({QStringLiteral("weekly"), QStringLiteral("Meta semanal"),
                           QStringLiteral("%1 de %2").arg(fmt::hours(data.weekSec), fmt::hours(goal)),
                           double(data.weekSec) / goal});
         }
         if (data.ms.streaks) {
             QStringList parts;
-            if (data.records.bestDay > 0) parts << QStringLiteral("día %1").arg(fmt::hours(data.records.bestDay));
-            if (data.records.bestWeek > 0) parts << QStringLiteral("sem. %1").arg(fmt::hours(data.records.bestWeek));
-            parts << QStringLiteral("racha %1").arg(data.bestStreak);
-            chips.append({QStringLiteral("Récords"), parts.join(QStringLiteral(" · "))});
+            if (data.records.bestDay > 0) parts << QStringLiteral("Día %1").arg(fmt::hours(data.records.bestDay));
+            if (data.records.bestWeek > 0) parts << QStringLiteral("Semana %1").arg(fmt::hours(data.records.bestWeek));
+            parts << QStringLiteral("Racha %1 %2").arg(data.bestStreak).arg(data.bestStreak == 1 ? "día" : "días");
+            chips.append({QStringLiteral("records"), QStringLiteral("Tus récords"), parts.join(QStringLiteral("  ·  "))});
         }
         if (data.ms.stages) {
             const ms::Stage st = ms::stageFor(data.allSec);
-            chips.append({QStringLiteral("Nivel global"),
+            chips.append({QStringLiteral("level"), QStringLiteral("Nivel global"),
                           st.toSec ? QStringLiteral("%1 · próx. %2").arg(st.label, roundHours(st.toSec)) : st.label,
                           st.toSec ? st.progress : 1.0});
         }
+        return chips;
+    }
+    static constexpr double kChipGap = 10;
+    static constexpr double kChipMinW = 200;
+    int chipsPerRow(double W, int n) const { return qBound(1, int((W + kChipGap) / (kChipMinW + kChipGap)), qMax(1, n)); }
+    double chipsHeight(double W) const
+    {
+        const int n = int(buildChips().size());
+        if (n == 0) return 0;
+        const int rows = (n + chipsPerRow(W, n) - 1) / chipsPerRow(W, n);
+        return rows * kChipH + (rows - 1) * kChipGap;
+    }
+
+    double paintChips(QPainter& p, double L, double y, double W)
+    {
+        const QVector<Chip> chips = buildChips();
         static const QColor medal[3] = {QColor(0xc0, 0x8a, 0x5a), QColor(0xb8, 0xbc, 0xc4), QColor(0xe0, 0xb8, 0x4a)};
-        const double gap = 10;
         const int n = int(chips.size());
-        const double cw = (W - (n - 1) * gap) / n;
+        if (n == 0) return y;
+        const int per = chipsPerRow(W, n);
+        const int rows = (n + per - 1) / per;
         for (int i = 0; i < n; ++i) {
             const Chip& c = chips[i];
-            const QRectF r(L + i * (cw + gap), y, cw, kChipH);
+            const int row = i / per;
+            const int inRow = row == rows - 1 ? n - row * per : per;   // la última fila reparte el ancho entre las que tiene
+            const double cw = (W - (inRow - 1) * kChipGap) / inRow;
+            const QRectF r(L + (i % per) * (cw + kChipGap), y + row * (kChipH + kChipGap), cw, kChipH);
             p.setPen(QPen(theme::line, 1));
             p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
             p.setFont(theme::uiFont(8));
             p.setPen(theme::textDim);
             p.drawText(r.adjusted(12, 8, -8, 0), Qt::AlignLeft | Qt::AlignTop, c.label);
-            double vx = r.left() + 12;
-            if (c.dots >= 0) {
+            if (c.dots >= 0) {   // las medallas van arriba a la derecha: el texto tiene todo el ancho
                 for (int k = 0; k < 3; ++k) {
-                    const QRectF dot(vx + k * 10, r.top() + 30, 7, 7);
+                    const QRectF dot(r.right() - 12 - (3 - k) * 10, r.top() + 10, 7, 7);
                     if (k < c.dots) { p.setPen(Qt::NoPen); p.setBrush(medal[k]); }
                     else { p.setPen(QPen(theme::textFaint, 1)); p.setBrush(Qt::NoBrush); }
                     p.drawEllipse(dot);
                 }
-                vx += 36;
             }
-            p.setFont(theme::uiFont(9.5, QFont::DemiBold));
+            const QRectF vr(r.left() + 12, r.top() + 22, r.width() - 22, 22);
+            // Si no entra, primero se achica la letra; recién después se corta.
+            double pt = 9.5;
+            p.setFont(theme::uiFont(pt, QFont::DemiBold));
+            while (pt > 7.6 && QFontMetricsF(p.font()).horizontalAdvance(c.value) > vr.width()) {
+                pt -= 0.5;
+                p.setFont(theme::uiFont(pt, QFont::DemiBold));
+            }
             p.setPen(theme::text);
-            const QRectF vr(vx, r.top() + 22, r.right() - vx - 10, 22);
             p.drawText(vr, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(c.value, Qt::ElideRight, int(vr.width())));
             if (c.frac >= 0) {
                 const QRectF track(r.left() + 12, r.bottom() - 9, r.width() - 24, 3);
@@ -184,8 +253,9 @@ private:
                 p.setBrush(c.frac >= 1 ? theme::breakAccent : statsInk());
                 p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * qMin(1.0, c.frac), 3), 1.5, 1.5);
             }
+            zone(r, c.key, p);
         }
-        return y + kChipH;
+        return y + chipsHeight(W);
     }
 
     double chartHeight(double W) const
@@ -201,7 +271,7 @@ private:
     int contentHeight(int w) const
     {
         const double W = w - 32;
-        return int(8 + kCardH + 10 + 20 + 18 + (hasChips() ? kChipH + 18 : 0) + chartHeight(W) + 22 + 24 +
+        return int(8 + kCardH + 10 + 20 + 18 + (hasChips() ? chipsHeight(W) + 18 : 0) + chartHeight(W) + 22 + 24 +
                    data.rows.size() * kRowH + 24);
     }
 
@@ -236,6 +306,8 @@ private:
             p.setFont(theme::uiFont(16, QFont::DemiBold));
             p.setPen(cards[i].accent);
             p.drawText(r.adjusted(12, 0, -8, -10), Qt::AlignLeft | Qt::AlignBottom, fmt::hours(cards[i].sec));
+            static const char* keys[4] = {"study", "breaks", "undue", "inactive"};
+            zone(r, QString::fromLatin1(keys[i]), p);
         }
         return y + kCardH;
     }
@@ -257,7 +329,8 @@ private:
             s += QStringLiteral("   ·   récord: %1").arg(data.bestStreak);
         if (!data.streak.todayDone) s += QStringLiteral("   ·   hoy todavía no arrancaste");
         p.setPen(theme::text);
-        p.drawText(QRectF(L, y, W, 20), Qt::AlignLeft | Qt::AlignVCenter, s);
+        p.drawText(QRectF(L, y, W, 20), Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(s, Qt::ElideRight, int(W)));
+        zone(QRectF(L - 6, y - 2, W + 12, 24), QStringLiteral("streak"), p);
         return y + 20;
     }
 
@@ -598,6 +671,9 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     top->addWidget(exp);
 
     m_canvas = new StatsCanvas(this);
+    m_canvas->tipFor = [this](const QString& key) { return tipFor(key); };
+    m_canvas->onZone = [this](const QString& key) { showDetail(key); };
+    m_detail = new DetailCard(this);
     auto* scroll = new QScrollArea(this);
     scroll->setWidget(m_canvas);
     scroll->setWidgetResizable(true);
@@ -809,4 +885,287 @@ void StatsWidget::refresh()
             d.rows.append({QStringLiteral("Sin actividad"), 0, m_db->studyByFolder(d.from, d.to).value(0), orphanAll});
     }
     m_canvas->relayout();
+}
+
+// ===========================================================================
+// Mejoras 3.0: detalle de cada dato
+// ===========================================================================
+namespace {
+QString row(const QString& a, const QString& b, const QString& c = QString())
+{
+    return QStringLiteral("<tr><td style='padding:3px 14px 3px 0; color:%1'>%2</td><td style='padding:3px 14px 3px 0'><b>%3</b></td>"
+                          "<td style='padding:3px 0; color:%1'>%4</td></tr>")
+        .arg(theme::textDim.name(), a, b, c);
+}
+QString table(const QStringList& rows) { return QStringLiteral("<table cellspacing='0' cellpadding='0'>%1</table>").arg(rows.join(QString())); }
+QString dim(const QString& t) { return QStringLiteral("<span style='color:%1'>%2</span>").arg(theme::textDim.name(), t); }
+QString para(const QString& t) { return QStringLiteral("<p style='margin:0 0 8px 0'>%1</p>").arg(t); }
+QString clock(qint64 epoch) { return QDateTime::fromSecsSinceEpoch(epoch).toString(QStringLiteral("HH:mm")); }
+QString cap(const QString& s) { return s.isEmpty() ? s : s.left(1).toUpper() + s.mid(1); }
+} // namespace
+
+QString StatsWidget::tipFor(const QString& key) const
+{
+    const StatsData& d = m_canvas->data;
+    const QString more = QStringLiteral("<br><span style='color:%1'>Click para ver el detalle</span>").arg(theme::textDim.name());
+    const int days = int(d.from.daysTo(qMin(d.to, d.today))) + 1;
+    if (key == "study") {
+        int withStudy = 0;
+        qint64 best = 0;
+        for (qint64 v : d.byDay) { if (v > 0) ++withStudy; best = qMax(best, v); }
+        return QStringLiteral("<b>%1 en %2</b><br>%3 de %4 días · mejor día %5 · promedio %6 por día")
+                   .arg(fmt::hours(d.totals.study), m_label->text().toLower()).arg(withStudy).arg(qMax(1, days))
+                   .arg(fmt::hours(best), fmt::hours(d.totals.study / qMax(1, days))) + more;
+    }
+    if (key == "breaks") return QStringLiteral("<b>Recreos: %1</b><br>El tiempo de recreo dentro de lo pactado.").arg(fmt::hours(d.totals.breaks)) + more;
+    if (key == "undue") return QStringLiteral("<b>Recreos indebidos: %1</b><br>Tiempo muerto en medio de la jornada: pausas, demoras en arrancar y recreos pasados de largo.").arg(fmt::hours(d.totals.undue)) + more;
+    if (key == "inactive") return QStringLiteral("<b>Horas inactivas: %1</b><br>Todo lo demás del período: dormir, comer, la vida.").arg(fmt::hours(d.totals.inactive)) + more;
+    if (key == "streak") {
+        const int left = qMax(0, stats::jokersToday(*m_db, d.today) - d.streak.jokersThisWeek);
+        return QStringLiteral("<b>Racha: %1 %2</b>%3<br>Comodines: te %4 %5 esta semana · racha más larga: %6")
+                   .arg(d.streak.days).arg(d.streak.days == 1 ? "día" : "días",
+                        d.streak.since.isValid() ? QStringLiteral(" · desde el %1").arg(fmt::shortDate(d.streak.since)) : QString())
+                   .arg(left == 1 ? "queda" : "quedan").arg(left).arg(d.bestStreak) + more;
+    }
+    if (key == "goals") return QStringLiteral("<b>Objetivos del período</b><br>Qué días se cumplió el objetivo y cuánto faltó en los que no.") + more;
+    if (key == "mark") {
+        const int lvl = ms::dayMark(d.todaySec, d.ms.markMin);
+        QString s = QStringLiteral("<b>Marca de hoy: %1</b><br>Llevás %2 hoy").arg(lvl ? cap(ms::dayMarkName(lvl)) : QStringLiteral("todavía no"), fmt::hours(d.todaySec));
+        if (lvl < 3) s += QStringLiteral(" · faltan %1 para %2").arg(fmt::hours(qMax<qint64>(0, qint64(d.ms.markMin[lvl]) * 60 - d.todaySec)), ms::dayMarkName(lvl + 1));
+        return s + QStringLiteral("<br>Bronce %1 · plata %2 · oro %3").arg(fmt::hours(qint64(d.ms.markMin[0]) * 60), fmt::hours(qint64(d.ms.markMin[1]) * 60), fmt::hours(qint64(d.ms.markMin[2]) * 60)) + more;
+    }
+    if (key == "weekly") {
+        const qint64 goal = qint64(d.ms.weeklyMin) * 60;
+        const int left = 7 - int(fmt::mondayOf(d.today).daysTo(d.today));
+        return QStringLiteral("<b>Meta semanal: %1 de %2</b><br>%3")
+                   .arg(fmt::hours(d.weekSec), fmt::hours(goal),
+                        d.weekSec >= goal ? QStringLiteral("¡Cumplida!")
+                                          : QStringLiteral("Faltan %1 · %2 por día en los %3 que quedan")
+                                                .arg(fmt::hours(goal - d.weekSec), fmt::hours((goal - d.weekSec) / qMax(1, left))).arg(left)) + more;
+    }
+    if (key == "records")
+        return QStringLiteral("<b>Tus récords</b><br>Mejor día: %1 (%2)<br>Mejor semana: %3<br>Racha más larga: %4 días")
+                   .arg(fmt::hours(d.records.bestDay), d.records.bestDayDate.isValid() ? fmt::shortDate(d.records.bestDayDate) : QStringLiteral("—"),
+                        fmt::hours(d.records.bestWeek)).arg(d.bestStreak) + more;
+    if (key == "level") {
+        const ms::Stage st = ms::stageFor(d.allSec);
+        return QStringLiteral("<b>%1</b> · %2 en total<br>%3").arg(st.label, fmt::hours(d.allSec),
+                   st.toSec ? QStringLiteral("Faltan %1 para el próximo nivel").arg(fmt::hours(st.toSec - d.allSec)) : QStringLiteral("Llegaste a Maestro")) + more;
+    }
+    return {};
+}
+
+void StatsWidget::showDetail(const QString& key)
+{
+    const StatsData& d = m_canvas->data;
+    const QDate last = qMin(d.to, d.today);
+    const int days = qMax(1, int(d.from.daysTo(last)) + 1);
+    const FolderTree tree(m_db->folders());
+    QStringList rows;
+    QString title, html, actionText;
+    std::function<void()> action;
+
+    auto intervalsDetail = [&](IntervalKind kind, const QString& what) {
+        qint64 total = 0, longest = 0;
+        int n = 0;
+        QStringList list;
+        const auto ivs = m_db->intervalsBetween(d.from, last);
+        for (auto it = ivs.crbegin(); it != ivs.crend(); ++it) {
+            if (it->kind != kind || it->seconds < 30) continue;
+            total += it->seconds; longest = qMax<qint64>(longest, it->seconds); ++n;
+            if (list.size() < 12) list << row(d.period == Period::Day ? clock(it->startedAt) : fmt::shortDate(it->day) + QStringLiteral(" ") + clock(it->startedAt), fmt::duration(it->seconds));
+        }
+        rows << row(QStringLiteral("Total"), fmt::hours(total)) << row(QStringLiteral("Cantidad"), QString::number(n))
+             << row(QStringLiteral("Promedio"), n ? fmt::duration(total / n) : QStringLiteral("—"))
+             << row(QStringLiteral("El más largo"), n ? fmt::duration(longest) : QStringLiteral("—"));
+        html = table(rows);
+        if (!list.isEmpty()) html += para(QStringLiteral("<br>") + dim(QStringLiteral("Los últimos %1:").arg(what))) + table(list);
+    };
+
+    if (key == "study") {
+        title = QStringLiteral("%1 · %2").arg(d.studyLabel, m_label->text());
+        int withStudy = 0, pomos = 0;
+        qint64 best = 0; QDate bestDay;
+        for (auto it = d.byDay.cbegin(); it != d.byDay.cend(); ++it) { if (it.value() > 0) ++withStudy; if (it.value() > best) { best = it.value(); bestDay = it.key(); } }
+        for (const Pomodoro& p : m_db->pomodorosBetween(d.from, last)) if (!d.filter || d.filter->contains(p.folderId)) pomos += p.doneUnits();
+        rows << row(QStringLiteral("Total"), fmt::hours(d.totals.study))
+             << row(QStringLiteral("Pomodoros"), QString::number(pomos), pomos ? QStringLiteral("%1 cada uno, en promedio").arg(fmt::duration(d.totals.study / pomos)) : QString());
+        if (d.period != Period::Day) {
+            rows << row(QStringLiteral("Días"), QStringLiteral("%1 de %2").arg(withStudy).arg(days))
+                 << row(QStringLiteral("Promedio por día"), fmt::hours(d.totals.study / days), withStudy ? QStringLiteral("%1 contando solo los días con pomodoros").arg(fmt::hours(d.totals.study / withStudy)) : QString())
+                 << row(QStringLiteral("Mejor día"), best ? fmt::hours(best) : QStringLiteral("—"), bestDay.isValid() ? fmt::longDate(bestDay) : QString());
+        }
+        html = table(rows);
+        QStringList acts;
+        for (const auto& r : d.rows) if (r.depth == 0 && r.period > 0) acts << row(r.name.toHtmlEscaped(), fmt::hours(r.period), QStringLiteral("%1 %").arg(d.totals.study ? qRound(100.0 * r.period / d.totals.study) : 0));
+        if (!acts.isEmpty()) html += para(QStringLiteral("<br>") + dim(QStringLiteral("Por actividad:"))) + table(acts);
+    } else if (key == "breaks") {
+        title = QStringLiteral("Recreos · %1").arg(m_label->text());
+        intervalsDetail(IntervalKind::Break, QStringLiteral("recreos"));
+    } else if (key == "undue") {
+        title = QStringLiteral("Recreos indebidos · %1").arg(m_label->text());
+        intervalsDetail(IntervalKind::Undue, QStringLiteral("ratos"));
+        html = para(dim(QStringLiteral("Tiempo muerto en medio de la jornada: pausas, demoras en arrancar el recreo o el próximo pomodoro, y recreos pasados de largo. "
+                                       "Solo cuenta si después volviste a arrancar ese día; «Me voy» lo corta."))) + html;
+    } else if (key == "inactive") {
+        title = QStringLiteral("Horas inactivas · %1").arg(m_label->text());
+        const qint64 all = d.totals.study + d.totals.breaks + d.totals.undue + d.totals.inactive;
+        auto pct = [&](qint64 v) { return QStringLiteral("%1 %").arg(all ? qRound(100.0 * v / all) : 0); };
+        rows << row(d.studyLabel, fmt::hours(d.totals.study), pct(d.totals.study)) << row(QStringLiteral("Recreos"), fmt::hours(d.totals.breaks), pct(d.totals.breaks))
+             << row(QStringLiteral("Recreos indebidos"), fmt::hours(d.totals.undue), pct(d.totals.undue)) << row(QStringLiteral("Inactivas"), fmt::hours(d.totals.inactive), pct(d.totals.inactive));
+        html = para(dim(QStringLiteral("Todo lo que no es pomodoro ni recreo: dormir, comer, cursar, la vida. Así se reparte el período:"))) + table(rows);
+    } else if (key == "streak") {
+        title = QStringLiteral("Racha: %1 %2").arg(d.streak.days).arg(d.streak.days == 1 ? "día" : "días");
+        const stats::StreakRules rules = stats::StreakRules::load(*m_db);
+        const int perWeek = rules.jokersOn(d.today);
+        const int left = qMax(0, perWeek - d.streak.jokersThisWeek);
+        rows << row(QStringLiteral("Viene desde"), d.streak.since.isValid() ? fmt::longDate(d.streak.since) : QStringLiteral("—"))
+             << row(QStringLiteral("Hoy"), d.streak.todayDone ? QStringLiteral("ya sumaste") : QStringLiteral("todavía no"),
+                    d.streak.todayDone ? QString() : (left > 0 ? QStringLiteral("si no hacés nada se usa un comodín") : QStringLiteral("si no hacés nada, se corta")))
+             << row(QStringLiteral("Comodines"), QStringLiteral("%1 de %2 esta semana").arg(left).arg(perWeek), QStringLiteral("disponibles"))
+             << row(QStringLiteral("Racha más larga"), QStringLiteral("%1 %2").arg(d.bestStreak).arg(d.bestStreak == 1 ? "día" : "días"));
+        html = table(rows);
+        // Las últimas 5 semanas: ● con pomodoros · ◐ comodín · ○ nada
+        const QSet<QDate> studied = m_db->studiedDays();
+        QString cal = QStringLiteral("<br><table cellspacing='0' cellpadding='0'><tr>");
+        for (const char* h : {"L", "M", "M", "J", "V", "S", "D"}) cal += QStringLiteral("<td style='padding:2px 9px; color:%1'>%2</td>").arg(theme::textFaint.name(), QString::fromLatin1(h));
+        cal += QStringLiteral("</tr>");
+        const QDate first = fmt::mondayOf(d.today).addDays(-28);
+        for (int w = 0; w < 5; ++w) {
+            cal += QStringLiteral("<tr>");
+            for (int k = 0; k < 7; ++k) {
+                const QDate x = first.addDays(w * 7 + k);
+                const bool inStreak = d.streak.since.isValid() && x >= d.streak.since && x <= d.today;
+                QString mark = QStringLiteral("○"); QColor c = theme::textFaint;
+                if (x > d.today) { mark = QStringLiteral("·"); }
+                else if (studied.contains(x)) { mark = QStringLiteral("●"); c = inStreak ? theme::pomoAccent : theme::textDim; }
+                else if (d.streak.jokerDays.contains(x)) { mark = QStringLiteral("◐"); c = theme::text; }
+                cal += QStringLiteral("<td style='padding:2px 9px; color:%1; %3'>%2</td>").arg(c.name(), mark, x == d.today ? QStringLiteral("font-weight:700; text-decoration: underline;") : QString());
+            }
+            cal += QStringLiteral("</tr>");
+        }
+        cal += QStringLiteral("</table>");
+        html += cal + para(QStringLiteral("<br>") + dim(QStringLiteral("● día con pomodoros (en rojo, los de la racha) · ◐ comodín · ○ nada.<br>"
+                                                                       "Solo suman los días con algún pomodoro; los comodines la sostienen pero no agregan días. "
+                                                                       "Cambiar los comodines en Ajustes vale desde ese día, no hacia atrás.")));
+        if (rules.resetDay == d.today) {
+            actionText = QStringLiteral("Deshacer el reinicio");
+            action = [this] { stats::resetStreak(*m_db, QDate()); refresh(); showDetail(QStringLiteral("streak")); emit message(QStringLiteral("Racha recuperada")); };
+        } else if (d.streak.days > 0) {
+            actionText = QStringLiteral("Reiniciar racha…");
+            action = [this, today = d.today, n = d.streak.days] {
+                m_detail->showDetail(QStringLiteral("¿Reiniciar la racha?"),
+                    para(QStringLiteral("Tu racha de <b>%1 %2</b> vuelve a cero y empieza a contar desde hoy.").arg(n).arg(n == 1 ? "día" : "días")) +
+                    para(dim(QStringLiteral("Es para cuando sentís que no cumpliste. Tu racha más larga queda guardada como récord, y hoy mismo lo podés deshacer desde acá."))),
+                    QStringLiteral("Sí, reiniciar"), [this, today] {
+                        stats::resetStreak(*m_db, today);
+                        refresh();
+                        showDetail(QStringLiteral("streak"));
+                        emit message(QStringLiteral("Racha reiniciada"));
+                    });
+            };
+        }
+    } else if (key == "goals") {
+        title = QStringLiteral("Objetivos · %1").arg(m_label->text());
+        int met = 0, n = 0;
+        for (auto it = d.goals.cend(); it != d.goals.cbegin();) {
+            --it;
+            const bool today = it.key() == d.today;
+            if (!today || it->met) { ++n; if (it->met) ++met; }
+            rows << row(cap(fmt::shortDate(it.key())), QStringLiteral("%1 de %2").arg(fmt::hours(it->studied), fmt::hours(it->target)),
+                        it->met ? QStringLiteral("<span style='color:%1'>cumplido</span>").arg(theme::breakAccent.name())
+                                : today ? QStringLiteral("en curso · faltan %1").arg(fmt::hours(it->missing)) : QStringLiteral("faltaron %1").arg(fmt::hours(it->missing)));
+        }
+        html = para(QStringLiteral("<b>%1 de %2</b> días cumplidos%3").arg(met).arg(n).arg(n ? QStringLiteral(" (%1 %)").arg(qRound(100.0 * met / n)) : QString())) + table(rows);
+    } else if (key == "mark") {
+        const int lvl = ms::dayMark(d.todaySec, d.ms.markMin);
+        title = QStringLiteral("Marca de hoy: %1").arg(lvl ? cap(ms::dayMarkName(lvl)) : QStringLiteral("todavía no"));
+        static const char* names[3] = {"Bronce", "Plata", "Oro"};
+        for (int i = 0; i < 3; ++i) {
+            const qint64 at = qint64(d.ms.markMin[i]) * 60;
+            rows << row(QString::fromLatin1(names[i]), fmt::hours(at), d.todaySec >= at ? QStringLiteral("<span style='color:%1'>lograda</span>").arg(theme::breakAccent.name())
+                                                                                        : QStringLiteral("faltan %1").arg(fmt::hours(at - d.todaySec)));
+        }
+        html = para(QStringLiteral("Llevás <b>%1</b> hoy.").arg(fmt::hours(d.todaySec))) + table(rows);
+        // Últimos 30 días
+        const auto all = stats::studyByDay(*m_db, d.today.addDays(-29), d.today, nullptr);
+        int c[4] = {0, 0, 0, 0};
+        for (QDate x = d.today.addDays(-29); x <= d.today; x = x.addDays(1)) ++c[ms::dayMark(all.value(x), d.ms.markMin)];
+        html += para(QStringLiteral("<br>") + dim(QStringLiteral("En los últimos 30 días:"))) +
+                table({row(QStringLiteral("Oro"), QString::number(c[3])), row(QStringLiteral("Plata"), QString::number(c[2])),
+                       row(QStringLiteral("Bronce"), QString::number(c[1])), row(QStringLiteral("Sin marca"), QString::number(c[0]))}) +
+                para(QStringLiteral("<br>") + dim(QStringLiteral("Los valores se cambian en Ajustes › Hitos.")));
+    } else if (key == "weekly") {
+        const qint64 goal = qint64(d.ms.weeklyMin) * 60;
+        title = QStringLiteral("Meta semanal: %1 de %2").arg(fmt::hours(d.weekSec), fmt::hours(goal));
+        const QDate mon = fmt::mondayOf(d.today);
+        const auto all = stats::studyByDay(*m_db, QDate(2000, 1, 1), d.today, nullptr);
+        static const char* dn[7] = {"Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"};
+        for (int i = 0; i < 7; ++i) {
+            const QDate x = mon.addDays(i);
+            rows << row(QString::fromUtf8(dn[i]), x > d.today ? QStringLiteral("—") : fmt::hours(all.value(x)), x == d.today ? QStringLiteral("hoy") : QString());
+        }
+        const int left = 7 - int(mon.daysTo(d.today));
+        html = para(d.weekSec >= goal ? QStringLiteral("<span style='color:%1'><b>¡Cumplida!</b></span>").arg(theme::breakAccent.name())
+                                      : QStringLiteral("Faltan <b>%1</b>: son <b>%2 por día</b> en los %3 %4 que quedan (contando hoy).")
+                                            .arg(fmt::hours(goal - d.weekSec), fmt::hours((goal - d.weekSec) / qMax(1, left))).arg(left).arg(left == 1 ? "día" : "días")) +
+               table(rows) +
+               para(QStringLiteral("<br>") + dim(QStringLiteral("Semanas seguidas cumpliéndola: %1. Se cambia en Ajustes › Hitos.").arg(ms::weeksInARow(all, d.today, goal))));
+    } else if (key == "records") {
+        title = QStringLiteral("Tus récords");
+        const auto all = stats::studyByDay(*m_db, QDate(2000, 1, 1), d.today, nullptr);
+        const ms::Records before = ms::records(all, d.today);   // sin contar hoy: para comparar
+        // Mejor mes y más pomodoros en un día
+        QMap<QDate, qint64> byMonth; QMap<QDate, int> pomosByDay;
+        for (auto it = all.cbegin(); it != all.cend(); ++it) byMonth[QDate(it.key().year(), it.key().month(), 1)] += it.value();
+        for (const Pomodoro& p : m_db->pomodorosBetween(QDate(2000, 1, 1), d.today)) pomosByDay[p.day] += p.doneUnits();
+        qint64 bestMonth = 0; QDate bestMonthDate; int mostPomos = 0; QDate mostPomosDate;
+        for (auto it = byMonth.cbegin(); it != byMonth.cend(); ++it) if (it.value() > bestMonth) { bestMonth = it.value(); bestMonthDate = it.key(); }
+        for (auto it = pomosByDay.cbegin(); it != pomosByDay.cend(); ++it) if (it.value() > mostPomos) { mostPomos = it.value(); mostPomosDate = it.key(); }
+        const qint64 thisMonth = byMonth.value(QDate(d.today.year(), d.today.month(), 1));
+        auto versus = [](qint64 now, qint64 rec, const QString& when) {
+            if (rec <= 0) return QString();
+            return now >= rec ? QStringLiteral("<span style='color:%1'>%2: ¡es el récord!</span>").arg(theme::breakAccent.name(), when)
+                              : QStringLiteral("%1: %2 · faltan %3").arg(when, fmt::hours(now), fmt::hours(rec - now));
+        };
+        auto block = [&](const QString& name, const QString& value, const QString& when, const QString& vs) {
+            return QStringLiteral("<tr><td style='padding:6px 16px 0 0; color:%1'>%2</td><td style='padding:6px 12px 0 0; font-size:13pt'><b>%3</b></td>"
+                                  "<td style='padding:6px 0 0 0; color:%1'>%4</td></tr>"
+                                  "<tr><td></td><td colspan='2' style='padding:0 0 6px 0; color:%1'>%5</td></tr>")
+                .arg(theme::textDim.name(), name, value, when, vs);
+        };
+        QStringList b;
+        b << block(QStringLiteral("Mejor día"), d.records.bestDay ? fmt::hours(d.records.bestDay) : QStringLiteral("—"),
+                   d.records.bestDayDate.isValid() ? fmt::longDate(d.records.bestDayDate) : QString(), versus(d.todaySec, before.bestDay, QStringLiteral("Hoy")))
+          << block(QStringLiteral("Mejor semana"), d.records.bestWeek ? fmt::hours(d.records.bestWeek) : QStringLiteral("—"),
+                   d.records.bestWeekMonday.isValid() && d.weekSec < d.records.bestWeek ? fmt::weekRange(d.records.bestWeekMonday) : (d.records.bestWeek ? QStringLiteral("esta semana") : QString()),
+                   versus(d.weekSec, before.bestWeek, QStringLiteral("Esta semana")))
+          << block(QStringLiteral("Mejor mes"), bestMonth ? fmt::hours(bestMonth) : QStringLiteral("—"), bestMonthDate.isValid() ? fmt::monthYear(bestMonthDate) : QString(),
+                   bestMonthDate == QDate(d.today.year(), d.today.month(), 1) ? QStringLiteral("es este mes") : versus(thisMonth, bestMonth, QStringLiteral("Este mes")))
+          << block(QStringLiteral("Racha más larga"), QStringLiteral("%1 %2").arg(d.bestStreak).arg(d.bestStreak == 1 ? "día" : "días"), QString(),
+                   d.streak.days >= d.bestStreak && d.bestStreak > 0 ? QStringLiteral("<span style='color:%1'>es la de ahora</span>").arg(theme::breakAccent.name())
+                                                                     : QStringLiteral("Ahora: %1 · faltan %2").arg(d.streak.days).arg(d.bestStreak - d.streak.days))
+          << block(QStringLiteral("Más pomodoros en un día"), mostPomos ? QString::number(mostPomos) : QStringLiteral("—"),
+                   mostPomosDate.isValid() ? fmt::longDate(mostPomosDate) : QString(),
+                   mostPomos ? QStringLiteral("Hoy: %1").arg(pomosByDay.value(d.today)) : QString());
+        html = table(b);
+    } else if (key == "level") {
+        const ms::Stage st = ms::stageFor(d.allSec);
+        title = QStringLiteral("Nivel global: %1").arg(st.label);
+        static const qint64 from[8] = {0, 20, 100, 500, 1000, 2500, 5000, 10000};
+        const QStringList names = ms::stageNames();
+        for (int i = 0; i < names.size() && i < 8; ++i) {
+            const bool here = i == st.index;
+            rows << row(here ? QStringLiteral("<b style='color:%1'>▸ %2</b>").arg(theme::text.name(), names[i]) : names[i],
+                        i + 1 < 8 ? QStringLiteral("%1 – %2 h").arg(from[i]).arg(from[i + 1]) : QStringLiteral("10.000 h o más"),
+                        here ? QStringLiteral("estás acá") : (i < st.index ? QStringLiteral("hecho") : QString()));
+        }
+        html = para(QStringLiteral("Llevás <b>%1</b> en total (%2 % de las 10.000 h).%3")
+                        .arg(fmt::hours(d.allSec), QString::number(d.allSec / 360000.0, 'f', 2),
+                             st.toSec ? QStringLiteral(" Faltan <b>%1</b> para el próximo nivel.").arg(fmt::hours(st.toSec - d.allSec)) : QString())) +
+               table(rows) + para(QStringLiteral("<br>") + dim(QStringLiteral("Cada etapa tiene subniveles I, II y III. Cada actividad tiene su propio nivel (abajo, en la lista).")));
+    } else {
+        return;
+    }
+    m_detail->showDetail(title, html, actionText, action);
 }

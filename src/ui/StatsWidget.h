@@ -24,6 +24,9 @@ public:
     void resetToToday();
     void step(int dir);
     void exportCsv(bool everything);   // M39
+    // Mejoras 3.0: el detalle de un dato (hover = resumen, click = mini ventana)
+    QString tipFor(const QString& key) const;
+    void showDetail(const QString& key);
 
 signals:
     void backRequested();
@@ -45,4 +48,5 @@ private:
     QLabel*       m_label;
     QComboBox*    m_folder;
     StatsCanvas*  m_canvas;
+    class DetailCard* m_detail = nullptr;
 };

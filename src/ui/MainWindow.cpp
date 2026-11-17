@@ -11,6 +11,7 @@
 #include "ui/Greeting.h"
 #include "ui/Tour.h"
 #include "ui/FocusGuard.h"
+#include "ui/DetailCard.h"
 #include "ui/Celebration.h"
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
@@ -513,7 +514,10 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(f11, &QShortcut::activated, this, &MainWindow::toggleFullScreen);
     auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     connect(esc, &QShortcut::activated, this, [this] {
-        if (m_grid->hasSelection()) m_grid->clearSelection();
+        if (auto cards = findChildren<DetailCard*>(); std::any_of(cards.begin(), cards.end(), [](DetailCard* c) { return c->isVisible(); })) {
+            for (DetailCard* c : cards) c->closeCard();   // Mejoras 3.0: la mini ventana de detalle
+        }
+        else if (m_grid->hasSelection()) m_grid->clearSelection();
         else if (m_goalPanel && m_goalPanel->isVisible()) closeGoalPanel();
         else if (m_overlay != Overlay::None) showOverlay(Overlay::None);   // M37
         else if (isFullScreen()) toggleFullScreen();
