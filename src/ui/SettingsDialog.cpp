@@ -28,6 +28,7 @@
 #include <QDoubleSpinBox>
 #include <QScrollArea>
 #include <cmath>
+#include <functional>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QToolButton>
@@ -55,6 +56,31 @@ QLabel* subheading(const QString& text, QWidget* parent)
     auto* l = new QLabel(text.toUpper(), parent);
     l->setProperty("role", "caption");
     return l;
+}
+
+// Mejoras 4.1: grupo plegable ("Avanzado") para bajar el ruido de cada página.
+QWidget* collapsible(const QString& title, QWidget* parent, const std::function<void(QVBoxLayout*)>& fill, bool open = false)
+{
+    auto* box = new QWidget(parent);
+    auto* outer = new QVBoxLayout(box);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(4);
+    auto* head = new QToolButton(box);
+    head->setObjectName("SettingsFold");
+    head->setCursor(Qt::PointingHandCursor);
+    head->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    auto* body = new QWidget(box);
+    auto* bl = new QVBoxLayout(body);
+    bl->setContentsMargins(0, 0, 0, 0);
+    fill(bl);
+    auto sync = [=](bool on) { head->setText((on ? QStringLiteral("▾  ") : QStringLiteral("▸  ")) + title); body->setVisible(on); };
+    head->setCheckable(true);
+    head->setChecked(open);
+    QObject::connect(head, &QToolButton::toggled, box, sync);
+    sync(open);
+    outer->addWidget(head, 0, Qt::AlignLeft);
+    outer->addWidget(body);
+    return box;
 }
 
 QSpinBox* spin(int min, int max, int value, const QString& suffix, QWidget* parent)
@@ -203,36 +229,54 @@ QWidget* SettingsDialog::pageGeneral()
     m_dateFormat->setCurrentIndex(m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric") ? 0 : 1);
     m_dayStart = spin(0, 6, m_db->setting("day_start_hour", 4).toInt(), QStringLiteral(":00 h"), w);
 
-    auto* form = new QFormLayout;
-    form->addRow(QStringLiteral("Pomodoro por defecto"), m_work);
-    form->addRow(QStringLiteral("Recreo por defecto"), m_break);
-    form->addRow(QStringLiteral("Comodines por semana"), m_jokers);
-    form->addRow(QStringLiteral("Formato de la fecha"), m_dateFormat);
-    form->addRow(QStringLiteral("El día empieza a las"), m_dayStart);
     m_goalInput = new QComboBox(w);
     m_goalInput->addItem(QStringLiteral("Botones (cantidad × minutos)"), "buttons");
     m_goalInput->addItem(QStringLiteral("Texto (3x30 + 2x25)"), "text");
     m_goalInput->setCurrentIndex(m_db->setting("goal_input", "buttons").toString() == QLatin1String("text") ? 1 : 0);
-    form->addRow(QStringLiteral("Objetivo por pomodoros"), m_goalInput);
     // B2-1: qué pasa con el fantasma del objetivo cuando arrancás ese pomodoro.
     m_goalRunning = new QComboBox(w);
     m_goalRunning->addItem(QStringLiteral("Reemplaza al fantasma"));
     m_goalRunning->addItem(QStringLiteral("Se funde con el fantasma al terminar"));
     m_goalRunning->setCurrentIndex(qBound(0, m_db->setting("goal_running", 0).toInt(), 1));
-    form->addRow(QStringLiteral("Pomodoro del objetivo"), m_goalRunning);
     // Mejoras 2.0: con qué recreo se calcula "≈ X con recreos" en el objetivo.
     m_goalBreak = new QComboBox(w);
     m_goalBreak->addItem(QStringLiteral("Mi duración de recreo"));
     m_goalBreak->addItem(QStringLiteral("Mi promedio real (últimas 4 semanas)"));
     m_goalBreak->setCurrentIndex(qBound(0, m_db->setting("goal_break_source", 0).toInt(), 1));
-    form->addRow(QStringLiteral("Recreos del objetivo"), m_goalBreak);
+    // Mejoras 4.1: anotador desplegable y ánimo al terminar la sesión.
+    m_notepad = new QCheckBox(QStringLiteral("Anotador desplegable junto al objetivo"), w);
+    m_notepad->setChecked(m_db->setting("notepad_on", 1).toBool());
+    m_notepad->setToolTip(QStringLiteral("Apagado, el diario (ánimo y nota) queda dentro del panel del objetivo, como antes."));
+    m_moodOffer = new QCheckBox(QStringLiteral("Preguntarme cómo me fue al terminar la sesión (Me voy)"), w);
+    m_moodOffer->setChecked(m_db->setting("mood_offer", 1).toBool());
+
+    auto* times = new QFormLayout;
+    times->addRow(QStringLiteral("Pomodoro por defecto"), m_work);
+    times->addRow(QStringLiteral("Recreo por defecto"), m_break);
+    times->addRow(QStringLiteral("El día empieza a las"), m_dayStart);
+    times->addRow(QStringLiteral("Comodines por semana"), m_jokers);
+    auto* goalForm = new QFormLayout;
+    goalForm->addRow(QStringLiteral("Cargar por pomodoros con"), m_goalInput);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("General"), w));
-    lay->addLayout(form);
-    lay->addWidget(note(QStringLiteral("Los comodines son días sin estudiar que no cortan la racha. "
-                                       "Si el día empieza a las 4, lo que estudies a las 2 AM cuenta para el día anterior "
-                                       "(se aplica al reiniciar la app)."), w));
+    lay->addWidget(subheading(QStringLiteral("Tiempos y racha"), w));
+    lay->addLayout(times);
+    lay->addWidget(note(QStringLiteral("Los comodines son días sin estudiar que no cortan la racha."), w));
+    lay->addSpacing(8);
+    lay->addWidget(subheading(QStringLiteral("Objetivo y diario"), w));
+    lay->addLayout(goalForm);
+    lay->addWidget(m_notepad);
+    lay->addWidget(m_moodOffer);
+    lay->addSpacing(8);
+    lay->addWidget(collapsible(QStringLiteral("Avanzado"), w, [&](QVBoxLayout* l) {
+        auto* f = new QFormLayout;
+        f->addRow(QStringLiteral("Formato de la fecha"), m_dateFormat);
+        f->addRow(QStringLiteral("Pomodoro del objetivo"), m_goalRunning);
+        f->addRow(QStringLiteral("Recreos del objetivo"), m_goalBreak);
+        l->addLayout(f);
+        l->addWidget(note(QStringLiteral("El cambio del inicio del día se aplica al reiniciar la app."), w));
+    }));
     lay->addStretch();
     return w;
 }
@@ -259,17 +303,18 @@ QWidget* SettingsDialog::pageTimer()
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Cronómetro"), w));
+    lay->addWidget(subheading(QStringLiteral("Ajustar la duración"), w));
     lay->addWidget(m_wheel);
     lay->addWidget(m_type);
     lay->addWidget(m_extraButtons);
-    lay->addSpacing(6);
-    lay->addLayout(form);
-    lay->addWidget(note(QStringLiteral("Sin los botones de paso fino, el − / + de siempre va de a 5 minutos "
-                                       "arriba de 10 y de a 1 por debajo."), w));
+    lay->addWidget(collapsible(QStringLiteral("Pasos y sensibilidad"), w, [&](QVBoxLayout* l) {
+        l->addLayout(form);
+        l->addWidget(note(QStringLiteral("Sin los botones de paso fino, el − / + va de a 5 min arriba de 10 y de a 1 por debajo."), w));
+    }));
 
     // Mejoras 3.0: distracciones (Instagram, WhatsApp…) con un pomodoro corriendo
     lay->addSpacing(10);
-    lay->addWidget(heading(QStringLiteral("Distracciones"), w));
+    lay->addWidget(subheading(QStringLiteral("Distracciones"), w));
     m_guardOn = new QCheckBox(QStringLiteral("Avisarme si me voy a una distracción con un pomodoro corriendo"), w);
     m_guardOn->setChecked(m_db->setting("guard_on", 0).toBool());
     m_guardPause = new QCheckBox(QStringLiteral("Pausar el pomodoro (el rato cuenta como recreo indebido)"), w);
@@ -283,9 +328,7 @@ QWidget* SettingsDialog::pageTimer()
     lay->addWidget(m_guardOn);
     lay->addWidget(m_guardPause);
     lay->addLayout(gform);
-    lay->addWidget(note(QStringLiteral("Mira solo la ventana que está al frente: el nombre del programa y el título (en el navegador, "
-                                       "el de la pestaña activa). Pasado el tiempo de gracia aparece un cartel rojo a pantalla completa. "
-                                       "Todo queda en tu PC y no se guarda qué mirabas. No ve pestañas de fondo ni el celular."), w));
+    lay->addWidget(note(QStringLiteral("Mira solo el programa y el título de la ventana al frente; todo queda en tu PC."), w));
     for (QWidget* x : {static_cast<QWidget*>(m_guardPause), static_cast<QWidget*>(m_guardGrace), static_cast<QWidget*>(m_guardWords)}) {
         x->setEnabled(m_guardOn->isChecked());
         connect(m_guardOn, &QCheckBox::toggled, x, &QWidget::setEnabled);
@@ -589,11 +632,12 @@ QWidget* SettingsDialog::pageTiles()
     lay->addWidget(m_tilePrefix);
     lay->addWidget(m_tileCaption);
     lay->addSpacing(6);
-    lay->addWidget(subheading(QStringLiteral("Tamaño"), w));
-    lay->addLayout(zform);
-    lay->addWidget(note(QStringLiteral("El botón de la barra cicla entre:"), w));
-    lay->addLayout(sizeRow);
-    lay->addWidget(m_sizeButton);
+    lay->addWidget(collapsible(QStringLiteral("Tamaño"), w, [&](QVBoxLayout* l) {
+        l->addLayout(zform);
+        l->addWidget(note(QStringLiteral("El botón de la barra cicla entre:"), w));
+        l->addLayout(sizeRow);
+        l->addWidget(m_sizeButton);
+    }));
     lay->addSpacing(6);
     lay->addWidget(subheading(QStringLiteral("Agrupado y colores"), w));
     lay->addLayout(gform);
@@ -647,16 +691,13 @@ QWidget* SettingsDialog::pageMilestones()
     lay->addWidget(m_msToggle[0]);
     lay->addLayout(mform);
     lay->addWidget(m_msToggle[1]);
-    lay->addWidget(note(QStringLiteral("Rachas de 3, 7, 14, 30, 60, 100… días; tu mejor día, tu mejor semana y tu racha más larga."), w));
     lay->addWidget(m_msToggle[2]);
     lay->addLayout(wform);
     lay->addSpacing(6);
     lay->addWidget(subheading(QStringLiteral("Mediano y largo plazo"), w));
     lay->addWidget(m_msToggle[3]);
     lay->addWidget(m_msToggle[4]);
-    lay->addWidget(note(QStringLiteral("Novato (0–20 h) · Aprendiz (20–100) · Practicante (100–500) · Competente (500–1.000) · "
-                                       "Avanzado (1.000–2.500) · Especialista (2.500–5.000) · Experto (5.000–10.000) · Maestro. "
-                                       "Cada etapa tiene tres subniveles."), w));
+    lay->addWidget(note(QStringLiteral("De Novato a Maestro pasando por 8 etapas, con tres subniveles cada una."), w));
     lay->addWidget(m_msToggle[5]);
     lay->addWidget(note(QStringLiteral("Lo mismo se prende y se apaga desde el menú ⋯ › Hitos."), w));
     lay->addStretch();
@@ -673,8 +714,9 @@ QWidget* SettingsDialog::pageSystem()
     auto* w = new QWidget(this);
     m_autostart = new QCheckBox(QStringLiteral("Iniciar con Windows"), w);
     m_autostart->setChecked(m_db->setting("autostart", 0).toBool());
-    m_greeting = new QCheckBox(QStringLiteral("Saludarme la primera vez que uso la PC en el día (al prender, despertar o desbloquear)"), w);
+    m_greeting = new QCheckBox(QStringLiteral("Saludarme la primera vez que uso la PC en el día"), w);
     m_greeting->setChecked(m_db->setting("greeting", 0).toBool());
+    m_greeting->setToolTip(QStringLiteral("Al prender la PC, despertarla o desbloquearla."));
     m_hotkey = new QCheckBox(QStringLiteral("Atajo global Ctrl + Alt + P (pausar / seguir)"), w);
     m_hotkey->setChecked(m_db->setting("hotkey", 1).toBool());
     m_quietFullscreen = new QCheckBox(QStringLiteral("No saltar al frente en pantalla completa (solo aviso)"), w);
@@ -697,19 +739,23 @@ QWidget* SettingsDialog::pageSystem()
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Sistema"), w));
+    lay->addWidget(subheading(QStringLiteral("Inicio"), w));
     lay->addWidget(m_autostart);
     lay->addWidget(m_greeting);
+    lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Atajos y avisos"), w));
     lay->addWidget(m_hotkey);
     lay->addWidget(m_quietFullscreen);
     lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Copia de seguridad"), w));
     lay->addWidget(m_backup);
     lay->addLayout(dirRow);
-    lay->addWidget(note(QStringLiteral("Tip: si elegís una carpeta de OneDrive o Google Drive, las copias también "
-                                       "te salvan si se rompe el disco."), w));
-    lay->addSpacing(10);
-    lay->addWidget(m_devMode);
-    lay->addWidget(note(QStringLiteral("Con el modo desarrollador aparece el botón 🧪 en la barra (completar ya, "
-                                       "acelerar el tiempo, ver festejos…). Al guardar, la app se reinicia sola."), w));
+    lay->addWidget(note(QStringLiteral("Con una carpeta de OneDrive o Drive, las copias también te salvan si se rompe el disco."), w));
+    lay->addSpacing(6);
+    lay->addWidget(collapsible(QStringLiteral("Avanzado"), w, [&](QVBoxLayout* l) {
+        l->addWidget(m_devMode);
+        l->addWidget(note(QStringLiteral("Aparece el botón 🧪 en la barra. Al guardar, la app se reinicia sola."), w));
+    }));
     lay->addStretch();
     return w;
 }
@@ -723,6 +769,8 @@ void SettingsDialog::accept()
     m_db->setSetting("date_format", m_dateFormat->currentIndex() == 0 ? "numeric" : "long");
     m_db->setSetting("day_start_hour", m_dayStart->value());
     m_db->setSetting("goal_input", m_goalInput->currentData().toString());
+    m_db->setSetting("notepad_on", m_notepad->isChecked() ? 1 : 0);
+    m_db->setSetting("mood_offer", m_moodOffer->isChecked() ? 1 : 0);
     m_db->setSetting("goal_running", m_goalRunning->currentIndex());
     m_db->setSetting("goal_break_source", m_goalBreak->currentIndex());
 
@@ -835,6 +883,8 @@ void SettingsDialog::resetSection(int page)
         m_dayStart->setValue(4);
         pick(m_goalInput, 0);
         pick(m_goalRunning, 0);
+        m_notepad->setChecked(true);
+        m_moodOffer->setChecked(true);
         break;
     case 1:   // Cronómetro
         m_wheel->setChecked(true);
