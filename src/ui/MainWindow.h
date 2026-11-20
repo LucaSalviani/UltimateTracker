@@ -106,6 +106,10 @@ private:
     // ---- meta del día (M7)
     void openGoalPanel(const QDate& day);
     void closeGoalPanel();
+    void openNotePad(const QDate& day);
+    void closeNotePad(bool animate = true);
+    void placeNotePad(bool open, bool animate);
+    void offerMood();
     void placeGoalPanel(bool open, bool animate);
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel
     void updateObjectiveBand();
@@ -173,6 +177,9 @@ private:
     bool         m_settingsOpen = false;  // M31
     bool         m_firstShow = true;      // M34 (antes era static: no servía con dos ventanas seguidas)
     class GoalPanel* m_goalPanel = nullptr;
+    class NotePad*   m_notePad = nullptr;       // Mejoras 4.1: anotador al lado del objetivo
+    QPointer<QPropertyAnimation> m_noteAnim;
+    bool        m_notePadOpen = false;
     class Celebration* m_celebration = nullptr;
     class GlobalHotkey* m_hotkey = nullptr;   // M9
     class WakeWatcher*  m_wake = nullptr;     // B2-4

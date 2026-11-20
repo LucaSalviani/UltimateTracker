@@ -245,7 +245,8 @@ GoalPanel::GoalPanel(QWidget* parent)
     lay->addWidget(m_status);
     // ---- Diario (Mejoras 4.0 · 10)
     lay->addSpacing(6);
-    lay->addWidget(caption(QStringLiteral("DIARIO"), this));
+    m_diaryCaption = caption(QStringLiteral("DIARIO"), this);
+    lay->addWidget(m_diaryCaption);
     m_moodLabel = new QLabel(QStringLiteral("¿Cómo te fue?"), this);
     m_mood = new MoodBar(this);
     lay->addWidget(m_moodLabel);
@@ -261,9 +262,30 @@ GoalPanel::GoalPanel(QWidget* parent)
     connect(m_note, &QPlainTextEdit::textChanged, this, [this] { m_noteDirty = true; m_noteTimer->start(); });
     connect(m_noteTimer, &QTimer::timeout, this, &GoalPanel::flushDiary);
     connect(m_mood, &MoodBar::moodChanged, this, [this](int v) { emit dayMoodChanged(m_day, v); });
+    // Mejoras 4.1: botón que despliega el anotador (solo con el anotador activo).
+    m_notepadBtn = new QPushButton(QStringLiteral("Anotador  ▸"), this);
+    m_notepadBtn->setObjectName("NotePadBtn");
+    m_notepadBtn->setCursor(Qt::PointingHandCursor);
+    m_notepadBtn->setToolTip(QStringLiteral("Una hoja libre para el día: lo que querés hacer, cómo te fue, lo que quieras"));
+    connect(m_notepadBtn, &QPushButton::clicked, this, &GoalPanel::notepadRequested);
+    lay->addWidget(m_notepadBtn);
+    setNotepadMode(false);
     lay->addStretch();
     lay->addLayout(buttons);
     lay->addWidget(hint);
+}
+
+void GoalPanel::setNotepadMode(bool on)
+{
+    for (QWidget* w : {static_cast<QWidget*>(m_diaryCaption), static_cast<QWidget*>(m_moodLabel),
+                       static_cast<QWidget*>(m_mood), static_cast<QWidget*>(m_note)})
+        w->setVisible(!on);
+    m_notepadBtn->setVisible(on);
+}
+
+void GoalPanel::setNotepadOpen(bool open)
+{
+    m_notepadBtn->setText(open ? QStringLiteral("Anotador  ◂") : QStringLiteral("Anotador  ▸"));
 }
 
 void GoalPanel::setDiary(const QString& note, int mood)

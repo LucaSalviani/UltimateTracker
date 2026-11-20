@@ -42,6 +42,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/FocusGuard.h        src/ui/FocusGuard.cpp
     src/ui/DetailCard.h        src/ui/DetailCard.cpp
     src/ui/MoodBar.h           src/ui/MoodBar.cpp
+    src/ui/NotePad.h           src/ui/NotePad.cpp
     src/ui/EvolutionView.h     src/ui/EvolutionView.cpp
     src/ui/Sounds.h            src/ui/Sounds.cpp
     src/ui/GridWidget.h        src/ui/GridWidget.cpp

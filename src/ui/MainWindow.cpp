@@ -6,6 +6,8 @@
 #include "ui/Fade.h"
 #include "ui/FolderMenu.h"
 #include "ui/GoalPanel.h"
+#include "ui/MoodBar.h"
+#include "ui/NotePad.h"
 #include "ui/MiniPlayer.h"
 #include "ui/DevMode.h"
 #include "ui/Greeting.h"
@@ -1070,6 +1072,7 @@ void MainWindow::resizeEvent(QResizeEvent* e)
     QWidget::resizeEvent(e);
     if (m_dayCard) m_dayCard->setGeometry(rect());
     if (m_goalPanel && m_goalPanel->isVisible()) placeGoalPanel(true, false);
+    if (m_notePad && m_notePad->isVisible()) placeNotePad(true, false);
     if (m_floatToast && m_floatToast->isVisible()) placeFloatToast();
     if (isFullScreen()) { updateDeckWidth(); return; }
     // Tamaño que dejaste a mano: se recuerda para siempre para esta vista.
@@ -2247,6 +2250,9 @@ void MainWindow::openGoalPanel(const QDate& day)
         m_goalPanel->hide();
         m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
         connect(m_goalPanel, &GoalPanel::closeRequested, this, &MainWindow::closeGoalPanel);
+        connect(m_goalPanel, &GoalPanel::notepadRequested, this, [this] {
+            if (m_notePadOpen) closeNotePad(); else openNotePad(m_goalPanel->day());
+        });
         connect(m_goalPanel, &GoalPanel::dayTitleEdited, this, [this](const QDate& d, const QString& t) {
             m_db->setDayTitle(d, t);
             refreshBand();
@@ -2288,13 +2294,94 @@ void MainWindow::openGoalPanel(const QDate& day)
     m_goalPanel->load(day, goals::resolve(m_db->goals(), day), m_db->dayTitle(day),
                       m_db->setting("work_min", 25).toInt(), day == m_today);
     { const auto dy = m_db->dayDiary(day); m_goalPanel->setDiary(dy.note, dy.mood); }
+    m_goalPanel->setNotepadMode(m_db->setting("notepad_on", 1).toBool());
+    if (m_notePadOpen) {
+        if (m_db->setting("notepad_on", 1).toBool()) openNotePad(day); else closeNotePad(false);
+    }
     if (!wasOpen) placeGoalPanel(true, true);
     refreshGoals();   // con el panel visible, también carga su progreso
 }
 
 void MainWindow::closeGoalPanel()
 {
-    if (m_goalPanel && m_goalPanel->isVisible()) { m_goalPanel->flushDiary(); placeGoalPanel(false, true); }
+    if (m_goalPanel && m_goalPanel->isVisible()) { m_goalPanel->flushDiary(); closeNotePad(); placeGoalPanel(false, true); }
+}
+
+// Mejoras 4.1: el anotador se despliega a la izquierda del panel del objetivo (sale de atrás).
+void MainWindow::openNotePad(const QDate& day)
+{
+    if (!m_notePad) {
+        m_notePad = new NotePad(this);
+        m_notePad->hide();
+        connect(m_notePad, &NotePad::closeRequested, this, [this] { closeNotePad(); });
+        connect(m_notePad, &NotePad::noteEdited, this, [this](const QDate& d, const QString& t) { m_db->setDayNote(d, t); });
+        connect(m_notePad, &NotePad::moodChanged, this, [this](const QDate& d, int v) { m_db->setDayMood(d, v); });
+    }
+    const auto dy = m_db->dayDiary(day);
+    m_notePad->setDay(day, dy.note, dy.mood, day == m_today);
+    const bool wasOpen = m_notePadOpen;
+    m_notePadOpen = true;
+    m_goalPanel->setNotepadOpen(true);
+    if (!wasOpen) { placeNotePad(true, true); m_notePad->focusNote(); }
+}
+
+void MainWindow::closeNotePad(bool animate)
+{
+    if (!m_notePad || !m_notePadOpen) return;
+    m_notePad->flush();
+    m_notePadOpen = false;
+    if (m_goalPanel) m_goalPanel->setNotepadOpen(false);
+    placeNotePad(false, animate);
+}
+
+void MainWindow::placeNotePad(bool open, bool animate)
+{
+    const int gw = qMin(320, width() - 40);
+    const int top = m_titleBar ? m_titleBar->geometry().bottom() + 1 : 0;
+    const int gx = width() - 1 - gw;
+    const int nw = qMin(300, qMax(200, gx - 180));
+    const int nx = qMax(0, gx - nw + 1);
+    const QRect shown(nx, top, nw, height() - top - 1);
+    const QRect hidden = shown.translated(nw, 0);   // escondido detrás del panel del objetivo
+    if (m_noteAnim) m_noteAnim->stop();
+    m_notePad->stackUnder(m_goalPanel);
+    if (!animate) {
+        m_notePad->setGeometry(open ? shown : hidden);
+        m_notePad->setVisible(open);
+        return;
+    }
+    if (open) { m_notePad->setGeometry(hidden); m_notePad->show(); m_notePad->stackUnder(m_goalPanel); }
+    m_noteAnim = new QPropertyAnimation(m_notePad, "geometry", this);
+    m_noteAnim->setDuration(open ? 220 : 170);
+    m_noteAnim->setEasingCurve(open ? QEasingCurve::OutCubic : QEasingCurve::InCubic);
+    m_noteAnim->setStartValue(m_notePad->geometry());
+    m_noteAnim->setEndValue(open ? shown : hidden);
+    if (!open) connect(m_noteAnim, &QPropertyAnimation::finished, m_notePad, &QWidget::hide);
+    m_noteAnim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+// Mejoras 4.1: al terminar la sesión se ofrece cargar cómo te fue (una vez; si ya lo cargaste, no).
+void MainWindow::offerMood()
+{
+    if (!m_db->setting("mood_offer", 1).toBool()) return;
+    if (m_db->dayDiary(m_today).mood > 0) return;
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("¿Cómo te fue hoy?"));
+    auto* lay = new QVBoxLayout(&dlg);
+    lay->setSpacing(10);
+    lay->addWidget(new QLabel(QStringLiteral("¿Cómo te fue hoy? (1 mal · 5 excelente)"), &dlg));
+    auto* mood = new MoodBar(&dlg);
+    lay->addWidget(mood);
+    auto* skip = new QPushButton(QStringLiteral("Ahora no"), &dlg);
+    skip->setObjectName("GreetLater");
+    skip->setAutoDefault(false);
+    lay->addWidget(skip, 0, Qt::AlignRight);
+    connect(skip, &QPushButton::clicked, &dlg, &QDialog::reject);
+    connect(mood, &MoodBar::moodChanged, &dlg, [this, &dlg](int v) {
+        m_db->setDayMood(m_today, v);
+        QTimer::singleShot(350, &dlg, &QDialog::accept);
+    });
+    dlg.exec();
 }
 
 // El panel tapa la parte derecha (el reproductor) y entra deslizándose.
@@ -2684,7 +2771,7 @@ void MainWindow::openSettings(int page)
     applyGuardSettings();
     reloadFolders();   // M25: colores por actividad prendidos/apagados
     applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
-    if (m_goalPanel) m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
+    if (m_goalPanel) { m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString()); m_goalPanel->setNotepadMode(m_db->setting("notepad_on", 1).toBool()); if (!m_db->setting("notepad_on", 1).toBool()) closeNotePad(false); }
     if (!m_session->inProgress()) {
         m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
         m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
@@ -2766,6 +2853,7 @@ void MainWindow::leaveSession()
     m_session->endSession();
     toast(QStringLiteral("Sesión terminada. Hasta la vuelta"));
     reloadGrid();
+    offerMood();
 }
 
 void MainWindow::showShortcuts()

@@ -51,6 +51,9 @@ public:
     // Mejoras 4.0: diario del día (nota libre y cómo te fue).
     void setDiary(const QString& note, int mood);
     void flushDiary();   // manda lo escrito que todavía no se guardó
+    // Mejoras 4.1: con anotador, el diario sale del panel y queda un botón que lo despliega.
+    void setNotepadMode(bool on);
+    void setNotepadOpen(bool open);
 
 signals:
     void saveRequested(const QDate& day, const QString& title, const QString& spec, int weekdays);
@@ -60,6 +63,7 @@ signals:
     void dayNoteEdited(const QDate& day, const QString& note);   // Mejoras 4.0: diario
     void dayMoodChanged(const QDate& day, int mood);
     void closeRequested();
+    void notepadRequested();
 
 protected:
     bool eventFilter(QObject* obj, QEvent* e) override;
@@ -85,6 +89,8 @@ private:
     QPlainTextEdit* m_note = nullptr;
     MoodBar*        m_mood = nullptr;
     QLabel*         m_moodLabel = nullptr;
+    QLabel*         m_diaryCaption = nullptr;
+    QPushButton*    m_notepadBtn = nullptr;
     QTimer*         m_noteTimer = nullptr;
     bool            m_noteDirty = false;
     QButtonGroup*   m_mode;
