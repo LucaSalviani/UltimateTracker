@@ -16,6 +16,7 @@ public:
         Pomodoro,    // terminó un pomodoro
         Goal,        // meta del día cumplida
         Milestone,   // hito de horas (25 h, 50 h, …)
+        Record,      // Mejoras 4.0: rompiste un récord personal (dorado, más largo)
     };
 
     // M26: estilos. Visor = el de siempre; los otros son minimalistas y no tapan nada.

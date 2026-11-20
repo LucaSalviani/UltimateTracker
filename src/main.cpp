@@ -8,6 +8,7 @@
 #include "ui/Theme.h"
 
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QDir>
 #include <QFile>
 #include <QLocalServer>
@@ -38,6 +39,8 @@ void migrateOldData(const QString& newDir, const QString& newDb)
 
 int main(int argc, char* argv[])
 {
+    QElapsedTimer startClock;   // Mejoras 4.0: cuánto tarda en estar lista la ventana (arranque.log)
+    startClock.start();
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("UltimateTracker"));
     QApplication::setApplicationDisplayName(QStringLiteral("UltimateTracker"));
@@ -129,12 +132,16 @@ int main(int argc, char* argv[])
         const bool forceGreeting = args.contains(QStringLiteral("--greeting"));
         const bool wake = args.contains(QStringLiteral("--wake"));
         // Mejoras 2.0: el saludo es una tarjeta sobre la misma ventana.
-        if (first && (forceGreeting || ((wake || args.contains(QStringLiteral("--autostart"))) && Greeting::shouldShow(db)))) {
-            w.show();
-            w.showDayCard(true, forceGreeting);
-        } else {
-            w.show();
-        }
+        // Mejoras 4.0: también al abrir la app a mano (antes solo aparecía a los 30 s,
+        // cuando el reloj de cambio de día se acordaba de mirar).
+        const bool auto_ = wake || args.contains(QStringLiteral("--autostart"));
+        const bool wantCard = first && (forceGreeting || Greeting::shouldShow(db) || Greeting::summaryPending(db));
+        w.show();
+        if (wantCard) w.showDayCard(auto_ || forceGreeting, forceGreeting);
+        w.logStart(QStringLiteral("inicio (%1): %2, %3 ms hasta tener la ventana")
+                       .arg(auto_ ? QStringLiteral("automático") : QStringLiteral("a mano"),
+                            wantCard ? QStringLiteral("tarjeta del día pedida") : QStringLiteral("sin tarjeta (ya saludó o está apagado)"))
+                       .arg(startClock.elapsed()));
         exitCode = app.exec();
         if (exitCode != devmode::kRestartCode) break;
     }

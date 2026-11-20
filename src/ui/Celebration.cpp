@@ -41,11 +41,12 @@ void Celebration::play(Kind kind, const QString& kicker, const QString& title, c
     m_kicker = kicker;
     m_title = title;
     m_subtitle = subtitle;
-    m_accent = kind == Kind::Milestone ? QColor(0xe2, 0xb0, 0x4a)                 // dorado
+    m_accent = (kind == Kind::Milestone || kind == Kind::Record) ? QColor(0xe2, 0xb0, 0x4a)                 // dorado
              : kind == Kind::Goal      ? theme::breakAccent
                                        : theme::pomoAccent;
-    m_style = g_styles[int(kind)];   // M31: un festejo distinto para cada cosa
+    m_style = g_styles[int(kind == Kind::Record ? Kind::Milestone : kind)];   // M31: un festejo distinto para cada cosa
     m_duration = m_style == Style::Visor ? (kind == Kind::Pomodoro ? 2300 : 3000) : (kind == Kind::Pomodoro ? 1700 : 2300);
+    if (kind == Kind::Record) m_duration += 1800;   // un récord merece un rato más
     // Los minimalistas no bloquean: se puede seguir usando la app mientras pasan.
     setAttribute(Qt::WA_TransparentForMouseEvents, m_style != Style::Visor);
     setGeometry(parentWidget()->rect());
@@ -311,9 +312,9 @@ void Celebration::paintVisor(QPainter& p, qreal ms)
             p.drawRoundedRect(sq.adjusted(1, 1, -1, -1), rad - 1, rad - 1);
             // símbolo: ✓ para pomodoro/meta, número para hito
             p.setPen(QPen(QColor(255, 255, 255), qMax(2.0, s * 0.07), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-            if (m_kind == Kind::Milestone) {
+            if (m_kind == Kind::Milestone || m_kind == Kind::Record) {
                 // Hito: el número ("100"); etapa (M44): el nombre, achicado hasta que entre.
-                const QString word = m_title.section(' ', 0, 0);
+                const QString word = m_kind == Kind::Record ? QStringLiteral("\u2605") : m_title.section(' ', 0, 0);
                 QFont f = theme::uiFont(10, QFont::Bold);
                 int px = int(s * 0.34);
                 f.setPixelSize(px);

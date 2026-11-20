@@ -1524,20 +1524,24 @@ void MainWindow::checkShortTermMilestones()
         for (auto it = byDay.cbegin(); it != byDay.cend(); ++it) if (it.key() < m_today && it.value() > 0) ++priorDays;
         if (priorDays >= 3 && rec.bestDay >= 3600 && today > rec.bestDay && once("ms/rec_day/" + dk)) {
             notes << QStringLiteral("Récord: tu mejor día");
-            celebrate(int(Celebration::Kind::Goal), QStringLiteral("Récord personal"), QStringLiteral("Tu mejor día"),
+            celebrate(int(Celebration::Kind::Record), QStringLiteral("¡Récord personal!"), QStringLiteral("Tu mejor día"),
                       QStringLiteral("%1 (antes %2)").arg(fmt::hours(today), fmt::hours(rec.bestDay)));
         }
         const qint64 week = ms::weekTotal(byDay, m_today);
         if (rec.bestWeek >= 2 * 3600 && week > rec.bestWeek && once("ms/rec_week/" + wk)) {
             notes << QStringLiteral("Récord: tu mejor semana");
-            celebrate(int(Celebration::Kind::Goal), QStringLiteral("Récord personal"), QStringLiteral("Tu mejor semana"),
+            celebrate(int(Celebration::Kind::Record), QStringLiteral("¡Récord personal!"), QStringLiteral("Tu mejor semana"),
                       QStringLiteral("%1 (antes %2)").arg(fmt::hours(week), fmt::hours(rec.bestWeek)));
         }
         const auto streak = stats::streak(m_db->studiedDays(), m_today, stats::StreakRules::load(*m_db));
         const int best = m_db->setting("ms/best_streak", 0).toInt();
         if (streak.days > best) {
             m_db->setSetting("ms/best_streak", streak.days);
-            if (best >= 3 && once("ms/rec_streak/" + dk)) notes << QStringLiteral("Récord de racha: %1 días").arg(streak.days);
+            if (best >= 3 && once("ms/rec_streak/" + dk)) {
+                notes << QStringLiteral("Récord de racha: %1 días").arg(streak.days);
+                celebrate(int(Celebration::Kind::Record), QStringLiteral("¡Récord personal!"), QStringLiteral("Tu racha más larga"),
+                          QStringLiteral("%1 días (antes %2)").arg(streak.days).arg(best));
+            }
         }
         if (ms::streakMarks().contains(streak.days) && once("ms/streak/" + dk)) {
             notes << QStringLiteral("Racha de %1 días").arg(streak.days);
@@ -1792,6 +1796,7 @@ void MainWindow::showDayCard(bool startup, bool force)
     });
     if (!isVisible()) show();
     m_dayCard->popIn();
+    logStart(full ? QStringLiteral("tarjeta del día: saludo mostrado") : QStringLiteral("tarjeta del día: resumen mostrado"));
 }
 
 // M44: al empezar un mes nuevo, una tarjetita con cómo te fue en el anterior.
