@@ -53,6 +53,7 @@ struct StatsData {
     QMap<QDate, insights::DayStat> daily;          // Mejoras 4.0: por día (estudio, pomodoros, indebido, inactivo)
     QHash<QDate, Database::DayDiary> diary;         // nota y ánimo
     QString heatMetric = QStringLiteral("hours");   // qué colorea el mapa de calor
+    bool    simple = true;                           // Mejoras 4.1: vista simple (por defecto) o avanzada
     QVector<Pomodoro> pomos;       // para la línea del día
     QVector<Interval> intervals;   // idem
     const QSet<qint64>* filter = nullptr;
@@ -104,8 +105,7 @@ protected:
         setCursor(z ? Qt::PointingHandCursor : Qt::ArrowCursor);
         const QString key = z ? z->key : QString();
         if (key != m_hoverKey) { m_hoverKey = key; update(); }
-        if (z && tipFor) QToolTip::showText(e->globalPosition().toPoint(), tipFor(z->key), this, z->rect.toRect());
-        else QToolTip::hideText();
+        QToolTip::hideText();   // Mejoras 4.1: el detalle sale solo con click (menos estímulo)
     }
     void leaveEvent(QEvent*) override { if (!m_hoverKey.isEmpty()) { m_hoverKey.clear(); update(); } }
     void mouseReleaseEvent(QMouseEvent* e) override
@@ -148,7 +148,7 @@ private:
     static constexpr double kChipH = 52;
 
     bool goalChip() const { return data.period != StatsWidget::Period::Day && !data.goals.isEmpty(); }
-    bool hasChips() const { return data.ms.dayMark || data.ms.weekly || data.ms.streaks || data.ms.stages || goalChip(); }
+    bool hasChips() const { return !buildChips().isEmpty(); }
 
     // M44: tarjetitas con los hitos de corto y largo plazo.
     // Mejoras 3.0: si no entran en una fila (ventana chica) bajan a dos o más, así el
@@ -198,6 +198,11 @@ private:
             chips.append({QStringLiteral("level"), QStringLiteral("Nivel global"),
                           st.toSec ? QStringLiteral("%1 · próx. %2").arg(st.label, roundHours(st.toSec)) : st.label,
                           st.toSec ? st.progress : 1.0});
+        }
+        if (data.simple) {   // simple: solo objetivos y meta semanal
+            QVector<Chip> keep;
+            for (const Chip& ch : chips) if (ch.key == QLatin1String("goals") || ch.key == QLatin1String("weekly")) keep << ch;
+            return keep;
         }
         return chips;
     }
@@ -298,8 +303,9 @@ private:
             {QStringLiteral("Horas inactivas"), data.totals.inactive, theme::textDim},
         };
         const double gap = 10;
-        const double cw = (W - 3 * gap) / 4;
-        for (int i = 0; i < 4; ++i) {
+        const int n = data.simple ? 2 : 4;   // simple: estudio y recreos; avanzada: + indebidos e inactivas
+        const double cw = (W - (n - 1) * gap) / n;
+        for (int i = 0; i < n; ++i) {
             const QRectF r(L + i * (cw + gap), y, cw, kCardH);
             p.setPen(Qt::NoPen);
             p.setBrush(theme::surface);
@@ -523,8 +529,8 @@ private:
     double paintHeatmap(QPainter& p, double L, double y, double W)
     {
         sectionTitle(p, L, y, QStringLiteral("Mapa de calor"));
-        // Selector de qué se colorea (a la derecha del título)
-        {
+        // Selector de qué se colorea (a la derecha del título; solo en la vista avanzada)
+        if (!data.simple) {
             static const char* metrics[] = {"hours", "pomos", "goal", "undue", "inactive"};
             p.setFont(theme::uiFont(8, QFont::DemiBold));
             double x = L + W;
@@ -744,6 +750,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     for (int i = 0; i < 5; ++i) {
         auto* b = new QPushButton(names[i], this);
         b->setCheckable(true);
+        b->setMinimumWidth(b->fontMetrics().horizontalAdvance(names[i]) + 26);
         b->setProperty("segment", i == 0 ? "first" : (i == 4 ? "last" : "mid"));
         m_periodGroup->addButton(b, i);
         seg->addWidget(b);
@@ -762,11 +769,11 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     connect(prev, &QToolButton::clicked, this, [this] { fade::cross(m_canvas, 150); shift(-1); });
     connect(next, &QToolButton::clicked, this, [this] { fade::cross(m_canvas, 150); shift(+1); });
     m_label = new QLabel(this);
-    m_label->setMinimumWidth(170);
+    m_label->setMinimumWidth(120);
     m_label->setAlignment(Qt::AlignCenter);
 
     m_folder = new QComboBox(this);
-    m_folder->setMinimumWidth(180);
+    m_folder->setMinimumWidth(130);
     connect(m_folder, &QComboBox::currentIndexChanged, this, [this](int) { fade::cross(m_canvas, 150); refresh(); });
 
     auto* top = new QHBoxLayout;
@@ -793,6 +800,24 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     exp->setMenu(expMenu);
     top->addSpacing(4);
     top->addWidget(exp);
+
+    // Mejoras 4.1: vista simple / avanzada + ayuda de cómo ver el detalle (click, no hover)
+    m_viewBtn = new QPushButton(this);
+    m_viewBtn->setCursor(Qt::PointingHandCursor);
+    m_viewBtn->setToolTip(QStringLiteral("Vista de estadísticas: simple o avanzada (click para cambiar)"));
+    connect(m_viewBtn, &QPushButton::clicked, this, [this] {
+        m_db->setSetting("stats_advanced", m_db->setting("stats_advanced", 0).toBool() ? 0 : 1);
+        fade::cross(m_canvas, 150);
+        refresh();
+    });
+    auto* info = new QToolButton(this);
+    info->setText(QStringLiteral("ⓘ"));
+    info->setToolTip(QStringLiteral("Cómo ver el detalle"));
+    connect(info, &QToolButton::clicked, this, [this] {
+        emit message(QStringLiteral("Hacé click en cualquier dato, barra o día para ver su detalle"));
+    });
+    top->insertWidget(top->indexOf(m_folder) + 1, m_viewBtn);
+    top->addWidget(info);
 
     m_canvas = new StatsCanvas(this);
     m_canvas->tipFor = [this](const QString& key) { return tipFor(key); };
@@ -947,6 +972,10 @@ void StatsWidget::refresh()
     const qint64 filterId = m_folder->currentData().toLongLong();
 
     // Mejoras 4.0: la vista Evolución tiene su propio lienzo (sin flechas de período).
+    const bool advanced = m_db->setting("stats_advanced", 0).toBool();
+    m_viewBtn->setText(advanced ? QStringLiteral("Avanzada") : QStringLiteral("Simple"));
+    m_periodGroup->button(int(Period::Evolution))->setVisible(advanced);   // la Evolución es de la vista avanzada
+    if (!advanced && m_period == Period::Evolution) { m_period = Period::Week; m_periodGroup->button(int(m_period))->setChecked(true); m_label->setText(periodLabel()); }
     const bool evo = m_period == Period::Evolution;
     m_scroll->setVisible(!evo);
     m_evoScroll->setVisible(evo);
@@ -974,7 +1003,8 @@ void StatsWidget::refresh()
     d.studyLabel = (d.filter ? kinds::of(tree, filterId) : kinds::general(tree)).name;
     d.totals = stats::totals(*m_db, d.from, d.to, d.filter, now);
     d.byDay = stats::studyByDay(*m_db, d.from, d.to, d.filter);
-    d.heatMetric = m_db->setting("stats/heat", "hours").toString();
+    d.simple = !m_db->setting("stats_advanced", 0).toBool();
+    d.heatMetric = d.simple ? QStringLiteral("hours") : m_db->setting("stats/heat", "hours").toString();
     if (m_period != Period::Day) {
         d.daily = insights::daily(*m_db, d.from, d.to, d.filter, now);
         d.diary = m_db->dayDiaries(d.from, d.to);

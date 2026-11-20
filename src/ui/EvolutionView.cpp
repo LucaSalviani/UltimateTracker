@@ -444,8 +444,7 @@ void EvolutionView::mouseMoveEvent(QMouseEvent* e)
 {
     for (const Zone& z : m_zones) {
         if (!z.rect.contains(e->position())) continue;
-        setCursor(z.key.isEmpty() ? Qt::ArrowCursor : Qt::PointingHandCursor);
-        if (!z.tip.isEmpty()) QToolTip::showText(e->globalPosition().toPoint(), z.tip, this, z.rect.toRect());
+        setCursor(z.key.isEmpty() && z.tip.isEmpty() ? Qt::ArrowCursor : Qt::PointingHandCursor);   // Mejoras 4.1: el detalle sale con click
         return;
     }
     setCursor(Qt::ArrowCursor);
@@ -455,6 +454,11 @@ void EvolutionView::mouseMoveEvent(QMouseEvent* e)
 void EvolutionView::mouseReleaseEvent(QMouseEvent* e)
 {
     if (e->button() != Qt::LeftButton) return;
+    for (const Zone& z : m_zones)
+        if (z.rect.contains(e->position()) && !z.tip.isEmpty()) {
+            QToolTip::showText(e->globalPosition().toPoint(), z.tip, this, z.rect.toRect(), 8000);
+            return;
+        }
     for (const Zone& z : m_zones) {
         if (!z.rect.contains(e->position()) || !z.key.startsWith(QLatin1String("range:"))) continue;
         m_db->setSetting("stats/evo_range", z.key.mid(6).toInt());

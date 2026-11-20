@@ -57,6 +57,7 @@ private:
     EvolutionView* m_evo = nullptr;
     QScrollArea*   m_scroll = nullptr;
     QScrollArea*   m_evoScroll = nullptr;
+    QPushButton*   m_viewBtn = nullptr;   // Mejoras 4.1: simple / avanzada
     QToolButton*   m_prev = nullptr;
     QToolButton*   m_next = nullptr;
 };
