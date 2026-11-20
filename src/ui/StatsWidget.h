@@ -27,9 +27,11 @@ public:
     // Mejoras 3.0: el detalle de un dato (hover = resumen, click = mini ventana)
     QString tipFor(const QString& key) const;
     void showDetail(const QString& key);
+    QString dayHtml(const QDate& day, bool brief) const;
 
 signals:
     void backRequested();
+    void dayRequested(const QDate& day);   // Mejoras 4.0: click en un día del gráfico
     void message(const QString& text);   // M39: aviso abajo (toast)
 
 private:

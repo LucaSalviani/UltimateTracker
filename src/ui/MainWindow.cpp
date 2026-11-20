@@ -18,6 +18,7 @@
 #include "core/Milestones.h"
 #include "core/Sync.h"
 #include "core/Live.h"
+#include "core/Insights.h"
 #include "core/Kinds.h"
 #include "ui/SyncDialog.h"
 #include "ui/LiveStats.h"
@@ -30,6 +31,7 @@
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QElapsedTimer>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -323,6 +325,11 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_stats = new StatsWidget(m_db, this);
     m_stats->setJokersPerWeek(m_jokers);
     connect(m_stats, &StatsWidget::backRequested, this, [this] { showOverlay(Overlay::None); });
+    connect(m_stats, &StatsWidget::dayRequested, this, [this](const QDate& day) {
+        showOverlay(Overlay::None);
+        m_grid->setAnchor(day);
+        setZoom(GridWidget::Zoom::Day);
+    });
     connect(m_stats, &StatsWidget::message, this, &MainWindow::toast);
 
     m_activities = new ActivitiesWidget(m_db, this);
@@ -1343,6 +1350,15 @@ void MainWindow::refreshDeck()
 
 void MainWindow::refreshLiveStats()
 {
+    // Mejoras 4.0 · 7: queda anotada la meta semanal de cada semana (para el historial).
+    {
+        static QElapsedTimer last;
+        if (!last.isValid() || last.elapsed() > 30000) {
+            last.start();
+            const ms::Config c = ms::Config::load(*m_db);
+            if (c.weekly && c.weeklyMin > 0) insights::recordWeekGoal(*m_db, fmt::mondayOf(m_today), c.weeklyMin);
+        }
+    }
     const auto cur = m_session->currentPomodoro();
     const qint64 folder = m_session->folderId();
     const QSet<qint64> scope = m_tree.subtree(folder);

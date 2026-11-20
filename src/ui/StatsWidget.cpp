@@ -7,6 +7,7 @@
 #include "core/Export.h"
 #include "core/Milestones.h"
 #include "core/Goals.h"
+#include "core/Insights.h"
 #include "ui/ActivitiesWidget.h"
 #include "ui/Fade.h"
 #include "ui/Icons.h"
@@ -48,6 +49,9 @@ struct StatsData {
     QDate from, to, today;
     stats::Totals totals;
     QMap<QDate, qint64> byDay;
+    QMap<QDate, insights::DayStat> daily;          // Mejoras 4.0: por día (estudio, pomodoros, indebido, inactivo)
+    QHash<QDate, Database::DayDiary> diary;         // nota y ánimo
+    QString heatMetric = QStringLiteral("hours");   // qué colorea el mapa de calor
     QVector<Pomodoro> pomos;       // para la línea del día
     QVector<Interval> intervals;   // idem
     const QSet<qint64>* filter = nullptr;
@@ -262,8 +266,8 @@ private:
     {
         switch (data.period) {
         case StatsWidget::Period::Day:  return 24 + 66;
-        case StatsWidget::Period::Year: return 24 + 7 * (heatCell(W) + 3) + 18;
-        default:                        return 24 + 150;
+        case StatsWidget::Period::Year: return 24 + 30 + 7 * (heatCell(W) + 3) + 18 + 24;
+        default:                        return 24 + 168;
         }
     }
     static double heatCell(double W) { return qBound(6.0, (W - 30) / 53.0 - 3, 14.0); }
@@ -397,6 +401,8 @@ private:
     }
 
     // Semana / mes: barras de horas por día.
+    // Mejoras 4.0: letra del día debajo de cada barra, fines de semana más claros,
+    // línea de promedio, y cada día es una zona (hover con detalle, click abre el día).
     double paintBars(QPainter& p, double L, double y, double W)
     {
         sectionTitle(p, L, y, QStringLiteral("Horas por día"));
@@ -409,25 +415,33 @@ private:
         qint64 maxV = 3600;
         for (auto v : data.byDay) maxV = qMax(maxV, v);
         for (const auto& g : data.goals) maxV = qMax(maxV, g.target);   // B2-3: que la rayita del objetivo entre
-        if (!data.goals.isEmpty()) {
-            p.setFont(theme::uiFont(7.5));
-            p.setPen(theme::textFaint);
-            p.drawText(QRectF(L, y - 24, W, 16), Qt::AlignRight | Qt::AlignVCenter,
-                       QStringLiteral("—  objetivo del día     verde = cumplido"));
-        }
+        const QDate last = qMin(data.to, data.today);
+        const int elapsed = qMax(1, int(data.from.daysTo(last)) + 1);
+        qint64 sum = 0;
+        for (auto it = data.byDay.cbegin(); it != data.byDay.cend(); ++it) if (it.key() <= last) sum += it.value();
+        const qint64 avg = sum / elapsed;
+        maxV = qMax(maxV, avg);
+        p.setFont(theme::uiFont(7.5));
+        p.setPen(theme::textFaint);
+        p.drawText(QRectF(L, y - 24, W, 16), Qt::AlignRight | Qt::AlignVCenter,
+                   data.goals.isEmpty() ? QStringLiteral("- - promedio por día")
+                                        : QStringLiteral("—  objetivo del día     ●  cumplido     - -  promedio por día"));
 
         p.setPen(QPen(theme::line, 1));
         p.drawLine(QPointF(L, y + chartH), QPointF(L + W, y + chartH));
 
+        static const char* letters = "LMMJVSD";
         for (int i = 0; i < n; ++i) {
             const QDate d = data.from.addDays(i);
             const qint64 v = data.byDay.value(d);
             const double h = (chartH - labelRoom) * double(v) / maxV;
             const QRectF r(L + i * slot + (slot - bw) / 2, y + chartH - h, bw, h);
+            const bool weekend = d.dayOfWeek() >= 6;
             p.setPen(Qt::NoPen);
-            // M35: barras en el color del tema; hoy, a pleno
-            p.setBrush(d == data.today ? statsInk() : theme::mix(theme::surface, statsInk(), 0.55));
-            if (data.goals.value(d).met) p.setBrush(d == data.today ? theme::breakAccent : theme::mix(theme::surface, theme::breakAccent, 0.75));
+            // M35: barras en el color del tema; hoy, a pleno; fin de semana, más suave
+            const double k = weekend ? 0.34 : 0.58;
+            p.setBrush(d == data.today ? statsInk() : theme::mix(theme::surface, statsInk(), k));
+            if (data.goals.value(d).met) p.setBrush(d == data.today ? theme::breakAccent : theme::mix(theme::surface, theme::breakAccent, weekend ? 0.5 : 0.78));
             if (v > 0) p.drawRoundedRect(r, 2, 2);
             if (data.goals.contains(d)) {   // B2-3: rayita a la altura del objetivo
                 const double gy = y + chartH - (chartH - labelRoom) * double(data.goals.value(d).target) / maxV;
@@ -441,21 +455,93 @@ private:
                 p.setPen(theme::textDim);
                 p.drawText(QRectF(r.left() - 10, r.top() - 16, bw + 20, 14), Qt::AlignCenter, fmt::duration(v));
             }
-            p.setPen(d == data.today ? theme::text : theme::textFaint);
-            const QString lab = data.period == StatsWidget::Period::Week ? fmt::shortDate(d) : QString::number(d.day());
-            if (data.period == StatsWidget::Period::Week || slot > 16 || d.day() % 2 == 1)
-                p.drawText(QRectF(L + i * slot - 6, y + chartH + 4, slot + 12, 14), Qt::AlignCenter, lab);
+            // Abajo: la letra del día y, debajo, el número (todos si entran; si no, cada 5).
+            const bool isToday = d == data.today;
+            p.setPen(isToday ? theme::text : (weekend ? theme::textDim : theme::textFaint));
+            const QRectF col(L + i * slot - 6, y + chartH + 3, slot + 12, 13);
+            if (data.period == StatsWidget::Period::Week) {
+                p.drawText(col, Qt::AlignCenter, fmt::shortDate(d));
+            } else {
+                if (slot >= 9) p.drawText(col, Qt::AlignCenter, QString(QLatin1Char(letters[d.dayOfWeek() - 1])));
+                const bool number = slot >= 17 || d.day() == 1 || d.day() % 5 == 0;
+                if (number) p.drawText(col.translated(0, 13), Qt::AlignCenter, QString::number(d.day()));
+            }
+            zone(QRectF(L + i * slot, y - 4, slot, chartH + 36), QStringLiteral("day:") + fmt::dayKey(d), p);
+        }
+        // Línea de promedio (punteada)
+        if (avg > 0) {
+            const double ay = y + chartH - (chartH - labelRoom) * double(avg) / maxV;
+            p.setPen(QPen(theme::textDim, 1, Qt::DashLine));
+            p.drawLine(QPointF(L, ay), QPointF(L + W, ay));
+            p.setFont(theme::uiFont(7.5));
+            p.setPen(theme::textDim);
+            p.drawText(QRectF(L, ay - 14, 120, 12), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("prom. ") + fmt::duration(int(avg)));
         }
         if (data.totals.study <= 0)   // M36: estado vacío
             emptyNote(p, QRectF(L, y, W, chartH - 10), emptyText());
-        return y + chartH + 22;
+        return y + chartH + (data.period == StatsWidget::Period::Week ? 22 : 36);
+    }
+
+    // Mejoras 4.0: valor de un día para el mapa de calor, según lo que se esté mirando.
+    // Devuelve <0 si ese día no cuenta (sin objetivo, en el caso de "objetivo").
+    double heatValue(const QDate& d) const
+    {
+        const insights::DayStat s = data.daily.value(d);
+        const QString m = data.heatMetric;
+        if (m == QLatin1String("pomos"))     return s.pomos;
+        if (m == QLatin1String("undue"))     return double(s.undue);
+        if (m == QLatin1String("inactive"))  return double(s.inactive);
+        if (m == QLatin1String("goal")) {
+            if (!data.goals.contains(d)) return -1;
+            return data.goals.value(d).met ? 1.0 : 0.0;
+        }
+        return double(data.byDay.value(d));   // hours
+    }
+    QColor heatInk() const
+    {
+        const QString m = data.heatMetric;
+        if (m == QLatin1String("goal"))     return theme::breakAccent;
+        if (m == QLatin1String("undue"))    return theme::squareFinal;
+        if (m == QLatin1String("inactive")) return theme::mix(theme::surface, theme::text, 0.8);
+        return statsInk();
+    }
+    static QString heatName(const QString& m)
+    {
+        if (m == QLatin1String("pomos")) return QStringLiteral("Pomodoros");
+        if (m == QLatin1String("goal")) return QStringLiteral("Objetivo");
+        if (m == QLatin1String("undue")) return QStringLiteral("Indebido");
+        if (m == QLatin1String("inactive")) return QStringLiteral("Inactivo");
+        return QStringLiteral("Horas");
     }
 
     // Año: mapa de calor, una celda por día (columnas = semanas).
+    // Mejoras 4.0: la escala se reparte por cuartiles de tus propios días (los más
+    // fuertes se notan), se elige qué mostrar (horas, pomodoros, objetivo, indebido,
+    // inactivo), el objetivo cumplido es un puntito (no un recuadro verde) y cada día
+    // tiene hover con sus datos y click para abrirlo.
     double paintHeatmap(QPainter& p, double L, double y, double W)
     {
         sectionTitle(p, L, y, QStringLiteral("Mapa de calor"));
-        y += 24;
+        // Selector de qué se colorea (a la derecha del título)
+        {
+            static const char* metrics[] = {"hours", "pomos", "goal", "undue", "inactive"};
+            p.setFont(theme::uiFont(8, QFont::DemiBold));
+            double x = L + W;
+            for (int k = 4; k >= 0; --k) {
+                const QString name = heatName(QString::fromLatin1(metrics[k]));
+                const double w = QFontMetricsF(p.font()).horizontalAdvance(name) + 18;
+                x -= w;
+                const QRectF pill(x, y - 1, w - 4, 20);
+                const bool on = data.heatMetric == QLatin1String(metrics[k]);
+                p.setPen(on ? Qt::NoPen : QPen(theme::line, 1));
+                if (on) p.setBrush(theme::mix(theme::surface, heatInk(), 0.45)); else p.setBrush(Qt::NoBrush);
+                p.drawRoundedRect(pill, 10, 10);
+                p.setPen(on ? theme::text : theme::textDim);
+                p.drawText(pill, Qt::AlignCenter, name);
+                zone(pill, QStringLiteral("hm:") + QString::fromLatin1(metrics[k]), p);
+            }
+        }
+        y += 30;
         const double cell = heatCell(W);
         const double step = cell + 3;
         const QDate start = fmt::mondayOf(data.from);
@@ -467,18 +553,17 @@ private:
         for (int r = 0; r < 7; ++r)
             p.drawText(QRectF(L, y + r * step, 24, cell), Qt::AlignLeft | Qt::AlignVCenter, QString::fromUtf8(rows[r]));
 
-        // M35: escala del color del tema (de la superficie al acento)
-        auto shade = [](qint64 sec) {
-            const double h = sec / 3600.0;
-            const QColor ink = statsInk();
-            auto at = [&](double t) { return theme::mix(theme::surface, ink, t); };
-            if (sec <= 0) return theme::surface;
-            if (h < 1)    return at(0.22);
-            if (h < 2.5)  return at(0.42);
-            if (h < 4.5)  return at(0.62);
-            if (h < 7)    return at(0.82);
-            return at(1.0);
-        };
+        // Cortes por cuartiles de los días que tienen algo (así siempre hay contraste).
+        QVector<double> vals;
+        const QDate last = qMin(data.to, data.today);
+        for (QDate d = data.from; d <= last; d = d.addDays(1)) { const double v = heatValue(d); if (v > 0) vals << v; }
+        std::sort(vals.begin(), vals.end());
+        auto cut = [&](double q) { return vals.isEmpty() ? 0.0 : vals[qMin<int>(int(vals.size()) - 1, int(q * vals.size()))]; };
+        const double c1 = cut(0.20), c2 = cut(0.40), c3 = cut(0.60), c4 = cut(0.80);
+        const QColor ink = heatInk();
+        const bool goalMode = data.heatMetric == QLatin1String("goal");
+        auto level = [&](double v) { return v <= 0 ? -1 : v < c1 ? 0 : v < c2 ? 1 : v < c3 ? 2 : v < c4 ? 3 : 4; };
+        auto shade = [&](int lv) { return theme::mix(theme::surface, ink, 0.28 + 0.18 * lv); };
 
         int lastMonth = -1;
         for (int w = 0; w < 54; ++w) {
@@ -486,23 +571,61 @@ private:
                 const QDate d = start.addDays(w * 7 + r);
                 if (d < data.from || d > data.to) continue;
                 const QRectF c(left + w * step, y + r * step, cell, cell);
-                p.setPen(d == data.today ? QPen(theme::squareFinal, 1.5)
-                         : data.goals.value(d).met ? QPen(theme::breakAccent, 1.2) : QPen(Qt::NoPen));   // B2-3
-                p.setBrush(d > data.today ? theme::bg.lighter(115) : shade(data.byDay.value(d)));
+                const double v = d > data.today ? -1 : heatValue(d);
+                QColor fill;
+                if (d > data.today) fill = theme::bg.lighter(115);
+                else if (goalMode) fill = v < 0 ? theme::surface : (v >= 1 ? theme::mix(theme::surface, ink, 0.9) : theme::mix(theme::surface, theme::squareFinal, 0.28));
+                else fill = v > 0 ? shade(level(v)) : theme::surface;
+                p.setPen(d == data.today ? QPen(theme::text, 1.4) : Qt::NoPen);
+                p.setBrush(fill);
                 p.drawRoundedRect(c, 2, 2);
+                // objetivo cumplido: puntito (en el modo "objetivo" ya es el color de la celda)
+                if (!goalMode && cell >= 8 && d <= data.today && data.goals.value(d).met) {
+                    p.setPen(Qt::NoPen);
+                    p.setBrush(QColor(255, 255, 255, 215));
+                    p.drawEllipse(c.center(), cell * 0.17, cell * 0.17);
+                }
+                if (d <= data.today) zone(c, QStringLiteral("day:") + fmt::dayKey(d), p);
                 if (r == 0 || d.day() == 1) {
                     if (d.month() != lastMonth && d.day() <= 7) {
                         lastMonth = d.month();
                         p.setPen(theme::textFaint);
-                        p.drawText(QPointF(left + w * step, y + 7 * step + 12),
-                                   fmt::monthYear(d).left(3));
+                        p.setFont(theme::uiFont(7.5));
+                        p.drawText(QPointF(left + w * step, y + 7 * step + 12), fmt::monthYear(d).left(3));
                     }
                 }
             }
         }
+        // Leyenda: qué significa cada cosa
+        const double ly = y + 7 * step + 16;
+        p.setFont(theme::uiFont(7.5));
+        p.setPen(theme::textFaint);
+        if (goalMode) {
+            p.drawText(QRectF(L, ly, W, 14), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("color pleno = objetivo cumplido · rojizo = no cumplido · gris = ese día no había objetivo"));
+        } else {
+            bool any = false;
+            for (auto it = data.goals.cbegin(); it != data.goals.cend(); ++it) any |= it->met;
+            if (any) {
+                p.setPen(Qt::NoPen);
+                p.setBrush(QColor(255, 255, 255, 215));
+                p.drawEllipse(QPointF(L + 4, ly + 7), 2.6, 2.6);
+                p.setPen(theme::textFaint);
+                p.drawText(QRectF(L + 12, ly, 150, 14), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("objetivo cumplido"));
+            }
+            const double lw = 14, lg = 3;
+            double x = L + W - (5 * (lw + lg) + 62);
+            p.drawText(QRectF(x - 34, ly, 32, 14), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("menos"));
+            for (int k = 0; k < 5; ++k) {
+                p.setPen(Qt::NoPen);
+                p.setBrush(shade(k));
+                p.drawRoundedRect(QRectF(x + k * (lw + lg), ly + 1, lw, 12), 2, 2);
+            }
+            p.setPen(theme::textFaint);
+            p.drawText(QRectF(x + 5 * (lw + lg) + 2, ly, 40, 14), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("más"));
+        }
         if (data.totals.study <= 0)
             emptyNote(p, QRectF(left, y, 53 * step, 7 * step), emptyText());
-        return y + 7 * step + 18;
+        return y + 7 * step + 32;
     }
 
     // M36: texto de "no hay nada" centrado sobre una pastilla, sin tapar el gráfico.
@@ -823,6 +946,11 @@ void StatsWidget::refresh()
     d.studyLabel = (d.filter ? kinds::of(tree, filterId) : kinds::general(tree)).name;
     d.totals = stats::totals(*m_db, d.from, d.to, d.filter, now);
     d.byDay = stats::studyByDay(*m_db, d.from, d.to, d.filter);
+    d.heatMetric = m_db->setting("stats/heat", "hours").toString();
+    if (m_period != Period::Day) {
+        d.daily = insights::daily(*m_db, d.from, d.to, d.filter, now);
+        d.diary = m_db->dayDiaries(d.from, d.to);
+    }
     if (m_period == Period::Day) {
         d.pomos = m_db->pomodorosBetween(d.from, d.to);
         d.intervals = m_db->intervalsBetween(d.from, d.to);
@@ -904,11 +1032,49 @@ QString clock(qint64 epoch) { return QDateTime::fromSecsSinceEpoch(epoch).toStri
 QString cap(const QString& s) { return s.isEmpty() ? s : s.left(1).toUpper() + s.mid(1); }
 } // namespace
 
+
+// Mejoras 4.0: resumen de un día (hover y mini ventana).
+static QString moodWord(int m)
+{
+    static const char* w[] = {"", "mal", "flojo", "normal", "bien", "excelente"};
+    return QString::fromUtf8(w[qBound(0, m, 5)]);
+}
+
+QString StatsWidget::dayHtml(const QDate& day, bool brief) const
+{
+    const StatsData& d = m_canvas->data;
+    const insights::DayStat s = d.daily.value(day);
+    QStringList rows;
+    rows << row(d.studyLabel, fmt::duration(int(s.study)), s.pomos > 0 ? QStringLiteral("%1 pomodoro%2").arg(s.pomos).arg(s.pomos == 1 ? "" : "s") : QString());
+    rows << row(QStringLiteral("Recreos"), fmt::duration(int(s.breaks)));
+    rows << row(QStringLiteral("Recreo indebido"), fmt::duration(int(s.undue)));
+    rows << row(QStringLiteral("Inactivo"), fmt::hours(s.inactive));
+    if (d.goals.contains(day)) {
+        const auto g = d.goals.value(day);
+        rows << row(QStringLiteral("Objetivo"), g.met ? QStringLiteral("cumplido") : QStringLiteral("no cumplido"),
+                    QStringLiteral("%1 de %2").arg(fmt::duration(int(g.studied)), fmt::duration(int(g.target))));
+    }
+    QString html = para(QStringLiteral("<b>%1</b>").arg(fmt::longDate(day))) + table(rows);
+    const auto dy = d.diary.value(day);
+    if (dy.mood > 0) html += para(QStringLiteral("<br>Cómo te fue: <b>%1</b> (%2/5)").arg(moodWord(dy.mood)).arg(dy.mood));
+    if (!dy.note.isEmpty()) {
+        QString n = dy.note.toHtmlEscaped();
+        if (brief && n.size() > 140) n = n.left(140) + QStringLiteral("…");
+        html += para(QStringLiteral("<br><i>%1</i>").arg(n.replace(QLatin1Char('\n'), QStringLiteral("<br>"))));
+    }
+    return html;
+}
+
 QString StatsWidget::tipFor(const QString& key) const
 {
     const StatsData& d = m_canvas->data;
     const QString more = QStringLiteral("<br><span style='color:%1'>Click para ver el detalle</span>").arg(theme::textDim.name());
     const int days = int(d.from.daysTo(qMin(d.to, d.today))) + 1;
+    if (key.startsWith(QLatin1String("day:"))) {
+        const QDate day = fmt::fromDayKey(key.mid(4));
+        return dayHtml(day, true) + QString(more).replace(QStringLiteral("Click para ver el detalle"), QStringLiteral("Click para abrir este día"));
+    }
+    if (key.startsWith(QLatin1String("hm:"))) return QStringLiteral("Colorear el mapa según: ") + key.mid(3);
     if (key == "study") {
         int withStudy = 0;
         qint64 best = 0;
@@ -964,6 +1130,18 @@ void StatsWidget::showDetail(const QString& key)
     QStringList rows;
     QString title, html, actionText;
     std::function<void()> action;
+
+    if (key.startsWith(QLatin1String("hm:"))) {   // elegir qué colorea el mapa de calor
+        m_db->setSetting("stats/heat", key.mid(3));
+        refresh();
+        return;
+    }
+    if (key.startsWith(QLatin1String("day:"))) {
+        const QDate day = fmt::fromDayKey(key.mid(4));
+        m_detail->showDetail(fmt::shortDate(day), dayHtml(day, false), QStringLiteral("Abrir este día"),
+                             [this, day] { m_detail->closeCard(); emit dayRequested(day); });
+        return;
+    }
 
     auto intervalsDetail = [&](IntervalKind kind, const QString& what) {
         qint64 total = 0, longest = 0;
