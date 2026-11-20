@@ -30,6 +30,11 @@
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QTimeEdit>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -2326,8 +2331,16 @@ void MainWindow::refreshGoals()
         // M21 → B2: por tiempo acumulado y por actividad.
         const auto fills = goals::fillByActivity(parsed, studiedByFolder(byDay.value(d), d == m_today && !merge), m_tree);
         QVector<GridWidget::Ghost> left;
-        for (int i = 0; i < parsed.blocks.size(); ++i)
-            if (fills[i] < 0.999) left.append({parsed.blocks[i], parsed.folders.value(i), fills[i], i});
+        // Mejoras 4.0 · 3: bolsa de minutos. Lo que ya se hizo "se come" el fantasma
+        // que sigue: en vez de un pedazo gris tapado, el fantasma queda más corto
+        // (8×25 con un primero de 30 → el segundo pasa a 20). Si lo que queda es
+        // menos de 3 minutos no vale la pena un cuadradito y se descarta.
+        for (int i = 0; i < parsed.blocks.size(); ++i) {
+            if (fills[i] >= 0.999) continue;
+            const int rest = int(qRound(parsed.blocks[i] * (1.0 - qBound(0.0, fills[i], 1.0))));
+            if (rest < 3) continue;
+            left.append({rest, parsed.folders.value(i), 0.0, i});
+        }
         if (!left.isEmpty()) ghosts.insert(d, left);
     }
     m_grid->setGoalBlocks(ghosts);
@@ -2429,7 +2442,58 @@ void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)
             m_grid->setAnchor(day);
             setZoom(GridWidget::Zoom::Day);
         });
+    if (day <= m_today)
+        menu.addAction(QStringLiteral("Marcar un pomodoro como hecho…"), this, [this, day] { markManual(day); });
     menu.exec(globalPos);
+}
+
+// Mejoras 4.0 · 1: un pomodoro que se hizo pero no se cronometró. Cuenta igual
+// que los demás (horas y racha) y se distingue con una marquita "manual".
+void MainWindow::markManual(const QDate& day)
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Marcar pomodoro como hecho"));
+    auto* form = new QFormLayout(&dlg);
+    auto* who = new QComboBox(&dlg);
+    int cur = 0;
+    for (const Folder& f : m_tree.all()) {
+        who->addItem(m_tree.path(f.id), f.id);
+        if (f.id == m_session->folderId()) cur = who->count() - 1;
+    }
+    who->setCurrentIndex(cur);
+    auto* mins = new QSpinBox(&dlg);
+    mins->setRange(1, 600);
+    mins->setSuffix(QStringLiteral(" min"));
+    mins->setValue(m_db->setting("work_min", 25).toInt());
+    auto* at = new QTimeEdit(&dlg);
+    at->setDisplayFormat(QStringLiteral("HH:mm"));
+    // Hoy: termina ahora. Otro día: a media mañana, que se puede cambiar.
+    at->setTime(day == m_today ? QTime::currentTime().addSecs(-mins->value() * 60) : QTime(10, 0));
+    form->addRow(QStringLiteral("Actividad"), who);
+    form->addRow(QStringLiteral("Duración"), mins);
+    form->addRow(QStringLiteral("Empezó a las"), at);
+    auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    bb->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Marcar"));
+    bb->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Cancelar"));
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    form->addRow(bb);
+    win::applyChrome(&dlg);
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    Pomodoro p;
+    p.folderId = who->currentData().toLongLong();
+    p.day = day;
+    p.startedAt = QDateTime(day, at->time()).toSecsSinceEpoch();
+    p.plannedSec = p.studiedSec = mins->value() * 60;
+    p.endedAt = p.startedAt + p.studiedSec;
+    p.status = PomoStatus::Completed;
+    p.manual = true;
+    const qint64 id = m_db->insertPomodoro(p);
+    if (id <= 0) { toast(QStringLiteral("No se pudo guardar el pomodoro")); return; }
+    reloadGrid();
+    toastAction(QStringLiteral("Pomodoro marcado: %1 · %2").arg(m_tree.path(p.folderId), fmt::duration(p.studiedSec)),
+                QStringLiteral("Deshacer"), [this, id] { m_db->deletePomodoro(id); reloadGrid(); });
 }
 
 void MainWindow::celebrate(int kind, const QString& kicker, const QString& title, const QString& subtitle)

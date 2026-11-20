@@ -365,6 +365,17 @@ void GridWidget::paintSquare(QPainter& p, const QRectF& r, const Pomodoro& pomo)
         if (dt < 0) t.state = tiles::State::Running, t.progress = 1.0;   // espera a que termine el festejo
     }
     tiles::paint(p, r, t, m_clock.elapsed());
+    if (pomo.manual && r.width() >= 14) {   // Mejoras 4.0: marquita de "a mano" (triangulito en la esquina)
+        const double k = qBound(5.0, r.width() * 0.22, 10.0);
+        QPainterPath tri;
+        tri.moveTo(r.right() - k, r.top() + 1); tri.lineTo(r.right() - 1, r.top() + 1); tri.lineTo(r.right() - 1, r.top() + 1 + k);
+        tri.closeSubpath();
+        p.save();
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(255, 255, 255, 150));
+        p.drawPath(tri);
+        p.restore();
+    }
 }
 
 void GridWidget::markCompleted(qint64 id, int delayMs)
@@ -813,6 +824,7 @@ void GridWidget::mouseMoveEvent(QMouseEvent* e)
         else if (pm.studiedSec >= pm.plannedSec)    status = QStringLiteral("completo");
         else                                        status = QStringLiteral("cortado antes");
         if (isDayEnd(pm)) status += QStringLiteral(" · último del día");
+        if (pm.manual) status += QStringLiteral(" · marcado a mano");
         if (pm.linked) status += QStringLiteral(" · sin recreo antes");
         if (const int n = int(pm.segmentList().size()); n > 1) status += QStringLiteral(" · %1 tramos seguidos, sin recreo").arg(n);
         QString tip = QString("#%1  %2\n%3 · %4 de %5 · %6")

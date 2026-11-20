@@ -119,6 +119,7 @@ private:
     qint64      m_weekBeforeToday = 0;
     void preloadFromGoal();   // M17
     void showDayMenu(const QDate& day, const QPoint& globalPos);
+    void markManual(const QDate& day);   // Mejoras 4.0: marcar un pomodoro como hecho a mano
 
     // ---- festejos (M8): si en el mismo momento pasan varias cosas, gana la más importante
     void celebrate(int kind, const QString& kicker, const QString& title, const QString& subtitle);

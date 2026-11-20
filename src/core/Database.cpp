@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 8;
+constexpr int kSchemaVersion = 9;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -128,6 +128,7 @@ bool Database::migrate()
     if (version < 6) addColumnIfMissing("folders", "color", "TEXT NOT NULL DEFAULT ''");       // M25: color elegido
     if (version < 8) addColumnIfMissing("pomodoros", "segments", "TEXT NOT NULL DEFAULT ''");  // Mejoras 3.0: tramos
     if (version < 8) addColumnIfMissing("folders", "kind", "TEXT NOT NULL DEFAULT ''");        // Mejoras 3.0: tipo de actividad
+    if (version < 9) addColumnIfMissing("pomodoros", "manual", "INTEGER NOT NULL DEFAULT 0");  // Mejoras 4.0: marcado a mano
     setupSync(version < 7);   // Celu: ids globales y registro de cambios para sincronizar
     if (version < kSchemaVersion) exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
     return true;
@@ -372,17 +373,18 @@ Pomodoro Database::readPomodoro(const QSqlQuery& q)
     p.linked     = q.value(8).toInt() != 0;
     p.note       = q.value(9).toString();
     p.segments   = q.value(10).toString();
+    p.manual     = q.value(11).toInt() != 0;
     return p;
 }
 
-#define POMO_COLUMNS "id, COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, segments"
+#define POMO_COLUMNS "id, COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, segments, manual"
 
 qint64 Database::insertPomodoro(const Pomodoro& p)
 {
     QSqlQuery q(m_db);
     // Con id > 0 se reinserta con el mismo id (deshacer un borrado).
-    q.prepare(QStringLiteral("INSERT INTO pomodoros(%1folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, segments) "
-                             "VALUES(%2?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    q.prepare(QStringLiteral("INSERT INTO pomodoros(%1folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, segments, manual) "
+                             "VALUES(%2?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                   .arg(p.id > 0 ? QStringLiteral("id, ") : QString(), p.id > 0 ? QStringLiteral("?, ") : QString()));
     if (p.id > 0) q.addBindValue(p.id);
     q.addBindValue(p.folderId > 0 ? QVariant(p.folderId) : QVariant(QMetaType(QMetaType::LongLong)));
@@ -395,6 +397,7 @@ qint64 Database::insertPomodoro(const Pomodoro& p)
     q.addBindValue(p.linked ? 1 : 0);
     q.addBindValue(p.note.isNull() ? QStringLiteral("") : p.note);   // NULL no entra en NOT NULL
     q.addBindValue(p.segments.isNull() ? QStringLiteral("") : p.segments);
+    q.addBindValue(p.manual ? 1 : 0);
     if (!q.exec()) {
         m_error = q.lastError().text();
         return 0;
@@ -406,8 +409,8 @@ qint64 Database::insertPomodoroWithUid(const Pomodoro& p, const QString& uid)
 {
     if (uid.isEmpty()) return insertPomodoro(p);
     QSqlQuery q(m_db);
-    q.prepare("INSERT INTO pomodoros(uid, folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, segments) "
-              "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    q.prepare("INSERT INTO pomodoros(uid, folder_id, day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, segments, manual) "
+              "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     q.addBindValue(uid);
     q.addBindValue(p.folderId > 0 ? QVariant(p.folderId) : QVariant(QMetaType(QMetaType::LongLong)));
     q.addBindValue(fmt::dayKey(p.day));
@@ -419,6 +422,7 @@ qint64 Database::insertPomodoroWithUid(const Pomodoro& p, const QString& uid)
     q.addBindValue(p.linked ? 1 : 0);
     q.addBindValue(p.note.isNull() ? QStringLiteral("") : p.note);
     q.addBindValue(p.segments.isNull() ? QStringLiteral("") : p.segments);
+    q.addBindValue(p.manual ? 1 : 0);
     if (!q.exec()) {
         m_error = q.lastError().text();
         return 0;

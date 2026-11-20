@@ -99,7 +99,7 @@ QVector<SyncRecord> SyncStore::pending(int limit)
                           {"created_at", q.value(5).toLongLong()}, {"kind", q.value(7).toString()}};
                 r.updatedAt = q.value(6).toLongLong();
             } else if (it.kind == QLatin1String("pomodoro")) {
-                q.prepare("SELECT COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, device, updated_at, segments "
+                q.prepare("SELECT COALESCE(folder_id, 0), day, started_at, ended_at, planned_sec, studied_sec, status, linked, note, device, updated_at, segments, manual "
                           "FROM pomodoros WHERE uid = ?");
                 q.addBindValue(it.uid);
                 if (!q.exec() || !q.next()) { r.deleted = true; out.append(r); continue; }
@@ -109,7 +109,7 @@ QVector<SyncRecord> SyncStore::pending(int limit)
                           {"planned_sec", q.value(4).toInt()}, {"studied_sec", q.value(5).toInt()}, {"status", q.value(6).toInt()},
                           {"linked", q.value(7).toBool()}, {"note", q.value(8).toString()},
                           {"device", q.value(9).toString().isEmpty() ? device : q.value(9).toString()},
-                          {"segments", q.value(11).toString()}};
+                          {"segments", q.value(11).toString()}, {"manual", q.value(12).toInt() != 0}};
                 r.updatedAt = q.value(10).toLongLong();
             } else if (it.kind == QLatin1String("interval")) {
                 q.prepare("SELECT kind, day, started_at, seconds, updated_at FROM intervals WHERE uid = ?");
@@ -371,8 +371,9 @@ bool SyncStore::applyOne(const SyncRecord& r)
     }
     if (ok && r.kind == QLatin1String("pomodoro") && d.contains("segments")) {
         QSqlQuery x(h);
-        x.prepare("UPDATE pomodoros SET segments = ? WHERE uid = ?");
+        x.prepare("UPDATE pomodoros SET segments = ?, manual = ? WHERE uid = ?");
         x.addBindValue(d.value("segments").toString());
+        x.addBindValue(d.value("manual").toBool() ? 1 : 0);
         x.addBindValue(r.uid);
         x.exec();
     }

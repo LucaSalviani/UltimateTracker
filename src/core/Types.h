@@ -44,6 +44,8 @@ struct Pomodoro {
     // Mejoras 3.0: seguir sin recreo extiende el mismo pomodoro. Cada tramo
     // pactado, en segundos y separado por comas ("1500,1500"); vacío = uno solo.
     QString    segments;
+    // Mejoras 4.0: marcado a mano (click derecho en la grilla), sin cronómetro.
+    bool       manual = false;
 
     QVector<int> segmentList() const
     {

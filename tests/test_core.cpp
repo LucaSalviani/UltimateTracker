@@ -533,6 +533,22 @@ private slots:
         QCOMPARE(kinds::of(t, so).doneFem, QString("entrenadas"));
     }
 
+    void manualPomodoro()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 f = db.addFolder(0, "SO");
+        Pomodoro p;
+        p.folderId = f; p.day = QDate(2026, 11, 18); p.startedAt = 1000; p.endedAt = 2500;
+        p.plannedSec = p.studiedSec = 1500; p.status = PomoStatus::Completed; p.manual = true;
+        const qint64 id = db.insertPomodoro(p);
+        QVERIFY(id > 0);
+        const auto back = db.pomodoro(id);
+        QVERIFY(back && back->manual);
+        QCOMPARE(back->studiedSec, 1500);
+        QVERIFY(db.studiedDays().contains(QDate(2026, 11, 18)));   // cuenta para la racha
+    }
+
     void goalDurations()
     {
         QCOMPARE(goals::parseDuration("3h30"), 210);
