@@ -9,6 +9,9 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPlainTextEdit>
+#include <QTimer>
+#include "ui/MoodBar.h"
 #include <QMenu>
 #include <QPainter>
 #include <QPainterPath>
@@ -240,9 +243,44 @@ GoalPanel::GoalPanel(QWidget* parent)
     lay->addWidget(m_daysRow);
     lay->addSpacing(4);
     lay->addWidget(m_status);
+    // ---- Diario (Mejoras 4.0 · 10)
+    lay->addSpacing(6);
+    lay->addWidget(caption(QStringLiteral("DIARIO"), this));
+    m_moodLabel = new QLabel(QStringLiteral("¿Cómo te fue?"), this);
+    m_mood = new MoodBar(this);
+    lay->addWidget(m_moodLabel);
+    lay->addWidget(m_mood);
+    m_note = new QPlainTextEdit(this);
+    m_note->setObjectName("DiaryNote");
+    m_note->setPlaceholderText(QStringLiteral("Una nota sobre este día: en qué trabajaste, qué te costó, qué sigue…"));
+    m_note->setFixedHeight(84);
+    lay->addWidget(m_note);
+    m_noteTimer = new QTimer(this);
+    m_noteTimer->setSingleShot(true);
+    m_noteTimer->setInterval(700);
+    connect(m_note, &QPlainTextEdit::textChanged, this, [this] { m_noteDirty = true; m_noteTimer->start(); });
+    connect(m_noteTimer, &QTimer::timeout, this, &GoalPanel::flushDiary);
+    connect(m_mood, &MoodBar::moodChanged, this, [this](int v) { emit dayMoodChanged(m_day, v); });
     lay->addStretch();
     lay->addLayout(buttons);
     lay->addWidget(hint);
+}
+
+void GoalPanel::setDiary(const QString& note, int mood)
+{
+    m_noteTimer->stop();
+    m_noteDirty = false;
+    QSignalBlocker b(m_note);
+    m_note->setPlainText(note);
+    m_mood->setMood(mood);
+}
+
+void GoalPanel::flushDiary()
+{
+    m_noteTimer->stop();
+    if (!m_noteDirty) return;
+    m_noteDirty = false;
+    emit dayNoteEdited(m_day, m_note->toPlainText().trimmed());
 }
 
 void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, const QString& dayTitle,
@@ -251,7 +289,9 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
     m_day = day;
     m_pomoMin = pomodoroMin;
     m_date->setText(isToday ? QStringLiteral("Hoy · %1").arg(fmt::shortDate(day)) : fmt::shortDate(day));
+    flushDiary();   // lo escrito en el día anterior se guarda antes de cambiar
     m_dayTitle->setText(dayTitle);
+    m_moodLabel->setText(isToday ? QStringLiteral("¿Cómo te va hoy?") : QStringLiteral("¿Cómo te fue?"));
     m_dayTitle->setPlaceholderText(isToday ? QStringLiteral("¿Qué querés lograr hoy?")
                                            : QStringLiteral("¿Qué querés lograr este día?"));
 

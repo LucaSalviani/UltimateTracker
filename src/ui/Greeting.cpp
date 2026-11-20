@@ -6,12 +6,14 @@
 #include "core/Kinds.h"
 #include "core/Stats.h"
 #include "ui/Icons.h"
+#include "ui/MoodBar.h"
 #include "ui/Theme.h"
 
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPainter>
 #include <QPropertyAnimation>
 #include <QPushButton>
@@ -154,6 +156,32 @@ Greeting::Greeting(Database* db, bool full, QWidget* parent)
     auto* info = line(facts.join(QStringLiteral("<br>")), "GreetFacts", m_card);
     info->setVisible(!facts.isEmpty());
 
+    // ---- Diario del día anterior (Mejoras 4.0 · 10): cómo te fue y una nota, ahí mismo.
+    QWidget* diary = nullptr;
+    if (last.isValid()) {
+        diary = new QWidget(m_card);
+        auto* dl = new QVBoxLayout(diary);
+        dl->setContentsMargins(0, 0, 0, 0);
+        dl->setSpacing(6);
+        const auto dy = m_db->dayDiary(last);
+        auto* row = new QHBoxLayout;
+        auto* lab = new QLabel(last == today.addDays(-1) ? QStringLiteral("¿Cómo te fue ayer?") : QStringLiteral("¿Cómo te fue ese día?"), diary);
+        lab->setObjectName("GreetFacts");
+        auto* mood = new MoodBar(diary);
+        mood->setMood(dy.mood);
+        connect(mood, &MoodBar::moodChanged, this, [this, last](int v) { m_db->setDayMood(last, v); });
+        row->addWidget(lab);
+        row->addSpacing(6);
+        row->addWidget(mood, 1);
+        dl->addLayout(row);
+        auto* note = new QLineEdit(diary);
+        note->setObjectName("DiaryLine");
+        note->setPlaceholderText(QStringLiteral("Una nota sobre ese día (opcional)"));
+        note->setText(dy.note);
+        connect(note, &QLineEdit::editingFinished, this, [this, last, note] { m_db->setDayNote(last, note->text()); });
+        dl->addWidget(note);
+    }
+
     // ---- Con qué actividad arrancás (Mejoras 2.0 · 11)
     auto* actLabel = new QLabel(QStringLiteral("Hoy arrancás con"), m_card);
     actLabel->setObjectName("GreetFacts");
@@ -191,6 +219,7 @@ Greeting::Greeting(Database* db, bool full, QWidget* parent)
     if (quote) lay->addWidget(quote);
     lay->addSpacing(4);
     lay->addWidget(info);
+    if (diary) { lay->addSpacing(2); lay->addWidget(diary); }
     lay->addSpacing(4);
     lay->addLayout(actRow);
     lay->addSpacing(6);
@@ -233,6 +262,7 @@ void Greeting::finish(bool accepted)
 {
     if (m_closing) return;
     m_closing = true;
+    if (auto* n = findChild<QLineEdit*>(QStringLiteral("DiaryLine"))) n->clearFocus();   // guarda la nota
     auto* a = new QPropertyAnimation(m_fade, "opacity", this);
     a->setDuration(160);
     a->setEndValue(0.0);

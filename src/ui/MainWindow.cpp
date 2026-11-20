@@ -2252,6 +2252,8 @@ void MainWindow::openGoalPanel(const QDate& day)
             refreshBand();
             reloadGrid();
         });
+        connect(m_goalPanel, &GoalPanel::dayNoteEdited, this, [this](const QDate& d, const QString& t) { m_db->setDayNote(d, t); });
+        connect(m_goalPanel, &GoalPanel::dayMoodChanged, this, [this](const QDate& d, int v) { m_db->setDayMood(d, v); });
         connect(m_goalPanel, &GoalPanel::saveRequested, this,
                 [this](const QDate& d, const QString& title, const QString& spec, int weekdays) {
             const auto before = m_db->goals();   // M40: para deshacer
@@ -2285,13 +2287,14 @@ void MainWindow::openGoalPanel(const QDate& day)
     m_goalPanel->setBreakSec(goals::breakSecFor(*m_db, m_session->breakSec()), m_db->setting("goal_break_source", 0).toInt() == 1);
     m_goalPanel->load(day, goals::resolve(m_db->goals(), day), m_db->dayTitle(day),
                       m_db->setting("work_min", 25).toInt(), day == m_today);
+    { const auto dy = m_db->dayDiary(day); m_goalPanel->setDiary(dy.note, dy.mood); }
     if (!wasOpen) placeGoalPanel(true, true);
     refreshGoals();   // con el panel visible, también carga su progreso
 }
 
 void MainWindow::closeGoalPanel()
 {
-    if (m_goalPanel && m_goalPanel->isVisible()) placeGoalPanel(false, true);
+    if (m_goalPanel && m_goalPanel->isVisible()) { m_goalPanel->flushDiary(); placeGoalPanel(false, true); }
 }
 
 // El panel tapa la parte derecha (el reproductor) y entra deslizándose.

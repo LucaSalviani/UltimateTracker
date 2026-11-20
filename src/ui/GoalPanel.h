@@ -18,6 +18,9 @@ class QPushButton;
 class QSpinBox;
 class QStackedWidget;
 class QToolButton;
+class QPlainTextEdit;
+class QTimer;
+class MoodBar;
 class GoalPreview;
 class ComboRows;
 
@@ -45,12 +48,17 @@ public:
     // B2: actividades para elegir en cada fila del objetivo (y sus colores).
     void setActivities(const FolderTree& tree, const QHash<qint64, QColor>& colors);
     QDate day() const { return m_day; }
+    // Mejoras 4.0: diario del día (nota libre y cómo te fue).
+    void setDiary(const QString& note, int mood);
+    void flushDiary();   // manda lo escrito que todavía no se guardó
 
 signals:
     void saveRequested(const QDate& day, const QString& title, const QString& spec, int weekdays);
     void removeDayRequested(const QDate& day);
     void removeFromDayRequested(const QDate& day);
     void dayTitleEdited(const QDate& day, const QString& title);
+    void dayNoteEdited(const QDate& day, const QString& note);   // Mejoras 4.0: diario
+    void dayMoodChanged(const QDate& day, int mood);
     void closeRequested();
 
 protected:
@@ -74,6 +82,11 @@ private:
 
     QLabel*         m_date;
     QLineEdit*      m_dayTitle;
+    QPlainTextEdit* m_note = nullptr;
+    MoodBar*        m_mood = nullptr;
+    QLabel*         m_moodLabel = nullptr;
+    QTimer*         m_noteTimer = nullptr;
+    bool            m_noteDirty = false;
     QButtonGroup*   m_mode;
     QStackedWidget* m_modePages;
     QLineEdit*      m_time;          // Mejoras 2.0: "3h30" escrito directo
