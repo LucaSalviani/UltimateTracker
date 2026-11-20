@@ -201,9 +201,9 @@ private:
                           st.toSec ? QStringLiteral("%1 · próx. %2").arg(st.label, roundHours(st.toSec)) : st.label,
                           st.toSec ? st.progress : 1.0});
         }
-        if (data.simple) {   // simple: solo objetivos y meta semanal
+        if (data.simple) {   // simple: objetivos, meta semanal, marca de hoy y récords (el nivel global queda en avanzada)
             QVector<Chip> keep;
-            for (const Chip& ch : chips) if (ch.key == QLatin1String("goals") || ch.key == QLatin1String("weekly")) keep << ch;
+            for (const Chip& ch : chips) if (ch.key != QLatin1String("level")) keep << ch;
             return keep;
         }
         return chips;
