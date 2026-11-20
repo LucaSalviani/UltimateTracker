@@ -14,6 +14,8 @@
 NotePad::NotePad(QWidget* parent) : QFrame(parent)
 {
     setObjectName("NotePad");
+    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);   // aleta: ventanita pegada a la principal
+    setAttribute(Qt::WA_ShowWithoutActivating, false);
     auto* title = new QLabel(QStringLiteral("Anotador"), this);
     title->setObjectName("NotePadTitle");
     m_date = new QLabel(this);

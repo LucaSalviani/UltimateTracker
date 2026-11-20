@@ -367,7 +367,7 @@ QPlainTextEdit#DiaryNote, QLineEdit#DiaryLine { background: @s2; border: 1px sol
 QPlainTextEdit#DiaryNote:focus, QLineEdit#DiaryLine:focus { border-color: @s8; }
 QToolButton#SettingsFold { background: transparent; border: none; color: @t3; padding: 4px 0; font-weight: 600; }
 QToolButton#SettingsFold:hover { color: @t1; }
-QFrame#NotePad { background: @bg2; border-left: 1px solid @s5; }
+QFrame#NotePad { background: @bg2; border: 1px solid @s5; border-left: none; }
 QLabel#NotePadTitle { color: @t1; font-size: 11pt; font-weight: 600; }
 QPlainTextEdit#NotePadText { background: @s2; border: 1px solid @s4; border-radius: 7px; padding: 8px 10px; color: @t1; }
 QPlainTextEdit#NotePadText:focus { border-color: @s8; }

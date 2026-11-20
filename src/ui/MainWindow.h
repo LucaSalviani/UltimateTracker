@@ -58,6 +58,8 @@ protected:
     void wheelEvent(QWheelEvent*) override;
     void closeEvent(QCloseEvent*) override;
     void showEvent(QShowEvent*) override;
+    void moveEvent(QMoveEvent*) override;
+    void hideEvent(QHideEvent*) override;
     void resizeEvent(QResizeEvent*) override;
     bool eventFilter(QObject* obj, QEvent* ev) override;
 
@@ -109,6 +111,7 @@ private:
     void openNotePad(const QDate& day);
     void closeNotePad(bool animate = true);
     void placeNotePad(bool open, bool animate);
+    QRect notePadRect(int w) const;
     void offerMood();
     void placeGoalPanel(bool open, bool animate);
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel

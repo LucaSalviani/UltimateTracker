@@ -2311,7 +2311,7 @@ void MainWindow::closeGoalPanel()
 void MainWindow::openNotePad(const QDate& day)
 {
     if (!m_notePad) {
-        m_notePad = new NotePad(this);
+        m_notePad = new NotePad(this);   // ventanita propia (aleta), con la principal de dueña
         m_notePad->hide();
         connect(m_notePad, &NotePad::closeRequested, this, [this] { closeNotePad(); });
         connect(m_notePad, &NotePad::noteEdited, this, [this](const QDate& d, const QString& t) { m_db->setDayNote(d, t); });
@@ -2334,30 +2334,64 @@ void MainWindow::closeNotePad(bool animate)
     placeNotePad(false, animate);
 }
 
+// El anotador es una aleta: una ventanita pegada al borde derecho de la ventana que crece hacia
+// afuera. Si la pantalla no deja lugar a la derecha, corre la ventana principal hacia la izquierda.
+QRect MainWindow::notePadRect(int w) const
+{
+    const QRect g = geometry();
+    return QRect(g.right() + 1, g.top(), w, g.height());
+}
+
 void MainWindow::placeNotePad(bool open, bool animate)
 {
-    const int gw = qMin(320, width() - 40);
-    const int top = m_titleBar ? m_titleBar->geometry().bottom() + 1 : 0;
-    const int gx = width() - 1 - gw;
-    const int nw = qMin(300, qMax(200, gx - 180));
-    const int nx = qMax(0, gx - nw + 1);
-    const QRect shown(nx, top, nw, height() - top - 1);
-    const QRect hidden = shown.translated(nw, 0);   // escondido detrás del panel del objetivo
-    if (m_noteAnim) m_noteAnim->stop();
-    m_notePad->stackUnder(m_goalPanel);
-    if (!animate) {
-        m_notePad->setGeometry(open ? shown : hidden);
+    const int want = 300;
+    const QScreen* scr = screen();
+    const QRect avail = scr ? scr->availableGeometry() : QRect(0, 0, 1920, 1080);
+    if (open && !m_notePad->isVisible() && !isFullScreen() && !isMaximized()) {
+        const int overflow = geometry().right() + 1 + want - (avail.right() + 1);
+        if (overflow > 0) move(qMax(avail.left(), x() - overflow), y());
+    }
+    int w = want;
+    if (isFullScreen() || isMaximized() || geometry().right() + 1 + 200 > avail.right() + 1) {
+        // sin lugar a la derecha: se apoya sobre la ventana, al lado del panel del objetivo
+        const int gw = qMin(320, width() - 40);
+        w = qMin(want, qMax(200, width() - gw - 120));
+        const QPoint tl = mapToGlobal(QPoint(width() - 1 - gw - w + 1, m_titleBar ? m_titleBar->geometry().bottom() + 1 : 0));
+        const QRect shown(tl, QSize(w, height() - (m_titleBar ? m_titleBar->geometry().bottom() + 1 : 0) - 1));
+        if (m_noteAnim) m_noteAnim->stop();
+        m_notePad->setGeometry(shown);
         m_notePad->setVisible(open);
         return;
     }
-    if (open) { m_notePad->setGeometry(hidden); m_notePad->show(); m_notePad->stackUnder(m_goalPanel); }
+    w = qMin(want, avail.right() + 1 - (geometry().right() + 1));
+    const QRect shown = notePadRect(w);
+    QRect closed = shown; closed.setWidth(0);
+    if (m_noteAnim) m_noteAnim->stop();
+    if (!animate) {
+        m_notePad->setGeometry(open ? shown : closed);
+        m_notePad->setVisible(open);
+        return;
+    }
+    if (open) { m_notePad->setGeometry(closed); m_notePad->show(); }
     m_noteAnim = new QPropertyAnimation(m_notePad, "geometry", this);
-    m_noteAnim->setDuration(open ? 220 : 170);
+    m_noteAnim->setDuration(open ? 240 : 180);
     m_noteAnim->setEasingCurve(open ? QEasingCurve::OutCubic : QEasingCurve::InCubic);
     m_noteAnim->setStartValue(m_notePad->geometry());
-    m_noteAnim->setEndValue(open ? shown : hidden);
+    m_noteAnim->setEndValue(open ? shown : closed);
     if (!open) connect(m_noteAnim, &QPropertyAnimation::finished, m_notePad, &QWidget::hide);
     m_noteAnim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void MainWindow::moveEvent(QMoveEvent* e)
+{
+    QWidget::moveEvent(e);
+    if (m_notePad && m_notePadOpen && m_notePad->isVisible()) placeNotePad(true, false);
+}
+
+void MainWindow::hideEvent(QHideEvent* e)
+{
+    QWidget::hideEvent(e);
+    if (m_notePad && m_notePad->isVisible()) m_notePad->hide();   // la aleta se va con la ventana (modo edge, minimizar…)
 }
 
 // Mejoras 4.1: al terminar la sesión se ofrece cargar cómo te fue (una vez; si ya lo cargaste, no).
@@ -2667,6 +2701,7 @@ void MainWindow::toastAction(const QString& text, const QString& action, std::fu
 void MainWindow::showEvent(QShowEvent* e)
 {
     QWidget::showEvent(e);
+    if (m_notePad && m_notePadOpen && !m_notePad->isVisible()) placeNotePad(true, false);
     if (m_firstShow) {
         m_firstShow = false;
         win::applyChrome(this);
