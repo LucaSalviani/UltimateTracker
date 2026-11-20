@@ -91,6 +91,10 @@ public:
     bool midBreak() const { return m_session.midBreak(); }
     bool willExtend() const { return m_session.state() == SessionController::State::WorkDone && m_session.skipWouldExtend(); }
     Q_INVOKABLE void takeBreakNow() { m_session.takeBreakNow(); }
+    // Mejoras 4.0: pausar el recreo (el tiempo parado cuenta como recreo indebido)
+    Q_PROPERTY(bool breakPaused READ breakPaused NOTIFY changed)
+    bool breakPaused() const { return m_session.breakPaused(); }
+    Q_INVOKABLE void toggleBreakPause() { if (m_session.breakPaused()) m_session.resumeBreak(); else m_session.pauseBreak(); }
     Q_INVOKABLE void endSession();              // Mejoras 2.0: "Me voy"
     // Mejoras 2.0: tarjeta del día (una vez por día): ayer, racha, comodines, actividad
     Q_INVOKABLE QVariantMap dayCard() const;
@@ -108,6 +112,11 @@ public:
     // ---- Objetivo del día
     QVariantMap goal() const { return m_goal; }
     QString dayTitle() const;
+    // Mejoras 4.0: diario del día (nota + cómo te fue, 1–5)
+    Q_INVOKABLE QString dayNote() const;
+    Q_INVOKABLE int dayMood() const;
+    Q_INVOKABLE void setDayNote(const QString& note);
+    Q_INVOKABLE void setDayMood(int mood);
     Q_INVOKABLE void setDayTitle(const QString& text);
     Q_INVOKABLE QVariantMap goalDraft() const;   // para editar: modo, partes, repetición
     // parts: [{count, minutes, folder}]; weekdays: 0 solo hoy, 127 todos los días, 31 lun–vie

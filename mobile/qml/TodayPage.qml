@@ -25,7 +25,7 @@ Flickable {
         case "running": return "POMODORO " + n
         case "paused": return "EN PAUSA"
         case "workdone": return "¡POMODORO TERMINADO!"
-        case "break": return ut.midBreak ? "RECREO · DESPUÉS SEGUÍS" : "RECREO"
+        case "break": return ut.breakPaused ? "RECREO · PAUSA" : ut.midBreak ? "RECREO · DESPUÉS SEGUÍS" : "RECREO"
         case "breakover": return "TERMINÓ EL RECREO"
         default: return "LISTO · POMODORO " + n
         }
@@ -244,15 +244,15 @@ Flickable {
             Layout.alignment: Qt.AlignHCenter
             spacing: 18
             UtButton {
-                visible: st === "running" || st === "paused" || st === "workdone"
+                visible: st === "running" || st === "paused" || st === "workdone" || st === "break"
                 diameter: 58
                 fillColor: Theme.surface
                 lineColor: Theme.line
                 iconColor: Theme.text
-                icon: st === "workdone" ? "skip" : "stop"
-                caption: st === "workdone" ? (ut.willExtend ? "Seguir sin recreo\n(mismo pomodoro)" : "Seguir sin recreo") : "Terminar"
+                icon: st === "workdone" ? "skip" : st === "break" ? (ut.breakPaused ? "play" : "pause") : "stop"
+                caption: st === "workdone" ? (ut.willExtend ? "Seguir sin recreo\n(mismo pomodoro)" : "Seguir sin recreo") : st === "break" ? (ut.breakPaused ? "Seguir recreo" : "Pausar recreo") : "Terminar"
                 captionColor: Theme.dim
-                onClicked: st === "workdone" ? ut.skipBreak() : ut.finishPomodoro()
+                onClicked: st === "workdone" ? ut.skipBreak() : st === "break" ? ut.toggleBreakPause() : ut.finishPomodoro()
             }
             UtButton {
                 diameter: 84

@@ -120,6 +120,10 @@ void MobileApp::preloadFromGoal()
 }
 
 QString MobileApp::dayTitle() const { return m_db->dayTitle(dayclock::today()); }
+QString MobileApp::dayNote() const { return m_db->dayDiary(dayclock::today()).note; }
+int MobileApp::dayMood() const { return m_db->dayDiary(dayclock::today()).mood; }
+void MobileApp::setDayNote(const QString& note) { m_db->setDayNote(dayclock::today(), note.trimmed()); }
+void MobileApp::setDayMood(int mood) { m_db->setDayMood(dayclock::today(), mood); }
 
 void MobileApp::setDayTitle(const QString& text)
 {

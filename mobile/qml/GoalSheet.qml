@@ -15,15 +15,21 @@ Sheet {
     property var parts: []
     property int weekdays: 0
     property int pickFor: -1
+    property int mood: 0
 
     function load() {
         const d = ut.goalDraft()
         has = d.has; timeMode = d.timeMode; totalMin = d.totalMin; weekdays = d.weekdays
         parts = d.parts
         titleField.text = ut.dayTitle
+        noteField.text = ut.dayNote()
+        mood = ut.dayMood()
     }
     onAboutToShow: load()
-    onClosed: if (titleField.text.trim() !== ut.dayTitle) ut.setDayTitle(titleField.text)
+    onClosed: {
+        if (titleField.text.trim() !== ut.dayTitle) ut.setDayTitle(titleField.text)
+        if (noteField.text.trim() !== ut.dayNote()) ut.setDayNote(noteField.text)
+    }
 
     function setPart(i, key, v) {
         const p = parts.slice(); const o = Object.assign({}, p[i]); o[key] = v; p[i] = o; parts = p
@@ -48,6 +54,34 @@ Sheet {
         font.pixelSize: 16
         background: Rectangle { implicitHeight: 48; color: Theme.bg; radius: 12; border.color: titleField.activeFocus ? Theme.faint : Theme.line }
         onAccepted: { ut.setDayTitle(text); focus = false }
+    }
+
+
+    // ---- Mejoras 4.0: diario del día
+    SectionLabel { text: "Diario" }
+    Text { text: "¿Cómo te va hoy?"; color: Theme.dim; font.pixelSize: 13 }
+    Row {
+        spacing: 10
+        Repeater {
+            model: 5
+            Rectangle {
+                width: 44; height: 44; radius: 22
+                color: root.mood === index + 1 ? Theme.text : Theme.bg
+                border.color: Theme.line
+                Text { anchors.centerIn: parent; text: index + 1; font.pixelSize: 15; color: root.mood === index + 1 ? Theme.bg : Theme.dim }
+                MouseArea { anchors.fill: parent; onClicked: { root.mood = root.mood === index + 1 ? 0 : index + 1; ut.setDayMood(root.mood) } }
+            }
+        }
+    }
+    TextArea {
+        id: noteField
+        Layout.fillWidth: true
+        placeholderText: "Qué hiciste, cómo salió…"
+        color: Theme.text
+        placeholderTextColor: Theme.faint
+        font.pixelSize: 15
+        wrapMode: TextEdit.Wrap
+        background: Rectangle { implicitHeight: 84; color: Theme.bg; radius: 12; border.color: noteField.activeFocus ? Theme.faint : Theme.line }
     }
 
     Segmented {
