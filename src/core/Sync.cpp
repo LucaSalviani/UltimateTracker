@@ -139,10 +139,10 @@ QVector<SyncRecord> SyncStore::pending(int limit)
                           {"weekdays", q.value(4).toInt()}, {"created_at", q.value(5).toLongLong()}};
                 r.updatedAt = q.value(6).toLongLong();
             } else if (it.kind == QLatin1String("day")) {
-                q.prepare("SELECT title, updated_at FROM days WHERE day = ?");
+                q.prepare("SELECT title, updated_at, note, mood FROM days WHERE day = ?");
                 q.addBindValue(it.uid);
                 if (!q.exec() || !q.next()) { r.deleted = true; out.append(r); continue; }
-                r.data = {{"title", q.value(0).toString()}};
+                r.data = {{"title", q.value(0).toString()}, {"note", q.value(2).toString()}, {"mood", q.value(3).toInt()}};
                 r.updatedAt = q.value(1).toLongLong();
             }
         }
@@ -366,6 +366,14 @@ bool SyncStore::applyOne(const SyncRecord& r)
         QSqlQuery x(h);
         x.prepare("UPDATE folders SET kind = ? WHERE uid = ?");
         x.addBindValue(d.value("kind").toString());
+        x.addBindValue(r.uid);
+        x.exec();
+    }
+    if (ok && r.kind == QLatin1String("day") && d.contains("note")) {
+        QSqlQuery x(h);
+        x.prepare("UPDATE days SET note = ?, mood = ? WHERE day = ?");
+        x.addBindValue(d.value("note").toString());
+        x.addBindValue(d.value("mood").toInt());
         x.addBindValue(r.uid);
         x.exec();
     }

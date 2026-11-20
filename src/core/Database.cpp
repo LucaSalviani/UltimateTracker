@@ -129,6 +129,8 @@ bool Database::migrate()
     if (version < 8) addColumnIfMissing("pomodoros", "segments", "TEXT NOT NULL DEFAULT ''");  // Mejoras 3.0: tramos
     if (version < 8) addColumnIfMissing("folders", "kind", "TEXT NOT NULL DEFAULT ''");        // Mejoras 3.0: tipo de actividad
     if (version < 9) addColumnIfMissing("pomodoros", "manual", "INTEGER NOT NULL DEFAULT 0");  // Mejoras 4.0: marcado a mano
+    if (version < 9) addColumnIfMissing("days", "note", "TEXT NOT NULL DEFAULT ''");           // Mejoras 4.0: diario
+    if (version < 9) addColumnIfMissing("days", "mood", "INTEGER NOT NULL DEFAULT 0");
     setupSync(version < 7);   // Celu: ids globales y registro de cambios para sincronizar
     if (version < kSchemaVersion) exec(QString("PRAGMA user_version = %1").arg(kSchemaVersion));
     return true;
@@ -353,6 +355,47 @@ void Database::setDayTitle(const QDate& day, const QString& title)
               "ON CONFLICT(day) DO UPDATE SET title = excluded.title");
     q.addBindValue(fmt::dayKey(day));
     q.addBindValue(title.trimmed());
+    q.exec();
+}
+
+Database::DayDiary Database::dayDiary(const QDate& day) const
+{
+    QSqlQuery q(m_db);
+    q.prepare("SELECT note, mood FROM days WHERE day = ?");
+    q.addBindValue(fmt::dayKey(day));
+    q.exec();
+    DayDiary d;
+    if (q.next()) { d.note = q.value(0).toString(); d.mood = q.value(1).toInt(); }
+    return d;
+}
+
+QHash<QDate, Database::DayDiary> Database::dayDiaries(const QDate& from, const QDate& to) const
+{
+    QHash<QDate, DayDiary> out;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT day, note, mood FROM days WHERE day BETWEEN ? AND ? AND (note <> '' OR mood > 0)");
+    q.addBindValue(fmt::dayKey(from));
+    q.addBindValue(fmt::dayKey(to));
+    q.exec();
+    while (q.next()) out.insert(fmt::fromDayKey(q.value(0).toString()), {q.value(1).toString(), q.value(2).toInt()});
+    return out;
+}
+
+void Database::setDayNote(const QDate& day, const QString& note)
+{
+    QSqlQuery q(m_db);
+    q.prepare("INSERT INTO days(day, note) VALUES(?, ?) ON CONFLICT(day) DO UPDATE SET note = excluded.note");
+    q.addBindValue(fmt::dayKey(day));
+    q.addBindValue(note.trimmed());
+    q.exec();
+}
+
+void Database::setDayMood(const QDate& day, int mood)
+{
+    QSqlQuery q(m_db);
+    q.prepare("INSERT INTO days(day, mood) VALUES(?, ?) ON CONFLICT(day) DO UPDATE SET mood = excluded.mood");
+    q.addBindValue(fmt::dayKey(day));
+    q.addBindValue(qBound(0, mood, 5));
     q.exec();
 }
 

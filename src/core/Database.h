@@ -54,6 +54,12 @@ public:
     QString dayTitle(const QDate& day) const;
     QHash<QDate, QString> dayTitles(const QDate& from, const QDate& to) const;
     void setDayTitle(const QDate& day, const QString& title);
+    // Mejoras 4.0: diario del día: una nota libre y cómo te fue (1 a 5; 0 = sin decir).
+    struct DayDiary { QString note; int mood = 0; };
+    DayDiary dayDiary(const QDate& day) const;
+    QHash<QDate, DayDiary> dayDiaries(const QDate& from, const QDate& to) const;   // solo los que tienen algo
+    void setDayNote(const QDate& day, const QString& note);
+    void setDayMood(const QDate& day, int mood);
 
     // ---- Pomodoros -------------------------------------------------------
     qint64 insertPomodoro(const Pomodoro& p);

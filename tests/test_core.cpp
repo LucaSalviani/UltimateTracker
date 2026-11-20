@@ -6,6 +6,7 @@
 #include "core/Sync.h"
 #include "core/Live.h"
 #include "core/Kinds.h"
+#include "core/Insights.h"
 #include <QSqlQuery>
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
@@ -566,6 +567,49 @@ private slots:
         }
         QVERIFY(qAbs(brk - 10 * 60) <= 2);                // lo tomado: 10 min de recreo
         QVERIFY(qAbs(undue - 3 * 60) <= 2);               // lo pausado: indebido
+    }
+
+    void insightsAndDiary()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 f = db.addFolder(0, "SO");
+        const QDate today(2026, 11, 20);
+        for (int i = 0; i < 40; ++i) {   // 40 días, cada vez un poco más
+            Pomodoro p;
+            p.folderId = f; p.day = today.addDays(-i);
+            p.startedAt = QDateTime(p.day, QTime(10, 0)).toSecsSinceEpoch();
+            p.plannedSec = p.studiedSec = (3600 + (40 - i) * 60);
+            p.endedAt = p.startedAt + p.studiedSec; p.status = PomoStatus::Completed;
+            db.insertPomodoro(p);
+        }
+        const auto days = insights::daily(db, today.addDays(-39), today, nullptr, QDateTime(today, QTime(12, 0)));
+        QCOMPARE(days.size(), 40);
+        QCOMPARE(days.value(today).pomos, 1);
+        QVERIFY(days.value(today.addDays(-5)).inactive > 0);
+        QVector<double> v;
+        for (const auto& d : days) v << d.study;
+        const auto t = insights::trend(v, 14);
+        QVERIFY(t.enough);
+        QVERIFY(t.slope > 0 && t.pct > 0);   // va al alza
+        QVERIFY(t.sentence().contains("alza"));
+        const auto avg = insights::movingAverage({1, 2, 3, 4}, 2);
+        QCOMPARE(avg.value(3), 3.5);
+        // Historial de meta semanal: el pasado no se reescribe
+        const QDate mon(2026, 11, 16);
+        insights::recordWeekGoal(db, mon.addDays(-7), 600);
+        insights::recordWeekGoal(db, mon, 900);
+        QCOMPARE(insights::weekGoals(db).value(mon.addDays(-7)), 600);
+        QCOMPARE(insights::weekGoals(db).value(mon), 900);
+        // Diario
+        db.setDayNote(today, "  repasé SO  ");
+        db.setDayMood(today, 4);
+        const auto dd = db.dayDiary(today);
+        QCOMPARE(dd.note, QString("repasé SO"));
+        QCOMPARE(dd.mood, 4);
+        QCOMPARE(db.dayDiaries(today.addDays(-3), today).size(), 1);
+        db.setDayTitle(today, "Objetivo");   // el título no pisa la nota
+        QCOMPARE(db.dayDiary(today).note, QString("repasé SO"));
     }
 
     void manualPomodoro()
