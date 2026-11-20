@@ -1,6 +1,7 @@
 #include "ui/StatsWidget.h"
 #include "core/Kinds.h"
 #include "ui/DetailCard.h"
+#include "ui/EvolutionView.h"
 #include "core/FolderTree.h"
 #include "core/DayClock.h"
 #include "core/Format.h"
@@ -739,11 +740,11 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     m_periodGroup = new QButtonGroup(this);
     auto* seg = new QHBoxLayout;
     seg->setSpacing(0);
-    const QString names[] = {QStringLiteral("Día"), QStringLiteral("Semana"), QStringLiteral("Mes"), QStringLiteral("Año")};
-    for (int i = 0; i < 4; ++i) {
+    const QString names[] = {QStringLiteral("Día"), QStringLiteral("Semana"), QStringLiteral("Mes"), QStringLiteral("Año"), QStringLiteral("Evolución")};
+    for (int i = 0; i < 5; ++i) {
         auto* b = new QPushButton(names[i], this);
         b->setCheckable(true);
-        b->setProperty("segment", i == 0 ? "first" : (i == 3 ? "last" : "mid"));
+        b->setProperty("segment", i == 0 ? "first" : (i == 4 ? "last" : "mid"));
         m_periodGroup->addButton(b, i);
         seg->addWidget(b);
     }
@@ -754,9 +755,9 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
         refresh();
     });
 
-    auto* prev = new QToolButton(this);
+    auto* prev = m_prev = new QToolButton(this);
     prev->setIcon(icons::get(icons::Id::ChevronLeft));
-    auto* next = new QToolButton(this);
+    auto* next = m_next = new QToolButton(this);
     next->setIcon(icons::get(icons::Id::ChevronRight));
     connect(prev, &QToolButton::clicked, this, [this] { fade::cross(m_canvas, 150); shift(-1); });
     connect(next, &QToolButton::clicked, this, [this] { fade::cross(m_canvas, 150); shift(+1); });
@@ -797,7 +798,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     m_canvas->tipFor = [this](const QString& key) { return tipFor(key); };
     m_canvas->onZone = [this](const QString& key) { showDetail(key); };
     m_detail = new DetailCard(this);
-    auto* scroll = new QScrollArea(this);
+    auto* scroll = m_scroll = new QScrollArea(this);
     scroll->setWidget(m_canvas);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -808,6 +809,15 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     lay->setSpacing(0);
     lay->addLayout(top);
     lay->addWidget(scroll, 1);
+    // Mejoras 4.0: la vista Evolución, en su propio scroll
+    m_evo = new EvolutionView(this);
+    m_evoScroll = new QScrollArea(this);
+    m_evoScroll->setWidget(m_evo);
+    m_evoScroll->setWidgetResizable(true);
+    m_evoScroll->setFrameShape(QFrame::NoFrame);
+    m_evoScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_evoScroll->hide();
+    lay->addWidget(m_evoScroll, 1);
 }
 
 void StatsWidget::resetToToday()
@@ -822,6 +832,7 @@ QDate StatsWidget::periodStart() const
     case Period::Week:  return fmt::mondayOf(m_anchor);
     case Period::Month: return QDate(m_anchor.year(), m_anchor.month(), 1);
     case Period::Year:  return QDate(m_anchor.year(), 1, 1);
+    case Period::Evolution: return m_anchor;
     }
     return m_anchor;
 }
@@ -833,6 +844,7 @@ QDate StatsWidget::periodEnd() const
     case Period::Week:  return fmt::mondayOf(m_anchor).addDays(6);
     case Period::Month: return QDate(m_anchor.year(), m_anchor.month(), m_anchor.daysInMonth());
     case Period::Year:  return QDate(m_anchor.year(), 12, 31);
+    case Period::Evolution: return m_anchor;
     }
     return m_anchor;
 }
@@ -844,6 +856,7 @@ QString StatsWidget::periodLabel() const
     case Period::Week:  return fmt::weekRange(fmt::mondayOf(m_anchor));
     case Period::Month: return fmt::monthYear(m_anchor);
     case Period::Year:  return QString::number(m_anchor.year());
+    case Period::Evolution: return QStringLiteral("Evolución");
     }
     return {};
 }
@@ -855,6 +868,7 @@ void StatsWidget::shift(int dir)
     case Period::Week:  m_anchor = m_anchor.addDays(7 * dir); break;
     case Period::Month: m_anchor = m_anchor.addMonths(dir); break;
     case Period::Year:  m_anchor = m_anchor.addYears(dir); break;
+    case Period::Evolution: return;
     }
     refresh();
 }
@@ -931,6 +945,20 @@ void StatsWidget::refresh()
     const QDateTime now = QDateTime::currentDateTime();
     const FolderTree tree(m_db->folders());
     const qint64 filterId = m_folder->currentData().toLongLong();
+
+    // Mejoras 4.0: la vista Evolución tiene su propio lienzo (sin flechas de período).
+    const bool evo = m_period == Period::Evolution;
+    m_scroll->setVisible(!evo);
+    m_evoScroll->setVisible(evo);
+    m_prev->setVisible(!evo);
+    m_next->setVisible(!evo);
+    if (evo) {
+        QSet<qint64> sub;
+        if (filterId) sub = tree.subtree(filterId);
+        m_label->setText(QStringLiteral("Evolución en el tiempo"));
+        m_evo->reload(m_db, filterId ? &sub : nullptr);
+        return;
+    }
 
     StatsData& d = m_canvas->data;
     d = StatsData{};

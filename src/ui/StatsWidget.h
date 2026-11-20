@@ -10,12 +10,15 @@ class QLabel;
 class QPushButton;
 class QButtonGroup;
 class StatsCanvas;
+class EvolutionView;
+class QScrollArea;
+class QToolButton;
 
 // Estadísticas por día / semana / mes / año, filtrables por carpeta.
 class StatsWidget : public QWidget {
     Q_OBJECT
 public:
-    enum class Period { Day = 0, Week = 1, Month = 2, Year = 3 };
+    enum class Period { Day = 0, Week = 1, Month = 2, Year = 3, Evolution = 4 };   // Mejoras 4.0: Evolución
 
     StatsWidget(Database* db, QWidget* parent = nullptr);
 
@@ -51,4 +54,9 @@ private:
     QComboBox*    m_folder;
     StatsCanvas*  m_canvas;
     class DetailCard* m_detail = nullptr;
+    EvolutionView* m_evo = nullptr;
+    QScrollArea*   m_scroll = nullptr;
+    QScrollArea*   m_evoScroll = nullptr;
+    QToolButton*   m_prev = nullptr;
+    QToolButton*   m_next = nullptr;
 };
