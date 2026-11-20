@@ -19,6 +19,7 @@ public:
 
     // filter: actividades que cuentan para las horas (nullptr = todas).
     void reload(Database* db, const QSet<qint64>* filter);
+    void setHoverTips(bool on) { m_hoverTips = on; }   // Mejoras 4.1: info al pasar el mouse (si no, con click)
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -35,6 +36,7 @@ private:
         int marks[3] = {0, 0, 0};     // días con marca de bronce / plata / oro
         int goalMin = -1;             // meta de esa semana (-1 = no quedó anotada)
     };
+    bool m_hoverTips = false;
     struct Zone { QRectF rect; QString tip; QString key; };
 
     int contentHeight(int w) const;

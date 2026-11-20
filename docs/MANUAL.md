@@ -38,7 +38,7 @@
 ### Novedades de la beta 6
 - **Anotador**: en el panel Objetivo, botón *Anotador*. Una hoja libre por día para lo que querés hacer y cómo te fue, con tu ánimo de 1 a 5. Si te molesta, apagalo en Ajustes › General y vuelve el diario de antes.
 - Al tocar **Me voy**, la app te pregunta cómo te fue.
-- **Estadísticas más tranquilas**: el detalle de cada dato aparece solo al hacer click (nada de carteles al pasar el mouse) y hay vista **Simple** (por defecto) o **Avanzada**.
+- **Estadísticas más tranquilas**: el detalle de cada dato aparece solo al hacer click (nada de carteles al pasar el mouse) y hay vista **Simple** (por defecto) o **Avanzada** (suma la línea de promedio y más datos). El botón **ⓘ** vuelve a activar la info al pasar el mouse.
 - **Ajustes ordenados** en grupos, con lo avanzado plegado.
 
 ### Novedades de la beta 5

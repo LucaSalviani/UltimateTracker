@@ -445,6 +445,7 @@ void EvolutionView::mouseMoveEvent(QMouseEvent* e)
     for (const Zone& z : m_zones) {
         if (!z.rect.contains(e->position())) continue;
         setCursor(z.key.isEmpty() && z.tip.isEmpty() ? Qt::ArrowCursor : Qt::PointingHandCursor);   // Mejoras 4.1: el detalle sale con click
+        if (m_hoverTips && !z.tip.isEmpty()) QToolTip::showText(e->globalPosition().toPoint(), z.tip, this, z.rect.toRect());
         return;
     }
     setCursor(Qt::ArrowCursor);

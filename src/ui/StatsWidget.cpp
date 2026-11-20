@@ -84,6 +84,7 @@ public:
     QVector<Zone> zones;
     std::function<void(const QString&)> onZone;
     std::function<QString(const QString&)> tipFor;
+    bool hoverTips = false;   // Mejoras 4.1: el botón ⓘ vuelve a activar la info al pasar el mouse
 
     void relayout()
     {
@@ -105,7 +106,8 @@ protected:
         setCursor(z ? Qt::PointingHandCursor : Qt::ArrowCursor);
         const QString key = z ? z->key : QString();
         if (key != m_hoverKey) { m_hoverKey = key; update(); }
-        QToolTip::hideText();   // Mejoras 4.1: el detalle sale solo con click (menos estímulo)
+        if (hoverTips && z && tipFor) QToolTip::showText(e->globalPosition().toPoint(), tipFor(z->key), this, z->rect.toRect());
+        else QToolTip::hideText();   // por defecto el detalle sale solo con click (menos estímulo)
     }
     void leaveEvent(QEvent*) override { if (!m_hoverKey.isEmpty()) { m_hoverKey.clear(); update(); } }
     void mouseReleaseEvent(QMouseEvent* e) override
@@ -431,8 +433,10 @@ private:
         p.setFont(theme::uiFont(7.5));
         p.setPen(theme::textFaint);
         p.drawText(QRectF(L, y - 24, W, 16), Qt::AlignRight | Qt::AlignVCenter,
-                   data.goals.isEmpty() ? QStringLiteral("- - promedio por día")
-                                        : QStringLiteral("—  objetivo del día     ●  cumplido     - -  promedio por día"));
+                   data.simple ? (data.goals.isEmpty() ? QStringLiteral("promedio %1 por día").arg(fmt::duration(int(avg)))
+                                                       : QStringLiteral("—  objetivo del día     ●  cumplido     promedio %1 por día").arg(fmt::duration(int(avg))))
+                   : data.goals.isEmpty() ? QStringLiteral("- - promedio por día")
+                                          : QStringLiteral("—  objetivo del día     ●  cumplido     - -  promedio por día"));
 
         p.setPen(QPen(theme::line, 1));
         p.drawLine(QPointF(L, y + chartH), QPointF(L + W, y + chartH));
@@ -476,7 +480,7 @@ private:
             zone(QRectF(L + i * slot, y - 4, slot, chartH + 36), QStringLiteral("day:") + fmt::dayKey(d), p);
         }
         // Línea de promedio (punteada)
-        if (avg > 0) {
+        if (avg > 0 && !data.simple) {   // Mejoras 4.1: la línea solo en la vista avanzada
             const double ay = y + chartH - (chartH - labelRoom) * double(avg) / maxV;
             p.setPen(QPen(theme::textDim, 1, Qt::DashLine));
             p.drawLine(QPointF(L, ay), QPointF(L + W, ay));
@@ -812,9 +816,14 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     });
     auto* info = new QToolButton(this);
     info->setText(QStringLiteral("ⓘ"));
-    info->setToolTip(QStringLiteral("Cómo ver el detalle"));
-    connect(info, &QToolButton::clicked, this, [this] {
-        emit message(QStringLiteral("Hacé click en cualquier dato, barra o día para ver su detalle"));
+    info->setCheckable(true);
+    info->setChecked(m_db->setting("stats_hover", 0).toBool());
+    info->setToolTip(QStringLiteral("Mostrar la info extra al pasar el mouse (apagado: solo con click)"));
+    auto applyHover = [this](bool on) { m_canvas->hoverTips = on; if (m_evo) m_evo->setHoverTips(on); };
+    connect(info, &QToolButton::toggled, this, [this, applyHover](bool on) {
+        m_db->setSetting("stats_hover", on ? 1 : 0);
+        applyHover(on);
+        emit message(on ? QStringLiteral("Info al pasar el mouse: activada") : QStringLiteral("Info al pasar el mouse: apagada (queda el click)"));
     });
     top->insertWidget(top->indexOf(m_folder) + 1, m_viewBtn);
     top->addWidget(info);
@@ -836,6 +845,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     lay->addWidget(scroll, 1);
     // Mejoras 4.0: la vista Evolución, en su propio scroll
     m_evo = new EvolutionView(this);
+    { const bool hv = m_db->setting("stats_hover", 0).toBool(); m_canvas->hoverTips = hv; m_evo->setHoverTips(hv); }
     m_evoScroll = new QScrollArea(this);
     m_evoScroll->setWidget(m_evo);
     m_evoScroll->setWidgetResizable(true);
