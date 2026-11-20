@@ -37,6 +37,7 @@ public:
         int     bankSec = 0;         // Mejoras 3.0: recreo guardado (de los salteados)
         bool    canTakeBreak = false;// se puede tomar ahora, a mitad del pomodoro
         bool    willExtend = false;  // "seguir sin recreo" extiende el mismo pomodoro
+        bool    breakPaused = false; // recreo en pausa (cuenta como indebido)
         bool    midBreak = false;    // el recreo en curso es a mitad de pomodoro
         bool    activityHint = false;// Mejoras 2.0: primer pomodoro del día: ¿es esta la actividad?
     };
@@ -68,6 +69,7 @@ signals:
     void startBreakClicked();
     void skipBreakClicked();
     void endBreakClicked();
+    void breakPauseClicked();   // pausar / seguir el recreo
     void silenceClicked();
     void durationChanged(int minutes);
     void goTodayClicked();

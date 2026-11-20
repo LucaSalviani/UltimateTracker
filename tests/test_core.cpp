@@ -533,6 +533,41 @@ private slots:
         QCOMPARE(kinds::of(t, so).doneFem, QString("entrenadas"));
     }
 
+    void breakPauseCountsAsUndue()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        std::unique_ptr<SessionController> s(make(db));
+        const QDate day(2026, 10, 26);
+        s->setWorkSec(25 * 60);
+        s->setBreakSec(10 * 60);
+        s->start();
+        advance(db, *s, 25 * 60 + 1);
+        s->skipBreak();                                   // se guarda el recreo
+        advance(db, *s, 25 * 60 + 1);
+        QCOMPARE(s->state(), SessionController::State::WorkDone);
+        QVERIFY(s->breakBankSec() > 0);
+        s->startBreak();                                  // tomar el recreo borra lo guardado
+        QCOMPARE(s->breakBankSec(), 0);
+        advance(db, *s, 2 * 60);
+        s->pauseBreak();
+        QVERIFY(s->breakPaused());
+        const int left = s->remainingSec();
+        advance(db, *s, 3 * 60);                          // en pausa el recreo no avanza
+        QCOMPARE(s->remainingSec(), left);
+        s->resumeBreak();
+        QVERIFY(!s->breakPaused());
+        advance(db, *s, 10 * 60);
+        QCOMPARE(s->state(), SessionController::State::BreakOver);
+        qint64 brk = 0, undue = 0;
+        for (const Interval& i : db.intervalsBetween(day, day)) {
+            if (i.kind == IntervalKind::Break) brk += i.seconds;
+            if (i.kind == IntervalKind::Undue) undue += i.seconds;
+        }
+        QVERIFY(qAbs(brk - 10 * 60) <= 2);                // lo tomado: 10 min de recreo
+        QVERIFY(qAbs(undue - 3 * 60) <= 2);               // lo pausado: indebido
+    }
+
     void manualPomodoro()
     {
         Database db;

@@ -52,6 +52,7 @@ public:
         qint64   breakMs = 0;
         qint64   breakPlannedMs = 0;
         qint64   folderId = 0;
+        bool     breakPaused = false; // recreo en pausa (cuenta como recreo indebido)
         bool     midBreak = false; // recreo a mitad de pomodoro (el pomodoro sigue después)
     };
 
@@ -114,6 +115,10 @@ public:
     bool canTakeBreak() const { return !m_passive && m_hasPomo && m_bankSec >= 60 && (m_state == State::Running || m_state == State::Paused); }
     void takeBreakNow();
     bool midBreak() const { return m_midBreak; }
+    // Mejoras 4.0: pausa del recreo. El tiempo en pausa cuenta como recreo indebido.
+    bool breakPaused() const { return m_breakPaused; }
+    void pauseBreak();
+    void resumeBreak();
     // ¿"Seguir sin recreo" va a extender el pomodoro que terminó (en vez de abrir otro)?
     bool skipWouldExtend() const;
 
@@ -188,6 +193,7 @@ private:
     Pomodoro m_lastPomo;      // el último terminado (para mandarlo en vivo)
 
     int      m_bankSec = 0;       // recreo guardado (de los salteados)
+    bool     m_breakPaused = false;
     bool     m_midBreak = false;  // el recreo en curso es a mitad de pomodoro
     void     setBank(int sec);
     void     endMidBreak();

@@ -224,6 +224,7 @@ void SessionController::tick()
         break;
     }
     case State::Break: {
+        if (m_breakPaused) { addToInterval(delta); break; }   // en pausa: no avanza, y es tiempo indebido
         m_breakMs += delta;
         if (m_breakMs >= m_breakPlannedMs) {
             const qint64 over = m_breakMs - m_breakPlannedMs;
@@ -312,6 +313,7 @@ void SessionController::startBreak()
     takeOver();
     tick();
     if (m_state != State::WorkDone) return;
+    setBank(0);   // Mejoras 4.0: tomaste un recreo de verdad: lo guardado ya no vale
     m_breakMs = 0;
     m_breakPlannedMs = qint64(m_breakSec) * 1000;
     setState(State::Break);
@@ -355,6 +357,29 @@ void SessionController::setBank(int sec)
 {
     m_bankSec = qBound(0, sec, 60 * 60);
     m_db->setSetting("break_bank", QStringLiteral("%1|%2").arg(fmt::dayKey(today())).arg(m_bankSec));
+    emit pomodoroChanged();
+}
+
+void SessionController::pauseBreak()
+{
+    takeOver();
+    tick();
+    if (m_state != State::Break || m_breakPaused) return;
+    m_breakPaused = true;
+    closeInterval();
+    openInterval(IvKind::Pending);   // lo que dure la pausa queda pendiente → recreo indebido al volver
+    emit pomodoroChanged();
+}
+
+void SessionController::resumeBreak()
+{
+    takeOver();
+    tick();
+    if (m_state != State::Break || !m_breakPaused) return;
+    m_breakPaused = false;
+    closeInterval();
+    confirmPending();
+    openInterval(IvKind::Break);
     emit pomodoroChanged();
 }
 
@@ -471,6 +496,7 @@ void SessionController::setState(State s)
         if (s == State::Running || s == State::Break) confirmPending();
         if (newKind != IvKind::None) openInterval(newKind);
     }
+    if (s != State::Break) m_breakPaused = false;
     m_state = s;
     m_stateMs = 0;
     emit stateChanged(s);
@@ -612,6 +638,7 @@ SessionController::LiveState SessionController::liveState() const
     s.breakMs = m_breakMs;
     s.breakPlannedMs = m_breakPlannedMs;
     s.midBreak = m_midBreak;
+    s.breakPaused = m_breakPaused && m_state == State::Break;
     if (m_hasPomo) {
         s.pomo = m_pomo;
         s.pomoMs = m_pomoMs;
@@ -638,6 +665,7 @@ void SessionController::adoptRemote(const LiveState& s, bool announce)
     const State prev = m_state;
     if (s.folderId > 0) m_folderId = s.folderId;
     m_passiveUid = s.pomoUid;
+    m_breakPaused = s.breakPaused && s.state == State::Break;
     m_midBreak = s.midBreak && (s.state == State::Break || s.state == State::BreakOver);
     m_hasPomo = s.state == State::Running || s.state == State::Paused || m_midBreak;
     m_pomo = s.pomo;
@@ -699,7 +727,7 @@ void SessionController::passiveTick(qint64 delta)
             emit stateChanged(m_state);
             emit pomodoroCompleted(m_lastPomo.id);
         }
-    } else if (m_state == State::Break) {
+    } else if (m_state == State::Break && !m_breakPaused) {
         m_breakMs += delta;
         if (m_breakMs >= m_breakPlannedMs) {
             m_breakMs = m_breakPlannedMs;
@@ -752,7 +780,7 @@ void SessionController::takeOver()
         m_lastPomoId = id;
     }
     m_passiveUid.clear();
-    const IvKind k = kindFor(m_state);
+    const IvKind k = (m_state == State::Break && m_breakPaused) ? IvKind::Pending : kindFor(m_state);
     if (k != IvKind::None) openInterval(k);
     m_lastPersistMs = 0;
     emit tookOver();

@@ -826,6 +826,9 @@ QWidget* MainWindow::buildDeck()
     connect(m_deck, &TimerDeck::startBreakClicked, m_session, &SessionController::startBreak);
     connect(m_deck, &TimerDeck::skipBreakClicked, m_session, &SessionController::skipBreak);
     connect(m_deck, &TimerDeck::endBreakClicked, m_session, &SessionController::endBreakEarly);
+    connect(m_deck, &TimerDeck::breakPauseClicked, this, [this] {
+        if (m_session->breakPaused()) m_session->resumeBreak(); else m_session->pauseBreak();
+    });
     connect(m_deck, &TimerDeck::silenceClicked, m_session, &SessionController::silenceAlarm);
     connect(m_deck, &TimerDeck::leaveClicked, this, &MainWindow::leaveSession);
     connect(m_deck, &TimerDeck::takeBreakClicked, m_session, &SessionController::takeBreakNow);
@@ -1326,6 +1329,7 @@ void MainWindow::refreshDeck()
     m.canTakeBreak = m_session->canTakeBreak();
     m.willExtend = m_session->state() == S::WorkDone && m_session->skipWouldExtend();
     m.midBreak = m_session->midBreak();
+    m.breakPaused = m_session->breakPaused();
     m.durationMin = (m.mode == M::BreakReady ? m_session->breakSec() : m_session->workSec()) / 60;
     // Los pomodoros se registran solo hoy: viendo otro día, el reproductor ofrece volver.
     m.canStart = m_grid->zoom() != GridWidget::Zoom::Day || m_grid->anchor() == m_today;
@@ -1415,7 +1419,7 @@ void MainWindow::togglePlay()
     case S::Running:   m_session->pause(); break;
     case S::Paused:    m_session->resume(); break;
     case S::WorkDone:  m_session->startBreak(); break;
-    case S::Break:     break;
+    case S::Break:     if (m_session->breakPaused()) m_session->resumeBreak(); else m_session->pauseBreak(); break;
     }
 }
 

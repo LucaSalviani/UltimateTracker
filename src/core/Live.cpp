@@ -115,6 +115,7 @@ QJsonObject LiveLink::snapshot() const
         o.insert("pomo_segments", s.pomo.segments);
         o.insert("mid_break", s.midBreak);
     }
+    o.insert("break_paused", s.breakPaused);
     return o;
 }
 
@@ -212,6 +213,7 @@ void LiveLink::applyRemote(const QJsonObject& data, bool announce)
         s.pomoMs = num(data, "pomo_ms");
         if (s.pomo.id <= 0 && m_sync) m_sync->syncNow();   // todavía no llegó: se pide
     }
+    s.breakPaused = data.value("break_paused").toBool();
     s.breakMs = num(data, "break_ms");
     s.breakPlannedMs = num(data, "break_planned_ms");
 
@@ -234,7 +236,7 @@ void LiveLink::applyRemote(const QJsonObject& data, bool announce)
                 m_session->adoptRemote(r, false);
             }
         }
-    } else if (st == S::Break) {
+    } else if (st == S::Break && !s.breakPaused) {
         s.breakMs += gone;
         if (s.breakMs >= s.breakPlannedMs) {
             loud = loud && s.breakMs - s.breakPlannedMs < kAnnounceWindowMs;

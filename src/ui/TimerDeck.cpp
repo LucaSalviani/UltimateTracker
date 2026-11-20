@@ -210,7 +210,7 @@ TimerDeck::TimerDeck(QWidget* parent)
         case Mode::BreakOver:  emit playClicked(); break;
         case Mode::Running:    emit pauseClicked(); break;
         case Mode::BreakReady: emit startBreakClicked(); break;
-        case Mode::Break:      break;
+        case Mode::Break:      emit breakPauseClicked(); break;
         }
     });
     connect(m_secondary, &QPushButton::clicked, this, [this] {
@@ -376,7 +376,7 @@ void TimerDeck::setModel(const Model& m)
 {
     const bool modeChanged = m_first || m.mode != m_model.mode || m.canStart != m_model.canStart || m.canLeave != m_model.canLeave ||
                              m.bankSec != m_model.bankSec || m.canTakeBreak != m_model.canTakeBreak ||
-                             m.willExtend != m_model.willExtend || m.midBreak != m_model.midBreak;
+                             m.willExtend != m_model.willExtend || m.midBreak != m_model.midBreak || m.breakPaused != m_model.breakPaused;
     // Mejoras 2.0 · 11: al empezar el día, la actividad titila suave unos segundos
     // (¿es esto lo que querés hacer hoy?) y queda marcada hasta que arrancás.
     if (m.activityHint != m_model.activityHint || m_first) {
@@ -404,7 +404,7 @@ void TimerDeck::applyMode()
     const QColor onAccent(0xff, 0xff, 0xff);
 
     // Botón grande
-    m_primary->setVisible(m != Mode::Break);
+    m_primary->setVisible(true);
     m_primary->setProperty("accent", brk ? "break" : "pomo");
     switch (m) {
     case Mode::Ready:
@@ -428,6 +428,9 @@ void TimerDeck::applyMode()
         m_primary->setToolTip(QStringLiteral("Siguiente pomodoro (Espacio)"));
         break;
     case Mode::Break:
+        m_primary->setIcon(icons::get(m_model.breakPaused ? icons::Id::Play : icons::Id::Pause, onAccent));
+        m_primary->setToolTip(m_model.breakPaused ? QStringLiteral("Seguir el recreo (Espacio)")
+                                                  : QStringLiteral("Pausar el recreo (Espacio): el tiempo en pausa cuenta como recreo indebido"));
         break;
     }
 
@@ -592,11 +595,12 @@ void DeckDisplay::paintEvent(QPaintEvent*)
     case Mode::Running:    label = QStringLiteral("POMODORO %1").arg(m_model.number, 2, 10, QChar('0')); break;
     case Mode::Paused:     label = QStringLiteral("POMODORO %1").arg(m_model.number, 2, 10, QChar('0')); break;
     case Mode::BreakReady: label = QStringLiteral("RECREO"); break;
-    case Mode::Break:      label = QStringLiteral("RECREO"); break;
+    case Mode::Break:      label = m_model.breakPaused ? QStringLiteral("RECREO · PAUSA") : QStringLiteral("RECREO"); break;
     case Mode::BreakOver:  label = QStringLiteral("FIN DEL RECREO"); break;
     }
-    const bool ledLit = mode == Mode::Running || mode == Mode::Break ||
-                        ((mode == Mode::Paused || mode == Mode::BreakOver) && blinkOn);
+    const bool brkPaused = mode == Mode::Break && m_model.breakPaused;
+    const bool ledLit = mode == Mode::Running || (mode == Mode::Break && !brkPaused) ||
+                        ((mode == Mode::Paused || mode == Mode::BreakOver || brkPaused) && blinkOn);
     QColor led = accentVisor() ? (ledLit ? QColor(0xff, 0xff, 0xff) : V.ledOff) : accent;
     if (!ledLit && !accentVisor()) led = accent.darker(260);
     const QPointF ledC(R.left() + pad + 4, R.top() + pad + 6);
