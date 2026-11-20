@@ -35,6 +35,15 @@
 
 ![Estadísticas](captura-estadisticas.png)
 
+### Novedades de la beta 5
+- **Marcar un pomodoro a mano**: click derecho en el cuadradito › *Marcar como hecho*. Cuenta igual y queda con un triangulito de "manual".
+- **Pausar el recreo**: el tiempo en pausa cuenta como recreo indebido.
+- **Objetivo en minutos**: los cuadraditos fantasma se ajustan a lo que te falta; el recreo guardado se borra al tomar un recreo.
+- **Mapa de calor nuevo** (horas, pomodoros, objetivo, indebido, inactivo) y gráfico del mes con letras y detalle al pasar el mouse.
+- **Evolución**: pestaña nueva en Estadísticas con tendencia, recreo indebido, horas inactivas, metas semanales y ánimo.
+- **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
+- Festejo al romper un récord.
+
 ### Novedades de la beta 4
 - **Estadísticas con detalle**: pasá el mouse por un dato para ver más; hacé click y se abre una ventanita con el detalle (Esc la cierra).
 - **Racha**: los comodines que cambies valen desde hoy. Si querés reiniciarla a mano: click en la racha › *Reiniciar racha…*.

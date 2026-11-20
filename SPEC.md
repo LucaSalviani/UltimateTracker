@@ -195,3 +195,15 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - **Tipo de actividad** (Estudio, Trabajo, Lectura, Práctica o propio): menú de la actividad › *Tipo*. Las subactividades heredan; cuando hay mezcla se usa "foco". Cambia los verbos y textos en toda la app (PC y celu).
 - **Saludo tras suspender**: una vez por día; detecta el despertar por salto de reloj (latido de 10 s), muestra la ventana aunque esté minimizada o anclada y espera si la PC está bloqueada. Registro en `arranque.log` (junto a `sonidos.log`).
 - **Distracciones** (Ajustes › Cronómetro › Distracciones; apagado por defecto): con un pomodoro corriendo, si la ventana activa coincide con la lista de palabras (por defecto Instagram y WhatsApp) pasado el tiempo de gracia, pantalla roja "RECREO INDEBIDO" y, si se eligió, pausa. Todo local: solo se mira el título/programa de la ventana activa, nada se guarda ni se envía.
+
+## Mejoras 4.0 (beta 5)
+- **Marcar a mano**: click derecho en un cuadradito del día › *Marcar como hecho* (duración a elegir). Cuenta igual que uno cronometrado y lleva la marca "manual" (triangulito en la esquina; `pomodoros.manual`, sincronizado).
+- **Pausar el recreo**: botón del reproductor (Espacio en PC, botón izquierdo en el celu). El tiempo en pausa cuenta como recreo indebido; se refleja en el vínculo PC↔celu (`break_paused`).
+- **Objetivo en bolsa de minutos**: los fantasmas se reparten por los minutos que faltan; si un pomodoro dura más que su bloque, el siguiente se achica (8×25: el primero de 30 → el segundo pasa a 20).
+- **Recreo guardado**: tomar cualquier recreo lo pone en cero (el botón sigue sirviendo por si te arrepentís a mitad de un pomodoro doble).
+- **Récord roto**: festejo corto con aviso claro (`Celebration::Kind::Record`).
+- **Mapa de calor**: selector de métrica (horas, pomodoros, objetivo, indebido, inactivo), escala por cuartiles, puntito = objetivo cumplido, leyenda, hover y click por día.
+- **Gráfico del mes**: letra del día, línea de promedio, hover y click con el detalle del día.
+- **Evolución** (nueva pestaña en Estadísticas): horas con media móvil de 7 días + regresión + últimas 4 semanas vs 4 anteriores, recreo indebido, horas inactivas, metas semanales y marcas (historial desde que existe la versión, tabla `weekly_goals`), ánimo del día. Lógica en `core/Insights`.
+- **Diario del día**: en el panel Objetivo, nota libre + "¿Cómo te va hoy?" (1–5); también en la tarjeta del día y en el celu (hoja del objetivo). `days.note` / `days.mood`, sincronizados. Esquema v9.
+- **Primera apertura del día**: abrir la app a mano ahora muestra la tarjeta enseguida (antes dependía del reloj de 30 s). `arranque.log` registra la línea "inicio (a mano/automático)" con los ms hasta tener la ventana.
