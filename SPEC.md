@@ -207,3 +207,10 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - **Evolución** (nueva pestaña en Estadísticas): horas con media móvil de 7 días + regresión + últimas 4 semanas vs 4 anteriores, recreo indebido, horas inactivas, metas semanales y marcas (historial desde que existe la versión, tabla `weekly_goals`), ánimo del día. Lógica en `core/Insights`.
 - **Diario del día**: en el panel Objetivo, nota libre + "¿Cómo te va hoy?" (1–5); también en la tarjeta del día y en el celu (hoja del objetivo). `days.note` / `days.mood`, sincronizados. Esquema v9.
 - **Primera apertura del día**: abrir la app a mano ahora muestra la tarjeta enseguida (antes dependía del reloj de 30 s). `arranque.log` registra la línea "inicio (a mano/automático)" con los ms hasta tener la ventana.
+
+## Mejoras 4.1 (beta 6, PC)
+- **Anotador**: dentro del panel Objetivo, el botón *Anotador ▸* despliega a la izquierda una hoja libre por día (lo que querés hacer, cómo salió, lo que sea) con el "¿Cómo te va hoy?" (1–5) abajo. Usa `days.note` / `days.mood` (sincronizados, el celu lo ve). *Ajustes › General › Anotador desplegable* apagado devuelve el diario dentro del panel, como en la beta 5.
+- **Ánimo al terminar la sesión**: «Me voy» pregunta cómo te fue si todavía no lo cargaste (se apaga en *Ajustes › General*).
+- **Detalle solo con click**: pasar el mouse por Estadísticas ya no muestra textos (queda el resaltado y la manito); el click abre el detalle. En Evolución, el click en una barra o punto muestra su dato. Botón ⓘ con la ayuda. Los cuadraditos de la grilla conservan su hover.
+- **Vista simple / avanzada** (botón junto a la actividad, arranca en Simple y se recuerda, `stats_advanced`): la simple muestra estudio, recreos, racha, objetivos y meta semanal, el gráfico y las actividades; la avanzada suma recreos indebidos, horas inactivas, marca, récords, nivel, el selector del mapa de calor y la pestaña Evolución.
+- **Ajustes ordenados**: grupos con títulos (Tiempos y racha, Objetivo y diario, Inicio, Atajos y avisos, Copia de seguridad…), lo menos usado en grupos plegables (*Avanzado*, *Pasos y sensibilidad*, *Tamaño*) y textos más cortos.
