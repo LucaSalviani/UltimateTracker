@@ -50,6 +50,14 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 7
+- **Avisos en cola**: no se pisan ni tapan el *Deshacer*, y duran menos. Los avisos automáticos ya no te sacan el foco ni activan teclas sueltas.
+- **Próximo pomodoro**: arranca con los minutos del próximo cuadradito fantasma (si faltan 16, 16).
+- **Click derecho en un fantasma › marcar a mano** usa su duración y actividad.
+- **Estadísticas**: racha grande, *Foco %*, actividades acotadas con selector, y en Mes podés alternar *Calendario* y *Últimos 30 días* (el default se elige en Ajustes).
+- **Evolución** con fichas de variación contra los 28 días anteriores.
+- **Barra de arriba** más simple: el tamaño de los cuadraditos pasa al menú ⋯.
+
 ### Novedades de la beta 4
 - **Estadísticas con detalle**: pasá el mouse por un dato para ver más; hacé click y se abre una ventanita con el detalle (Esc la cierra).
 - **Racha**: los comodines que cambies valen desde hoy. Si querés reiniciarla a mano: click en la racha › *Reiniciar racha…*.

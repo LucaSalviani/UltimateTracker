@@ -214,3 +214,14 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - **Detalle solo con click**: pasar el mouse por Estadísticas ya no muestra textos (queda el resaltado y la manito); el click abre el detalle. En Evolución, el click en una barra o punto muestra su dato. El botón ⓘ (interruptor, se recuerda) vuelve a activar la info al pasar el mouse. Los cuadraditos de la grilla conservan su hover.
 - **Vista simple / avanzada** (botón junto a la actividad, arranca en Simple y se recuerda, `stats_advanced`): la simple muestra estudio, recreos, racha, objetivos, meta semanal, marca de hoy y récords, el gráfico (el promedio solo como dato) y las actividades; la avanzada suma la línea de promedio, recreos indebidos, horas inactivas, nivel global, el selector del mapa de calor y la pestaña Evolución.
 - **Ajustes ordenados**: grupos con títulos (Tiempos y racha, Objetivo y diario, Inicio, Atajos y avisos, Copia de seguridad…), lo menos usado en grupos plegables (*Avanzado*, *Pasos y sensibilidad*, *Tamaño*) y textos más cortos.
+
+## Mejoras 5.0 (beta 7, PC) — tanda 5.0
+- **Avisos**: la info extra del hover apagada ya no dice "(queda el click)"; los avisos simples duran 4 s (los de "Deshacer", 8 s) y se hacen **cola** (máx. 3, sin repetidos): no se pisan entre sí ni tapan un "Deshacer".
+- **Foco**: los avisos automáticos (fin de pomodoro/recreo, hito) ya no roban el foco ni dejan pasar teclas sueltas (Espacio/N/M) durante 4 s: corrige el recreo que arrancaba solo, el pedido de nota y el mini reproductor inesperados.
+- **Próximo pomodoro** = minutos restantes del próximo cuadradito fantasma (16 → el reloj arranca en 16, no en 25).
+- **Marcar a mano** (click derecho en un fantasma): usa los minutos y la actividad de ese cuadradito.
+- **Estadísticas**: racha grande arriba; "Foco %" reemplaza al recreo indebido en la cabecera (el detalle del indebido sigue en el día y en Avanzada); bloque de actividades más bajo, scrolleable, con selector "Mostrar ▾" de cuáles se ven (`stats_hidden_acts`).
+- **Mes**: en la pestaña Mes se alterna *Calendario | Últimos 30 días*; el valor por defecto se elige en Ajustes (`month_mode`).
+- **Barra de arriba**: un solo botón de vista (día/semana/mes); el tamaño de los cuadraditos pasa al menú ⋯ (`size_button` apagado por defecto).
+- **Evolución**: cuatro fichas con número grande y variación "↑ 12 % vs 28 días antes" (estudio, pomodoros, indebido, inactivo), tarjetas más bajas y sin bordes, titular en lenguaje natural más grande.
+- Pendiente de la tanda: color con significado y menos líneas en el resto de la app. Siguen 5.1 (cantidad de sesiones, rutina) y 5.2 (personalizar paneles).
