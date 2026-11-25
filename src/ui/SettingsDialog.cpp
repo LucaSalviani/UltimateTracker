@@ -255,6 +255,11 @@ QWidget* SettingsDialog::pageGeneral()
     times->addRow(QStringLiteral("Recreo por defecto"), m_break);
     times->addRow(QStringLiteral("El día empieza a las"), m_dayStart);
     times->addRow(QStringLiteral("Comodines por semana"), m_jokers);
+    m_monthMode = new QComboBox(w);
+    m_monthMode->addItem(QStringLiteral("Mes del calendario"), "calendar");
+    m_monthMode->addItem(QStringLiteral("Últimos 30 días"), "rolling");
+    m_monthMode->setCurrentIndex(m_db->setting("month_mode", "calendar").toString() == QLatin1String("rolling") ? 1 : 0);
+    times->addRow(QStringLiteral("Mes en Estadísticas"), m_monthMode);
     auto* goalForm = new QFormLayout;
     goalForm->addRow(QStringLiteral("Cargar por pomodoros con"), m_goalInput);
 
@@ -770,6 +775,7 @@ void SettingsDialog::accept()
     m_db->setSetting("day_start_hour", m_dayStart->value());
     m_db->setSetting("goal_input", m_goalInput->currentData().toString());
     m_db->setSetting("notepad_on", m_notepad->isChecked() ? 1 : 0);
+    m_db->setSetting("month_mode", m_monthMode->currentData().toString());
     m_db->setSetting("mood_offer", m_moodOffer->isChecked() ? 1 : 0);
     m_db->setSetting("goal_running", m_goalRunning->currentIndex());
     m_db->setSetting("goal_break_source", m_goalBreak->currentIndex());
@@ -884,6 +890,7 @@ void SettingsDialog::resetSection(int page)
         pick(m_goalInput, 0);
         pick(m_goalRunning, 0);
         m_notepad->setChecked(true);
+        m_monthMode->setCurrentIndex(0);
         m_moodOffer->setChecked(true);
         break;
     case 1:   // Cronómetro

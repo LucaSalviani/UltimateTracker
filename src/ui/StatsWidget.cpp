@@ -934,6 +934,17 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
         applyHover(on);
         emit message(on ? QStringLiteral("Info al pasar el mouse: activada") : QStringLiteral("Info al pasar el mouse: apagada"));
     });
+    // Mejoras 5.0: el mes puede ser el calendario o los últimos 30 días.
+    m_monthBtn = new QPushButton(this);
+    m_monthBtn->setCursor(Qt::PointingHandCursor);
+    m_monthBtn->setToolTip(QStringLiteral("Mes del calendario o últimos 30 días"));
+    connect(m_monthBtn, &QPushButton::clicked, this, [this] {
+        m_db->setSetting("month_mode", rolling() ? QStringLiteral("calendar") : QStringLiteral("rolling"));
+        if (rolling()) m_anchor = dayclock::today();   // los 30 días terminan hoy
+        fade::cross(m_canvas, 150);
+        refresh();
+    });
+    top->insertWidget(top->indexOf(m_folder), m_monthBtn);
     top->insertWidget(top->indexOf(m_folder) + 1, m_viewBtn);
     top->addWidget(info);
 
@@ -974,7 +985,7 @@ QDate StatsWidget::periodStart() const
     switch (m_period) {
     case Period::Day:   return m_anchor;
     case Period::Week:  return fmt::mondayOf(m_anchor);
-    case Period::Month: return QDate(m_anchor.year(), m_anchor.month(), 1);
+    case Period::Month: return rolling() ? m_anchor.addDays(-29) : QDate(m_anchor.year(), m_anchor.month(), 1);
     case Period::Year:  return QDate(m_anchor.year(), 1, 1);
     case Period::Evolution: return m_anchor;
     }
@@ -986,7 +997,7 @@ QDate StatsWidget::periodEnd() const
     switch (m_period) {
     case Period::Day:   return m_anchor;
     case Period::Week:  return fmt::mondayOf(m_anchor).addDays(6);
-    case Period::Month: return QDate(m_anchor.year(), m_anchor.month(), m_anchor.daysInMonth());
+    case Period::Month: return rolling() ? m_anchor : QDate(m_anchor.year(), m_anchor.month(), m_anchor.daysInMonth());
     case Period::Year:  return QDate(m_anchor.year(), 12, 31);
     case Period::Evolution: return m_anchor;
     }
@@ -998,7 +1009,12 @@ QString StatsWidget::periodLabel() const
     switch (m_period) {
     case Period::Day:   return fmt::longDate(m_anchor);
     case Period::Week:  return fmt::weekRange(fmt::mondayOf(m_anchor));
-    case Period::Month: return fmt::monthYear(m_anchor);
+    case Period::Month:
+        if (rolling()) {   // Mejoras 5.0: últimos 30 días hasta la fecha elegida
+            const QLocale es(QLocale::Spanish);
+            return QStringLiteral("30 días · %1 – %2").arg(es.toString(m_anchor.addDays(-29), QStringLiteral("d MMM")).remove('.'), es.toString(m_anchor, QStringLiteral("d MMM")).remove('.'));
+        }
+        return fmt::monthYear(m_anchor);
     case Period::Year:  return QString::number(m_anchor.year());
     case Period::Evolution: return QStringLiteral("Evolución");
     }
@@ -1010,7 +1026,7 @@ void StatsWidget::shift(int dir)
     switch (m_period) {
     case Period::Day:   m_anchor = m_anchor.addDays(dir); break;
     case Period::Week:  m_anchor = m_anchor.addDays(7 * dir); break;
-    case Period::Month: m_anchor = m_anchor.addMonths(dir); break;
+    case Period::Month: m_anchor = rolling() ? m_anchor.addDays(30 * dir) : m_anchor.addMonths(dir); break;
     case Period::Year:  m_anchor = m_anchor.addYears(dir); break;
     case Period::Evolution: return;
     }
@@ -1091,6 +1107,8 @@ void StatsWidget::refresh()
     const qint64 filterId = m_folder->currentData().toLongLong();
 
     // Mejoras 4.0: la vista Evolución tiene su propio lienzo (sin flechas de período).
+    m_monthBtn->setVisible(m_period == Period::Month);
+    m_monthBtn->setText(rolling() ? QStringLiteral("30 días") : QStringLiteral("Calendario"));
     const bool advanced = m_db->setting("stats_advanced", 0).toBool();
     m_viewBtn->setText(advanced ? QStringLiteral("Avanzada") : QStringLiteral("Simple"));
     m_periodGroup->button(int(Period::Evolution))->setVisible(advanced);   // la Evolución es de la vista avanzada

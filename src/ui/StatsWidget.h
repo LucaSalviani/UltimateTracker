@@ -41,6 +41,7 @@ private:
     void shift(int dir);
     void rebuildFolderCombo();
     void pickFolders();   // Mejoras 5.0
+    bool rolling() const { return m_db->setting("month_mode", "calendar").toString() == QLatin1String("rolling"); }
     QDate periodStart() const;
     QDate periodEnd() const;
     QString periodLabel() const;
@@ -58,6 +59,7 @@ private:
     EvolutionView* m_evo = nullptr;
     QScrollArea*   m_scroll = nullptr;
     QScrollArea*   m_evoScroll = nullptr;
+    QPushButton*   m_monthBtn = nullptr;
     QPushButton*   m_viewBtn = nullptr;   // Mejoras 4.1: simple / avanzada
     QToolButton*   m_prev = nullptr;
     QToolButton*   m_next = nullptr;
