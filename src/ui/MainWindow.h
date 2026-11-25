@@ -212,7 +212,7 @@ private:
     GridWidget* m_grid = nullptr;
     QLabel*     m_toast = nullptr;
     QLabel*     m_floatToast = nullptr;   // M40: el mismo aviso, flotando sobre Estadísticas / Actividades
-    void        showToastHtml(const QString& html);
+    void        showToastHtml(const QString& html, int ms = 8000);
     void        placeFloatToast();
     QTimer      m_toastTimer;
     std::function<void()> m_toastAction;

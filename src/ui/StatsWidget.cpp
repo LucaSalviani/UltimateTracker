@@ -823,7 +823,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     connect(info, &QToolButton::toggled, this, [this, applyHover](bool on) {
         m_db->setSetting("stats_hover", on ? 1 : 0);
         applyHover(on);
-        emit message(on ? QStringLiteral("Info al pasar el mouse: activada") : QStringLiteral("Info al pasar el mouse: apagada (queda el click)"));
+        emit message(on ? QStringLiteral("Info al pasar el mouse: activada") : QStringLiteral("Info al pasar el mouse: apagada"));
     });
     top->insertWidget(top->indexOf(m_folder) + 1, m_viewBtn);
     top->addWidget(info);

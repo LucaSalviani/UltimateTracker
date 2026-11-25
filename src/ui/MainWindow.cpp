@@ -1,4 +1,6 @@
 #include "ui/MainWindow.h"
+
+#include <cmath>
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "core/Stats.h"
@@ -2579,7 +2581,9 @@ void MainWindow::preloadFromGoal()
     if (next < 0)
         for (int i = 0; i < fills.size(); ++i) if (fills[i] < 0.999) { next = i; break; }
     if (next < 0) return;
-    m_session->setWorkSec(parsed.blocks[next] * 60);
+    // Mejoras 5.0: lo que muestra el fantasma, o sea lo que falta de ese bloque (si ya hiciste 9 de 25, arranca de 16).
+    const int left = qMax(1, int(std::ceil(parsed.blocks[next] * (1.0 - qBound(0.0, fills[next], 1.0)) - 1e-6)));
+    m_session->setWorkSec(left * 60);
     // B2: si el bloque es de una actividad, también la deja elegida (sin dejar nada en pausa).
     const qint64 f = parsed.folders.value(next);
     if (f > 0 && m_tree.contains(f) && !m_tree.subtree(f).contains(m_session->folderId()) && !m_session->switchWouldPark(f)) {
@@ -2680,7 +2684,7 @@ void MainWindow::celebrate(int kind, const QString& kicker, const QString& title
 void MainWindow::toast(const QString& text)
 {
     m_toastAction = nullptr;
-    showToastHtml(text.toHtmlEscaped());
+    showToastHtml(text.toHtmlEscaped(), 4000);   // Mejoras 5.0: los avisos simples duran menos; los que traen "Deshacer", más
 }
 
 // Abajo al centro de la ventana, por encima del campo "Nueva actividad".
@@ -2692,7 +2696,7 @@ void MainWindow::placeFloatToast()
     t->raise();
 }
 
-void MainWindow::showToastHtml(const QString& html)
+void MainWindow::showToastHtml(const QString& html, int ms)
 {
     const bool floating = m_overlay != Overlay::None;
     QLabel* t = floating ? m_floatToast : m_toast;
@@ -2701,7 +2705,7 @@ void MainWindow::showToastHtml(const QString& html)
     t->adjustSize();
     if (floating) placeFloatToast();
     t->show();
-    m_toastTimer.start(8000);
+    m_toastTimer.start(ms);
 }
 
 void MainWindow::toastAction(const QString& text, const QString& action, std::function<void()> fn)
@@ -2709,7 +2713,7 @@ void MainWindow::toastAction(const QString& text, const QString& action, std::fu
     m_toastAction = std::move(fn);
     // M32: sin color fijo en el enlace: toma el del tema (antes quedaba invisible al pasar a claro).
     showToastHtml(QStringLiteral("%1 &nbsp;·&nbsp; <a href=\"act\" style=\"text-decoration:none; font-weight:600\">%2</a>")
-                      .arg(text.toHtmlEscaped(), action.toHtmlEscaped()));
+                      .arg(text.toHtmlEscaped(), action.toHtmlEscaped()), 8000);
 }
 
 void MainWindow::showEvent(QShowEvent* e)
