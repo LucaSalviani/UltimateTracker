@@ -53,6 +53,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QActionGroup>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QParallelAnimationGroup>
@@ -650,9 +651,8 @@ QWidget* MainWindow::buildTitleBar()
 
     m_btnZoomIn = iconButton(bar, icons::Id::ZoomIn, QStringLiteral("Acercar: mes → semana → día (Ctrl +)"));
     m_btnZoomOut = iconButton(bar, icons::Id::ZoomOut, QStringLiteral("Alejar: día → semana → mes (Ctrl −)"));
-    // Mejoras 5.0: un solo botón de vista que cicla Día → Semana → Mes (Ctrl +/− siguen andando).
-    connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom((int(m_grid->zoom()) + 1) % 3)); });
-    m_btnZoomIn->hide();
+    connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMin(2, int(m_grid->zoom()) + 1))); });
+    connect(m_btnZoomIn, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMax(0, int(m_grid->zoom()) - 1))); });
 
     auto* goalBtn = iconButton(bar, icons::Id::Goal, QStringLiteral("Objetivo del día (G)"));
     goalBtn->setObjectName("TbGoal");
@@ -671,7 +671,22 @@ QWidget* MainWindow::buildTitleBar()
     menuBtn->setObjectName("TbMenu");
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
-    menu->addAction(QStringLiteral("Tamaño de los cuadraditos"), this, [this] { m_btnProportional->click(); });   // Mejoras 5.0: sale de la barra
+    // Mejoras 5.0: el tamaño de los cuadraditos sale de la barra y se elige acá.
+    auto* sizeMenu = menu->addMenu(QStringLiteral("Tamaño de los cuadraditos"));
+    connect(sizeMenu, &QMenu::aboutToShow, this, [this, sizeMenu] {
+        sizeMenu->clear();
+        static const char* nm[] = {"Todos iguales", "Proporcional a lo ancho", "Proporcional completo"};
+        const int mask = m_db->setting("size_modes", 7).toInt();
+        auto* grp = new QActionGroup(sizeMenu);
+        for (int i = 0; i < 3; ++i) {
+            if (!(mask & (1 << i))) continue;
+            QAction* a = sizeMenu->addAction(QString::fromUtf8(nm[i]));
+            a->setCheckable(true);
+            a->setActionGroup(grp);
+            a->setChecked(int(m_grid->sizeMode()) == i);
+            connect(a, &QAction::triggered, this, [this, i] { applySizeMode(GridWidget::SizeMode(i), true); });
+        }
+    });
     menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
     // M44: hitos, cada uno se prende o se apaga por separado (los números, en Ajustes › Hitos).
     auto* hitos = menu->addMenu(QStringLiteral("Hitos"));
@@ -1154,9 +1169,8 @@ void MainWindow::setZoom(GridWidget::Zoom z)
         m_pages->setCurrentIndex(PageGrid);
     }
     m_grid->setZoom(z);
-    m_btnZoomOut->setEnabled(true);
-    static const char* names[] = {"Día", "Semana", "Mes"};
-    m_btnZoomOut->setToolTip(QStringLiteral("Vista: %1 (click: %2)").arg(QString::fromUtf8(names[int(z)]), QString::fromUtf8(names[(int(z) + 1) % 3])));
+    m_btnZoomOut->setEnabled(z != GridWidget::Zoom::Month);
+    m_btnZoomIn->setEnabled(z != GridWidget::Zoom::Day);
     refreshBand();
     reloadGrid();
     applyViewSize();
@@ -2070,15 +2084,10 @@ void MainWindow::applySizeMode(GridWidget::SizeMode mode, bool announce)
 {
     static const char* names[] = {"Tamaño: todos iguales", "Tamaño: proporcional solo a lo ancho",
                                   "Tamaño: proporcional completo"};
-    const bool button = m_db->setting("size_button", 0).toBool();   // Mejoras 5.0: por defecto va en el menú ⋯
-    // Sin botón: si elegiste un tamaño fijo en Ajustes se respeta; si no, vale lo último que ciclaste desde ⋯.
-    if (!button && !announce && m_db->setting("size_default", -1).toInt() >= 0)
-        mode = GridWidget::SizeMode(m_db->setting("size_default", 0).toInt());
     m_grid->setSizeMode(mode);
     m_db->setSetting("size_mode", int(mode));
-    m_btnProportional->setVisible(button);
+    m_btnProportional->setVisible(false);   // Mejoras 5.0: ya no va en la barra
     m_btnProportional->setChecked(mode != GridWidget::SizeMode::Uniform);
-    m_btnProportional->setToolTip(QString::fromUtf8(names[int(mode)]) + QStringLiteral(" (click para cambiar)"));
     if (announce) toast(QString::fromUtf8(names[int(mode)]));
 }
 

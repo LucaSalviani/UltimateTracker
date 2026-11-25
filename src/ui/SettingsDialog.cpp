@@ -620,7 +620,7 @@ QWidget* SettingsDialog::pageTiles()
     nform->addRow(QStringLiteral("Número"), m_tileNumberPos);
     auto* zform = new QFormLayout;
     zform->addRow(QStringLiteral("Tamaño base"), m_tileSize);
-    zform->addRow(QStringLiteral("Por defecto"), m_sizeDefault);
+    m_sizeDefault->hide();   // Mejoras 5.0: el tamaño se elige desde ⋯ y se recuerda
     auto* gform = new QFormLayout;
     gform->addRow(QStringLiteral("Agrupar"), m_groupStyle);
 
@@ -639,9 +639,9 @@ QWidget* SettingsDialog::pageTiles()
     lay->addSpacing(6);
     lay->addWidget(collapsible(QStringLiteral("Tamaño"), w, [&](QVBoxLayout* l) {
         l->addLayout(zform);
-        l->addWidget(note(QStringLiteral("El botón de la barra cicla entre:"), w));
+        l->addWidget(note(QStringLiteral("Los tamaños que aparecen en ⋯ › Tamaño de los cuadraditos:"), w));
         l->addLayout(sizeRow);
-        l->addWidget(m_sizeButton);
+        m_sizeButton->hide();
     }));
     lay->addSpacing(6);
     lay->addWidget(subheading(QStringLiteral("Agrupado y colores"), w));

@@ -56,7 +56,7 @@
 - **Click derecho en un fantasma › marcar a mano** usa su duración y actividad.
 - **Estadísticas**: racha grande, *Foco %*, actividades acotadas con selector, y en Mes podés alternar *Calendario* y *Últimos 30 días* (el default se elige en Ajustes).
 - **Evolución** con fichas de variación contra los 28 días anteriores.
-- **Barra de arriba** más simple: el tamaño de los cuadraditos pasa al menú ⋯.
+- **Barra de arriba** más simple: el tamaño de los cuadraditos se elige en ⋯ › *Tamaño de los cuadraditos*. Los botones de acercar y alejar la vista siguen en la barra.
 
 ### Novedades de la beta 4
 - **Estadísticas con detalle**: pasá el mouse por un dato para ver más; hacé click y se abre una ventanita con el detalle (Esc la cierra).
