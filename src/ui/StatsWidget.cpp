@@ -70,6 +70,7 @@ struct StatsData {
     qint64 todaySec = 0, weekSec = 0, allSec = 0;
     ms::Records records;   // incluye hoy
     int bestStreak = 0;
+    QSet<qint64> hiddenRows;   // Mejoras 5.0: actividades que el usuario sacó de la lista
     QHash<qint64, QColor> colors;   // M35: color de cada actividad (vacío si están apagados)
     QColor colorOf(qint64 id) const { return colors.value(id, statsInk()); }
 };
@@ -137,15 +138,14 @@ protected:
         double y = 8;
         zones.clear();
 
-        y = paintCards(p, L, y, W) + 10;
-        y = paintStreak(p, L, y, W) + 18;
+        y = paintHero(p, L, y, W) + 18;
         if (hasChips()) y = paintChips(p, L, y, W) + 18;   // M44
         y = paintChart(p, L, y, W) + 22;
         paintFolders(p, L, y, W);
     }
 
 private:
-    static constexpr double kCardH = 70;
+    static constexpr int kMaxFolderRows = 6;   // Mejoras 5.0: más que eso → scroll adentro del bloque
     static constexpr double kRowH = 26;
     static constexpr double kChipH = 52;
 
@@ -283,8 +283,8 @@ private:
     int contentHeight(int w) const
     {
         const double W = w - 32;
-        return int(8 + kCardH + 10 + 20 + 18 + (hasChips() ? chipsHeight(W) + 18 : 0) + chartHeight(W) + 22 + 24 +
-                   data.rows.size() * kRowH + 24);
+        return int(8 + heroHeight() + 18 + (hasChips() ? chipsHeight(W) + 18 : 0) + chartHeight(W) + 22 + 24 +
+                   foldersBodyH() + 24);
     }
 
     void sectionTitle(QPainter& p, double x, double y, const QString& t) const
@@ -294,57 +294,100 @@ private:
         p.drawText(QPointF(x, y + 13), t.toUpper());
     }
 
-    double paintCards(QPainter& p, double L, double y, double W)
+    // Mejoras 5.0: arriba de todo, tres datos con jerarquía: la racha (protagonista), lo estudiado y el foco.
+    // En la vista avanzada, abajo van los datos finos (recreos, indebidos, inactivas).
+    static constexpr double kHeroH = 96, kSmallH = 58;
+    double heroHeight() const { return data.simple ? kHeroH : kHeroH + 10 + kSmallH; }
+    int focusPct() const
     {
-        struct Card { QString label; qint64 sec; QColor accent; };
-        const Card cards[4] = {
-            {data.studyLabel, data.totals.study, theme::text},
-            {QStringLiteral("Recreos"), data.totals.breaks, theme::text},
-            {QStringLiteral("Recreos indebidos"), data.totals.undue,
-             data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text},
-            {QStringLiteral("Horas inactivas"), data.totals.inactive, theme::textDim},
-        };
-        const double gap = 10;
-        const int n = data.simple ? 2 : 4;   // simple: estudio y recreos; avanzada: + indebidos e inactivas
-        const double cw = (W - (n - 1) * gap) / n;
-        for (int i = 0; i < n; ++i) {
-            const QRectF r(L + i * (cw + gap), y, cw, kCardH);
-            p.setPen(Qt::NoPen);
-            p.setBrush(theme::surface);
-            p.drawRoundedRect(r, 8, 8);
-            p.setFont(theme::uiFont(8.5));
-            p.setPen(theme::textDim);
-            p.drawText(r.adjusted(12, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop,
-                       QFontMetrics(p.font()).elidedText(cards[i].label, Qt::ElideRight, int(cw - 20)));
-            p.setFont(theme::uiFont(16, QFont::DemiBold));
-            p.setPen(cards[i].accent);
-            p.drawText(r.adjusted(12, 0, -8, -10), Qt::AlignLeft | Qt::AlignBottom, fmt::hours(cards[i].sec));
-            static const char* keys[4] = {"study", "breaks", "undue", "inactive"};
-            zone(r, QString::fromLatin1(keys[i]), p);
+        const qint64 den = data.totals.study + data.totals.breaks + data.totals.undue;
+        return den > 0 ? int(std::lround(100.0 * data.totals.study / den)) : -1;
+    }
+    void card(QPainter& p, const QRectF& r, const QString& label, const QString& value, const QString& sub,
+              double valuePt, const QColor& accent, const QString& key)
+    {
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::surface);
+        p.drawRoundedRect(r, 10, 10);
+        p.setFont(theme::uiFont(8.5));
+        p.setPen(theme::textDim);
+        p.drawText(r.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop,
+                   QFontMetrics(p.font()).elidedText(label, Qt::ElideRight, int(r.width() - 22)));
+        p.setFont(theme::uiFont(valuePt, QFont::DemiBold));
+        p.setPen(accent);
+        p.drawText(r.adjusted(14, 0, -8, sub.isEmpty() ? -10 : -26), Qt::AlignLeft | Qt::AlignBottom, value);
+        if (!sub.isEmpty()) {
+            p.setFont(theme::uiFont(8));
+            p.setPen(theme::textFaint);
+            p.drawText(r.adjusted(14, 0, -8, -9), Qt::AlignLeft | Qt::AlignBottom,
+                       QFontMetrics(p.font()).elidedText(sub, Qt::ElideRight, int(r.width() - 22)));
         }
-        return y + kCardH;
+        zone(r, key, p);
     }
 
-    double paintStreak(QPainter& p, double L, double y, double W)
+    double paintHero(QPainter& p, double L, double y, double W)
     {
-        p.setFont(theme::uiFont(9.5));
-        QString s = QStringLiteral("Racha: %1 %2")
-                        .arg(data.streak.days)
-                        .arg(data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
-        s += QStringLiteral("   ·   comodines esta semana: %1 de %2").arg(data.streak.jokersThisWeek).arg(data.jokers);
+        const double gap = 10;
+        const double sw = qMax(230.0, W * 0.44);                  // racha
+        const double cw = (W - sw - 2 * gap) / 2;
+        // ---- racha: el número grande
+        const QRectF sr(L, y, sw, kHeroH);
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::surface);
+        p.drawRoundedRect(sr, 10, 10);
+        p.setFont(theme::uiFont(8.5));
+        p.setPen(theme::textDim);
+        p.drawText(sr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("RACHA"));
+        const QString num = QString::number(data.streak.days);
+        p.setFont(theme::uiFont(34, QFont::DemiBold));
+        p.setPen(data.streak.days > 0 ? theme::text : theme::textDim);
+        p.drawText(sr.adjusted(14, 0, 0, -8), Qt::AlignLeft | Qt::AlignBottom, num);
+        const double numW = QFontMetricsF(p.font()).horizontalAdvance(num);
+        p.setFont(theme::uiFont(10));
+        p.setPen(theme::textDim);
+        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, kHeroH - 14), Qt::AlignLeft | Qt::AlignBottom,
+                   data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
+        // columna derecha: comodines, récord y lo que pasa hoy
+        QStringList side;
+        side << QStringLiteral("comodines %1 de %2").arg(data.streak.jokersThisWeek).arg(data.jokers);
+        if (data.ms.streaks && data.bestStreak > data.streak.days) side << QStringLiteral("récord %1").arg(data.bestStreak);
         if (data.period == StatsWidget::Period::Day && data.goals.contains(data.from)) {   // B2-3
             const auto g = data.goals.value(data.from);
-            if (g.met) s += QStringLiteral("   ·   objetivo %1 cumplido").arg(fmt::hours(g.target));
-            else if (data.from == data.today) s += QStringLiteral("   ·   objetivo %1: faltan %2").arg(fmt::hours(g.target), fmt::hours(g.missing));
-            else s += QStringLiteral("   ·   objetivo %1: faltaron %2").arg(fmt::hours(g.target), fmt::hours(g.missing));
+            if (g.met) side << QStringLiteral("objetivo %1 cumplido").arg(fmt::hours(g.target));
+            else side << QStringLiteral("objetivo %1: %2 %3").arg(fmt::hours(g.target), data.from == data.today ? QStringLiteral("faltan") : QStringLiteral("faltaron"), fmt::hours(g.missing));
         }
-        if (data.ms.streaks && data.bestStreak > data.streak.days)
-            s += QStringLiteral("   ·   récord: %1").arg(data.bestStreak);
-        if (!data.streak.todayDone) s += QStringLiteral("   ·   hoy todavía no arrancaste");
-        p.setPen(theme::text);
-        p.drawText(QRectF(L, y, W, 20), Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(s, Qt::ElideRight, int(W)));
-        zone(QRectF(L - 6, y - 2, W + 12, 24), QStringLiteral("streak"), p);
-        return y + 20;
+        if (!data.streak.todayDone) side << QStringLiteral("hoy todavía no arrancaste");
+        p.setFont(theme::uiFont(8.5));
+        p.setPen(theme::textDim);
+        const double sx = sr.left() + 14 + numW + 62;
+        const double sideW = sr.right() - 10 - sx;
+        if (sideW > 70) {
+            const QFontMetrics fm(p.font());
+            double ty = sr.bottom() - 12 - side.size() * 15;
+            for (const QString& s : side) {
+                p.drawText(QRectF(sx, ty, sideW, 15), Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(s, Qt::ElideRight, int(sideW)));
+                ty += 15;
+            }
+        }
+        zone(sr, QStringLiteral("streak"), p);
+
+        // ---- estudio y foco
+        card(p, QRectF(L + sw + gap, y, cw, kHeroH), data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, QStringLiteral("study"));
+        const int fp = focusPct();
+        card(p, QRectF(L + sw + gap + cw + gap, y, cw, kHeroH), QStringLiteral("Foco"),
+             fp >= 0 ? QStringLiteral("%1 %").arg(fp) : QStringLiteral("—"),
+             QStringLiteral("del tiempo de sesión"), 20, theme::text, QStringLiteral("focus"));
+        y += kHeroH;
+        if (data.simple) return y;
+
+        // ---- avanzada: datos finos
+        y += 10;
+        const double fw = (W - 2 * gap) / 3;
+        card(p, QRectF(L, y, fw, kSmallH), QStringLiteral("Recreos"), fmt::hours(data.totals.breaks), QString(), 13, theme::text, QStringLiteral("breaks"));
+        card(p, QRectF(L + fw + gap, y, fw, kSmallH), QStringLiteral("Recreo indebido"), fmt::hours(data.totals.undue), QString(), 13,
+             data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text, QStringLiteral("undue"));
+        card(p, QRectF(L + 2 * (fw + gap), y, fw, kSmallH), QStringLiteral("Horas inactivas"), fmt::hours(data.totals.inactive), QString(), 13, theme::textDim, QStringLiteral("inactive"));
+        return y + kSmallH;
     }
 
     double paintChart(QPainter& p, double L, double y, double W)
@@ -664,9 +707,52 @@ private:
         p.drawText(pill, Qt::AlignCenter, text);
     }
 
+    // Mejoras 5.0: las actividades ocupan poco (6 filas) y el resto se recorre con scroll; se puede elegir cuáles se ven.
+    QVector<const StatsData::Row*> visibleRows() const
+    {
+        QVector<const StatsData::Row*> v;
+        int hideDepth = -1;   // si se saca una actividad, sus subactividades también
+        for (const auto& r : data.rows) {
+            if (hideDepth >= 0 && r.depth > hideDepth) continue;
+            hideDepth = -1;
+            if (r.id && data.hiddenRows.contains(r.id)) { hideDepth = r.depth; continue; }
+            v << &r;
+        }
+        return v;
+    }
+    double foldersBodyH() const
+    {
+        const int n = visibleRows().size();
+        return qMax(1, qMin(n, kMaxFolderRows)) * kRowH;
+    }
+    double m_foldScroll = 0, m_foldMax = 0;
+    QRectF m_foldRect;
+
+    void wheelEvent(QWheelEvent* e) override
+    {
+        if (m_foldMax > 0 && m_foldRect.contains(e->position())) {
+            const double next = qBound(0.0, m_foldScroll - e->angleDelta().y() / 120.0 * kRowH, m_foldMax);
+            if (next != m_foldScroll) { m_foldScroll = next; update(); e->accept(); return; }
+        }
+        e->ignore();   // al borde, la rueda sigue con la página
+    }
+
     void paintFolders(QPainter& p, double L, double y, double W)
     {
         sectionTitle(p, L, y, QStringLiteral("Actividades"));
+        {   // selector de cuáles se muestran
+            const int hidden = data.hiddenRows.size();
+            const QString t = hidden ? QStringLiteral("Mostrar: %1 de %2 ▾").arg(data.rows.size() - hidden).arg(data.rows.size()) : QStringLiteral("Mostrar ▾");
+            p.setFont(theme::uiFont(8));
+            const double tw = QFontMetricsF(p.font()).horizontalAdvance(t) + 16;
+            const QRectF pill(L + W * 0.42 - tw / 2 - 60, y - 1, tw, 18);
+            p.setPen(Qt::NoPen);
+            p.setBrush(theme::surface);
+            p.drawRoundedRect(pill, 9, 9);
+            p.setPen(theme::textDim);
+            p.drawText(pill, Qt::AlignCenter, t);
+            zone(pill, QStringLiteral("folders:pick"), p);
+        }
         p.setFont(theme::uiFont(8));
         p.setPen(theme::textFaint);
         const double cPeriod = L + W * 0.42, cTotal = L + W * 0.56, cBar = L + W * 0.70;
@@ -682,7 +768,22 @@ private:
             p.drawText(QPointF(L, y + 14), QStringLiteral("Todavía no hay actividades: creá una desde ⋯ › Actividades…"));
             return;
         }
-        for (const auto& row : data.rows) {
+        const auto vis = visibleRows();
+        if (vis.isEmpty()) {
+            p.setPen(theme::textFaint);
+            p.setFont(theme::uiFont(9));
+            p.drawText(QPointF(L, y + 14), QStringLiteral("Sacaste todas las actividades de la lista (botón Mostrar)."));
+            return;
+        }
+        const double bodyH = foldersBodyH();
+        m_foldRect = QRectF(L, y, W, bodyH);
+        m_foldMax = qMax(0.0, vis.size() * kRowH - bodyH);
+        m_foldScroll = qBound(0.0, m_foldScroll, m_foldMax);
+        p.save();
+        p.setClipRect(m_foldRect);
+        y -= m_foldScroll;
+        for (const StatsData::Row* rp : vis) {
+            const StatsData::Row& row = *rp;
             const QRectF r(L, y, W, kRowH);
             p.setFont(theme::uiFont(9.5, row.depth == 0 ? QFont::DemiBold : QFont::Normal));
             p.setPen(row.depth == 0 ? theme::text : theme::textDim);
@@ -727,6 +828,14 @@ private:
                            QStringLiteral("%1 %  · próx. %2 h").arg(QLocale().toString(frac * 100, 'f', frac < 0.1 ? 2 : 1)).arg(next));
             }
             y += kRowH;
+        }
+        p.restore();
+        if (m_foldMax > 0) {   // barrita de scroll
+            const double th = qMax(24.0, bodyH * bodyH / (vis.size() * kRowH));
+            const double ty = m_foldRect.top() + (bodyH - th) * (m_foldScroll / m_foldMax);
+            p.setPen(Qt::NoPen);
+            p.setBrush(theme::line);
+            p.drawRoundedRect(QRectF(L + W + 6, ty, 3, th), 1.5, 1.5);
         }
     }
 };
@@ -1080,6 +1189,8 @@ void StatsWidget::refresh()
         if (orphanAll > 0)
             d.rows.append({QStringLiteral("Sin actividad"), 0, m_db->studyByFolder(d.from, d.to).value(0), orphanAll});
     }
+    d.hiddenRows.clear();
+    for (const QString& s : m_db->setting("stats_hidden_acts", "").toString().split(',', Qt::SkipEmptyParts)) d.hiddenRows.insert(s.toLongLong());
     m_canvas->relayout();
 }
 
@@ -1153,6 +1264,11 @@ QString StatsWidget::tipFor(const QString& key) const
     }
     if (key == "breaks") return QStringLiteral("<b>Recreos: %1</b><br>El tiempo de recreo dentro de lo pactado.").arg(fmt::hours(d.totals.breaks)) + more;
     if (key == "undue") return QStringLiteral("<b>Recreos indebidos: %1</b><br>Tiempo muerto en medio de la jornada: pausas, demoras en arrancar y recreos pasados de largo.").arg(fmt::hours(d.totals.undue)) + more;
+    if (key == "focus") {
+        const qint64 den = d.totals.study + d.totals.breaks + d.totals.undue;
+        return QStringLiteral("<b>Foco: %1</b><br>De todo el tiempo de sesión, cuánto fue de %2 de verdad.")
+                   .arg(den > 0 ? QStringLiteral("%1 %").arg(qRound(100.0 * d.totals.study / den)) : QStringLiteral("—"), d.studyLabel.toLower()) + more;
+    }
     if (key == "inactive") return QStringLiteral("<b>Horas inactivas: %1</b><br>Todo lo demás del período: dormir, comer, la vida.").arg(fmt::hours(d.totals.inactive)) + more;
     if (key == "streak") {
         const int left = qMax(0, stats::jokersToday(*m_db, d.today) - d.streak.jokersThisWeek);
@@ -1189,8 +1305,36 @@ QString StatsWidget::tipFor(const QString& key) const
     return {};
 }
 
+// Mejoras 5.0: elegir qué actividades se ven en la lista de abajo (no cambia ningún total).
+void StatsWidget::pickFolders()
+{
+    QSet<qint64> hidden = m_canvas->data.hiddenRows;
+    QMenu menu(this);
+    QAction* all = menu.addAction(QStringLiteral("Mostrar todas"));
+    menu.addSeparator();
+    for (const auto& r : m_canvas->data.rows) {
+        if (!r.id) continue;
+        QAction* a = menu.addAction(QString(r.depth * 3, QChar(' ')) + r.name);
+        a->setCheckable(true);
+        a->setChecked(!hidden.contains(r.id));
+        a->setData(qlonglong(r.id));
+    }
+    const QPoint at = QCursor::pos();
+    QAction* picked = menu.exec(at);
+    if (!picked) return;
+    if (picked == all) hidden.clear();
+    else if (hidden.contains(picked->data().toLongLong())) hidden.remove(picked->data().toLongLong());
+    else hidden.insert(picked->data().toLongLong());
+    QStringList ids;
+    for (qint64 id : hidden) ids << QString::number(id);
+    m_db->setSetting("stats_hidden_acts", ids.join(','));
+    refresh();
+    pickFolders();   // el menú se vuelve a abrir para marcar varias de una
+}
+
 void StatsWidget::showDetail(const QString& key)
 {
+    if (key == QLatin1String("folders:pick")) { pickFolders(); return; }
     const StatsData& d = m_canvas->data;
     const QDate last = qMin(d.to, d.today);
     const int days = qMax(1, int(d.from.daysTo(last)) + 1);
@@ -1253,6 +1397,16 @@ void StatsWidget::showDetail(const QString& key)
         intervalsDetail(IntervalKind::Undue, QStringLiteral("ratos"));
         html = para(dim(QStringLiteral("Tiempo muerto en medio de la jornada: pausas, demoras en arrancar el recreo o el próximo pomodoro, y recreos pasados de largo. "
                                        "Solo cuenta si después volviste a arrancar ese día; «Me voy» lo corta."))) + html;
+    } else if (key == "focus") {
+        title = QStringLiteral("Foco · %1").arg(m_label->text());
+        const qint64 den = d.totals.study + d.totals.breaks + d.totals.undue;
+        auto pct = [&](qint64 v) { return QStringLiteral("%1 %").arg(den ? qRound(100.0 * v / den) : 0); };
+        rows << row(d.studyLabel, fmt::hours(d.totals.study), pct(d.totals.study))
+             << row(QStringLiteral("Recreos"), fmt::hours(d.totals.breaks), pct(d.totals.breaks))
+             << row(QStringLiteral("Recreo indebido"), fmt::hours(d.totals.undue), pct(d.totals.undue));
+        html = para(dim(QStringLiteral("Foco = %1 ÷ (%1 + recreos + recreo indebido). Mide qué parte del tiempo de sesión estuviste de verdad en lo tuyo; "
+                                       "el tiempo muerto entre pomodoros lo baja.").arg(d.studyLabel.toLower()))) + table(rows);
+        html += para(QStringLiteral("<br>") + dim(QStringLiteral("El detalle del recreo indebido está en su tarjeta (vista avanzada) y en cada día.")));
     } else if (key == "inactive") {
         title = QStringLiteral("Horas inactivas · %1").arg(m_label->text());
         const qint64 all = d.totals.study + d.totals.breaks + d.totals.undue + d.totals.inactive;

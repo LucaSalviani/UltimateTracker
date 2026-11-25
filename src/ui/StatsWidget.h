@@ -40,6 +40,7 @@ signals:
 private:
     void shift(int dir);
     void rebuildFolderCombo();
+    void pickFolders();   // Mejoras 5.0
     QDate periodStart() const;
     QDate periodEnd() const;
     QString periodLabel() const;
