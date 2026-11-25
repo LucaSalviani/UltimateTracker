@@ -302,6 +302,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     m_toastTimer.setSingleShot(true);
     connect(&m_toastTimer, &QTimer::timeout, m_toast, &QLabel::hide);
     connect(&m_toastTimer, &QTimer::timeout, m_floatToast, &QLabel::hide);
+    connect(&m_toastTimer, &QTimer::timeout, this, [this] { m_toastShowing = false; m_toastAction = nullptr; showNextToast(); });
 
     m_liveStats = new LiveStats(gridPage);
     m_liveActivityScope = m_db->setting("live_scope", "day").toString() == QLatin1String("activity");
@@ -2688,8 +2689,10 @@ void MainWindow::celebrate(int kind, const QString& kicker, const QString& title
 
 void MainWindow::toast(const QString& text)
 {
-    m_toastAction = nullptr;
-    showToastHtml(text.toHtmlEscaped(), 4000);   // Mejoras 5.0: los avisos simples duran menos; los que traen "Deshacer", más
+    PendingToast pt{text.toHtmlEscaped(), 4000, nullptr};
+    if (m_toastShowing) { for (const PendingToast& q : m_toastQueue) if (q.html == pt.html) return; if (m_toastQueue.size() >= 3) m_toastQueue.removeFirst(); m_toastQueue.append(pt); return; }
+    m_toastQueue.prepend(pt);
+    showNextToast();   // Mejoras 5.0: los avisos simples duran menos; los que traen "Deshacer", más
 }
 
 // Abajo al centro de la ventana, por encima del campo "Nueva actividad".
@@ -2701,24 +2704,40 @@ void MainWindow::placeFloatToast()
     t->raise();
 }
 
-void MainWindow::showToastHtml(const QString& html, int ms)
+void MainWindow::showToastHtml(const QString& html, int ms, std::function<void()> action)
 {
+    PendingToast pt{html, ms, std::move(action)};
+    if (m_toastShowing) {
+        for (const PendingToast& q : m_toastQueue) if (q.html == html) return;   // el mismo aviso no se repite
+        if (m_toastQueue.size() >= 3) m_toastQueue.removeFirst();
+        m_toastQueue.append(std::move(pt));
+        return;
+    }
+    m_toastQueue.prepend(std::move(pt));
+    showNextToast();
+}
+
+void MainWindow::showNextToast()
+{
+    if (m_toastQueue.isEmpty()) return;
+    const PendingToast pt = m_toastQueue.takeFirst();
+    m_toastAction = pt.action;
+    m_toastShowing = true;
     const bool floating = m_overlay != Overlay::None;
     QLabel* t = floating ? m_floatToast : m_toast;
     (floating ? m_toast : m_floatToast)->hide();
-    t->setText(html);
+    t->setText(pt.html);
     t->adjustSize();
     if (floating) placeFloatToast();
     t->show();
-    m_toastTimer.start(ms);
+    m_toastTimer.start(pt.ms);
 }
 
 void MainWindow::toastAction(const QString& text, const QString& action, std::function<void()> fn)
 {
-    m_toastAction = std::move(fn);
     // M32: sin color fijo en el enlace: toma el del tema (antes quedaba invisible al pasar a claro).
     showToastHtml(QStringLiteral("%1 &nbsp;·&nbsp; <a href=\"act\" style=\"text-decoration:none; font-weight:600\">%2</a>")
-                      .arg(text.toHtmlEscaped(), action.toHtmlEscaped()), 8000);
+                      .arg(text.toHtmlEscaped(), action.toHtmlEscaped()), 8000, std::move(fn));
 }
 
 void MainWindow::showEvent(QShowEvent* e)

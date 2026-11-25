@@ -212,10 +212,14 @@ private:
     GridWidget* m_grid = nullptr;
     QLabel*     m_toast = nullptr;
     QLabel*     m_floatToast = nullptr;   // M40: el mismo aviso, flotando sobre Estadísticas / Actividades
-    void        showToastHtml(const QString& html, int ms = 8000);
+    void        showToastHtml(const QString& html, int ms = 8000, std::function<void()> action = nullptr);
     void        placeFloatToast();
     QTimer      m_toastTimer;
     std::function<void()> m_toastAction;
+    struct PendingToast { QString html; int ms; std::function<void()> action; };
+    QList<PendingToast> m_toastQueue;   // Mejoras 5.0: los avisos se hacen cola, no se pisan
+    bool m_toastShowing = false;
+    void showNextToast();
 
     // Reproductor y stats en vivo
     TimerDeck*  m_deck = nullptr;
