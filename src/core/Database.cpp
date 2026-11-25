@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 9;
+constexpr int kSchemaVersion = 10;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -40,6 +40,7 @@ const char* kSchema[] = {
         seconds    INTEGER NOT NULL
     ))",
     "CREATE INDEX IF NOT EXISTS idx_intervals_day ON intervals(day)",
+    "CREATE TABLE IF NOT EXISTS session_ends (at INTEGER PRIMARY KEY)",   // Mejoras 5.1
     R"(CREATE TABLE IF NOT EXISTS milestones (
         folder_id INTEGER NOT NULL,
         hours     INTEGER NOT NULL,
@@ -705,6 +706,26 @@ void Database::setIntervalsKind(const QVector<qint64>& ids, IntervalKind kind)
         q.exec();
     }
     m_db.commit();
+}
+
+void Database::addSessionEnd(qint64 atSec)
+{
+    QSqlQuery q(m_db);
+    q.prepare("INSERT OR IGNORE INTO session_ends(at) VALUES(?)");
+    q.addBindValue(atSec);
+    q.exec();
+}
+
+QVector<qint64> Database::sessionEnds(qint64 fromSec, qint64 toSec) const
+{
+    QVector<qint64> out;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT at FROM session_ends WHERE at BETWEEN ? AND ? ORDER BY at");
+    q.addBindValue(fromSec);
+    q.addBindValue(toSec);
+    q.exec();
+    while (q.next()) out.append(q.value(0).toLongLong());
+    return out;
 }
 
 QVector<Interval> Database::intervalsBetween(const QDate& from, const QDate& to) const

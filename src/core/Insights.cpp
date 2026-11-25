@@ -2,6 +2,7 @@
 #include "core/DayClock.h"
 #include "core/Format.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace insights {
@@ -21,6 +22,11 @@ QMap<QDate, DayStat> daily(const Database& db, const QDate& from, const QDate& t
         d.study += p.studiedSec;
         d.pomos += p.doneUnits() > 0 ? p.doneUnits() : (p.status == PomoStatus::Running ? 0 : 1);
     }
+    for (const Session& s : sessions(db, from, last, folders)) {
+        DayStat& d = out[s.day];
+        ++d.sessions;
+        d.sessionSec += s.length();
+    }
     for (const Interval& i : db.intervalsBetween(from, last)) {
         DayStat& d = out[i.day];
         if (i.kind == IntervalKind::Break) d.breaks += i.seconds;
@@ -30,6 +36,31 @@ QMap<QDate, DayStat> daily(const Database& db, const QDate& from, const QDate& t
         DayStat& d = out[day];   // todos los días del rango existen (con ceros)
         const qint64 elapsed = day == today ? qMax<qint64>(0, dayclock::dayStart(today).secsTo(now)) : 86400;
         d.inactive = qMax<qint64>(0, elapsed - allStudy.value(day) - d.breaks - d.undue);
+    }
+    return out;
+}
+
+QVector<Session> sessions(const Database& db, const QDate& from, const QDate& to, const QSet<qint64>* folders)
+{
+    QVector<Session> out;
+    QVector<Pomodoro> ps = db.pomodorosBetween(from, to);
+    std::sort(ps.begin(), ps.end(), [](const Pomodoro& a, const Pomodoro& b) { return a.startedAt < b.startedAt; });
+    const qint64 gap = qint64(qMax(5, db.setting("session_gap_min", 60).toInt())) * 60;
+    const QVector<qint64> ends = ps.isEmpty() ? QVector<qint64>() : db.sessionEnds(ps.first().startedAt, ps.last().startedAt);
+    for (const Pomodoro& p : ps) {
+        if (p.status == PomoStatus::Running && p.studiedSec <= 0) continue;
+        if (folders && !folders->contains(p.folderId)) continue;
+        const qint64 pe = qMax(p.endedAt, p.startedAt + p.studiedSec);
+        bool fresh = out.isEmpty() || out.last().day != p.day || p.startedAt - out.last().end > gap;
+        if (!fresh) {
+            const qint64 prevEnd = out.last().end;
+            for (qint64 e : ends) if (e >= prevEnd && e <= p.startedAt) { fresh = true; break; }
+        }
+        if (fresh) { Session s; s.day = p.day; s.start = p.startedAt; s.end = pe; out.append(s); }
+        Session& s = out.last();
+        s.end = qMax(s.end, pe);
+        ++s.pomos;
+        s.study += p.studiedSec;
     }
     return out;
 }

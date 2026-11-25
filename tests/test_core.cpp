@@ -569,6 +569,31 @@ private slots:
         QVERIFY(qAbs(undue - 3 * 60) <= 2);               // lo pausado: indebido
     }
 
+    void sessionsCount()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 f = db.addFolder(0, "SO");
+        const QDate day(2026, 11, 20);
+        auto add = [&](int h, int m, int min) {
+            Pomodoro p; p.folderId = f; p.day = day;
+            p.startedAt = QDateTime(day, QTime(h, m)).toSecsSinceEpoch();
+            p.plannedSec = p.studiedSec = min * 60; p.endedAt = p.startedAt + p.studiedSec; p.status = PomoStatus::Completed;
+            db.insertPomodoro(p);
+        };
+        add(9, 0, 25); add(9, 35, 25);            // misma sesión (pausa de 10 min)
+        add(12, 0, 25);                           // pausa larga: sesión nueva
+        add(12, 30, 25); add(13, 0, 25);          // 12:30 sigue la sesión de las 12; el de las 13 la corta un «Me voy»
+        db.addSessionEnd(QDateTime(day, QTime(12, 56)).toSecsSinceEpoch());   // ...salvo por un «Me voy» antes de la última
+        const auto s = insights::sessions(db, day, day, nullptr);
+        QCOMPARE(s.size(), 3);
+        QCOMPARE(s[0].pomos, 2);
+        QCOMPARE(s[1].pomos, 2);
+        QCOMPARE(s[2].pomos, 1);
+        const auto d = insights::daily(db, day, day, nullptr, QDateTime(day.addDays(1), QTime(12, 0)));
+        QCOMPARE(d.value(day).sessions, 3);
+    }
+
     void insightsAndDiary()
     {
         Database db;

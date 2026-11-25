@@ -85,6 +85,9 @@ public:
     void   updateIntervalSeconds(qint64 id, qint64 seconds);
     void   setIntervalsKind(const QVector<qint64>& ids, IntervalKind kind);
     QVector<Interval> intervalsBetween(const QDate& from, const QDate& to) const;
+    // Mejoras 5.1: cada «Me voy» (segundos epoch). Corta la sesión; solo local.
+    void addSessionEnd(qint64 atSec);
+    QVector<qint64> sessionEnds(qint64 fromSec, qint64 toSec) const;
 
     // ---- Metas diarias (M7) ---------------------------------------------
     QVector<GoalRule> goals() const;

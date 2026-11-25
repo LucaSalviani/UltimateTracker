@@ -17,7 +17,20 @@ struct DayStat {
     qint64 undue = 0;     // recreo indebido
     qint64 inactive = 0;  // el resto del día que no estuvo en la app
     int    pomos = 0;     // pomodoros (con tramos seguidos: valen más)
+    int    sessions = 0;  // Mejoras 5.1: sesiones del día
+    qint64 sessionSec = 0; // suma de lo que duraron (de que arranca el primero a que termina el último)
 };
+
+// Mejoras 5.1: una sesión va desde el primer pomodoro hasta «Me voy» o una pausa
+// larga (`session_gap_min`, 60 por defecto). Cuenta en el día en que empezó.
+struct Session {
+    QDate  day;
+    qint64 start = 0, end = 0;   // segundos epoch
+    int    pomos = 0;
+    qint64 study = 0;
+    qint64 length() const { return end - start; }
+};
+QVector<Session> sessions(const Database& db, const QDate& from, const QDate& to, const QSet<qint64>* folders);
 
 // Un día por entrada, de `from` a `to` (los futuros no aparecen). Hoy cuenta hasta `now`.
 QMap<QDate, DayStat> daily(const Database& db, const QDate& from, const QDate& to,

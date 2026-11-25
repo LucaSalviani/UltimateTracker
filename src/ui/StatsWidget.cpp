@@ -50,6 +50,7 @@ struct StatsData {
     QDate from, to, today;
     stats::Totals totals;
     QMap<QDate, qint64> byDay;
+    QVector<insights::Session> sessions;           // Mejoras 5.1
     QMap<QDate, insights::DayStat> daily;          // Mejoras 4.0: por día (estudio, pomodoros, indebido, inactivo)
     QHash<QDate, Database::DayDiary> diary;         // nota y ánimo
     QString heatMetric = QStringLiteral("hours");   // qué colorea el mapa de calor
@@ -382,11 +383,15 @@ private:
 
         // ---- avanzada: datos finos
         y += 10;
-        const double fw = (W - 2 * gap) / 3;
+        const double fw = (W - 3 * gap) / 4;
         card(p, QRectF(L, y, fw, kSmallH), QStringLiteral("Recreos"), fmt::hours(data.totals.breaks), QString(), 13, theme::text, QStringLiteral("breaks"));
         card(p, QRectF(L + fw + gap, y, fw, kSmallH), QStringLiteral("Recreo indebido"), fmt::hours(data.totals.undue), QString(), 13,
              data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text, QStringLiteral("undue"));
         card(p, QRectF(L + 2 * (fw + gap), y, fw, kSmallH), QStringLiteral("Horas inactivas"), fmt::hours(data.totals.inactive), QString(), 13, theme::textDim, QStringLiteral("inactive"));
+        qint64 sesSec = 0;
+        for (const auto& s : data.sessions) sesSec += s.length();
+        card(p, QRectF(L + 3 * (fw + gap), y, fw, kSmallH), QStringLiteral("Sesiones"), QString::number(data.sessions.size()),
+             data.sessions.isEmpty() ? QString() : QStringLiteral("prom. %1").arg(fmt::duration(int(sesSec / data.sessions.size()))), 13, theme::text, QStringLiteral("sessions"));
         return y + kSmallH;
     }
 
@@ -1140,6 +1145,7 @@ void StatsWidget::refresh()
     d.studyLabel = (d.filter ? kinds::of(tree, filterId) : kinds::general(tree)).name;
     d.totals = stats::totals(*m_db, d.from, d.to, d.filter, now);
     d.byDay = stats::studyByDay(*m_db, d.from, d.to, d.filter);
+    d.sessions = insights::sessions(*m_db, d.from, qMin(d.to, now.date().addDays(1)), d.filter);
     d.simple = !m_db->setting("stats_advanced", 0).toBool();
     d.heatMetric = d.simple ? QStringLiteral("hours") : m_db->setting("stats/heat", "hours").toString();
     if (m_period != Period::Day) {
@@ -1246,6 +1252,11 @@ QString StatsWidget::dayHtml(const QDate& day, bool brief) const
     rows << row(QStringLiteral("Recreos"), fmt::duration(int(s.breaks)));
     rows << row(QStringLiteral("Recreo indebido"), fmt::duration(int(s.undue)));
     rows << row(QStringLiteral("Inactivo"), fmt::hours(s.inactive));
+    {
+        int ns = 0; qint64 sec = 0;
+        for (const auto& se : d.sessions) if (se.day == day) { ++ns; sec += se.length(); }
+        if (ns > 0) rows << row(QStringLiteral("Sesiones"), QString::number(ns), QStringLiteral("%1 en total").arg(fmt::duration(int(sec))));
+    }
     if (d.goals.contains(day)) {
         const auto g = d.goals.value(day);
         rows << row(QStringLiteral("Objetivo"), g.met ? QStringLiteral("cumplido") : QStringLiteral("no cumplido"),
@@ -1287,6 +1298,7 @@ QString StatsWidget::tipFor(const QString& key) const
         return QStringLiteral("<b>Foco: %1</b><br>De todo el tiempo de sesión, cuánto fue de %2 de verdad.")
                    .arg(den > 0 ? QStringLiteral("%1 %").arg(qRound(100.0 * d.totals.study / den)) : QStringLiteral("—"), d.studyLabel.toLower()) + more;
     }
+    if (key == "sessions") return QStringLiteral("<b>Sesiones: %1</b><br>Una sesión va del primer pomodoro hasta «Me voy» o una pausa larga.").arg(d.sessions.size()) + more;
     if (key == "inactive") return QStringLiteral("<b>Horas inactivas: %1</b><br>Todo lo demás del período: dormir, comer, la vida.").arg(fmt::hours(d.totals.inactive)) + more;
     if (key == "streak") {
         const int left = qMax(0, stats::jokersToday(*m_db, d.today) - d.streak.jokersThisWeek);
@@ -1425,6 +1437,23 @@ void StatsWidget::showDetail(const QString& key)
         html = para(dim(QStringLiteral("Foco = %1 ÷ (%1 + recreos + recreo indebido). Mide qué parte del tiempo de sesión estuviste de verdad en lo tuyo; "
                                        "el tiempo muerto entre pomodoros lo baja.").arg(d.studyLabel.toLower()))) + table(rows);
         html += para(QStringLiteral("<br>") + dim(QStringLiteral("El detalle del recreo indebido está en su tarjeta (vista avanzada) y en cada día.")));
+    } else if (key == "sessions") {
+        title = QStringLiteral("Sesiones · %1").arg(m_label->text());
+        qint64 total = 0, longest = 0;
+        for (const auto& s : d.sessions) { total += s.length(); longest = qMax(longest, s.length()); }
+        const int n = int(d.sessions.size());
+        rows << row(QStringLiteral("Cantidad"), QString::number(n))
+             << row(QStringLiteral("Duración promedio"), n ? fmt::duration(int(total / n)) : QStringLiteral("—"))
+             << row(QStringLiteral("La más larga"), n ? fmt::duration(int(longest)) : QStringLiteral("—"));
+        html = para(dim(QStringLiteral("Una sesión va del primer pomodoro hasta «Me voy» o una pausa de más de %1 min (se cambia en Ajustes › General › Avanzado).")
+                            .arg(m_db->setting("session_gap_min", 60).toInt()))) + table(rows);
+        QStringList list;
+        for (int i = int(d.sessions.size()) - 1; i >= 0 && list.size() < 12; --i) {
+            const auto& s = d.sessions[i];
+            list << row(fmt::shortDate(s.day), QStringLiteral("%1 – %2").arg(QDateTime::fromSecsSinceEpoch(s.start).toString("HH:mm"), QDateTime::fromSecsSinceEpoch(s.end).toString("HH:mm")),
+                        QStringLiteral("%1 · %2 pomodoro%3").arg(fmt::duration(int(s.length()))).arg(s.pomos).arg(s.pomos == 1 ? "" : "s"));
+        }
+        if (!list.isEmpty()) html += para(QStringLiteral("<br>") + dim(QStringLiteral("Últimas:"))) + table(list);
     } else if (key == "inactive") {
         title = QStringLiteral("Horas inactivas · %1").arg(m_label->text());
         const qint64 all = d.totals.study + d.totals.breaks + d.totals.undue + d.totals.inactive;

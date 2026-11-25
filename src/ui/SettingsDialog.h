@@ -66,6 +66,7 @@ private:
     QSpinBox*  m_jokers;
     QComboBox* m_dateFormat;
     QSpinBox*  m_dayStart;
+    QSpinBox*  m_sessionGap;
     QComboBox* m_goalInput;   // M17
     QComboBox* m_goalRunning; // B2-1
     QComboBox* m_goalBreak;   // Mejoras 2.0

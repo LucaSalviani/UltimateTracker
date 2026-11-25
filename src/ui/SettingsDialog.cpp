@@ -228,6 +228,7 @@ QWidget* SettingsDialog::pageGeneral()
     m_dateFormat->addItem(QStringLiteral("Escrita (lunes 26 de octubre)"));
     m_dateFormat->setCurrentIndex(m_db->setting("date_format", "numeric").toString() == QLatin1String("numeric") ? 0 : 1);
     m_dayStart = spin(0, 6, m_db->setting("day_start_hour", 4).toInt(), QStringLiteral(":00 h"), w);
+    m_sessionGap = spin(10, 240, m_db->setting("session_gap_min", 60).toInt(), QStringLiteral(" min"), w);   // Mejoras 5.1
 
     m_goalInput = new QComboBox(w);
     m_goalInput->addItem(QStringLiteral("Botones (cantidad × minutos)"), "buttons");
@@ -254,6 +255,7 @@ QWidget* SettingsDialog::pageGeneral()
     times->addRow(QStringLiteral("Pomodoro por defecto"), m_work);
     times->addRow(QStringLiteral("Recreo por defecto"), m_break);
     times->addRow(QStringLiteral("El día empieza a las"), m_dayStart);
+    times->addRow(QStringLiteral("Una pausa más larga corta la sesión"), m_sessionGap);
     times->addRow(QStringLiteral("Comodines por semana"), m_jokers);
     m_monthMode = new QComboBox(w);
     m_monthMode->addItem(QStringLiteral("Mes del calendario"), "calendar");
@@ -781,6 +783,7 @@ void SettingsDialog::accept()
     stats::setJokers(*m_db, m_jokers->value(), dayclock::today());   // Mejoras 3.0: desde hoy, no hacia atrás
     m_db->setSetting("date_format", m_dateFormat->currentIndex() == 0 ? "numeric" : "long");
     m_db->setSetting("day_start_hour", m_dayStart->value());
+    m_db->setSetting("session_gap_min", m_sessionGap->value());
     m_db->setSetting("goal_input", m_goalInput->currentData().toString());
     m_db->setSetting("notepad_on", m_notepad->isChecked() ? 1 : 0);
     m_db->setSetting("month_mode", m_monthMode->currentData().toString());
@@ -895,6 +898,7 @@ void SettingsDialog::resetSection(int page)
         m_jokers->setValue(2);
         pick(m_dateFormat, 0);
         m_dayStart->setValue(4);
+        m_sessionGap->setValue(60);
         pick(m_goalInput, 0);
         pick(m_goalRunning, 0);
         m_notepad->setChecked(true);

@@ -480,6 +480,7 @@ void SessionController::endSession()
     takeOver();   // si lo manejaba el otro aparato, se cierra en los dos
     closeDay(false);
     m_db->setSetting("session/ended_at", now() / 1000);
+    m_db->addSessionEnd(now() / 1000);   // Mejoras 5.1: corta la sesión para la cuenta de sesiones
 }
 
 // ---------------------------------------------------------------------------
