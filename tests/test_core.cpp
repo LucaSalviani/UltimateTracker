@@ -7,6 +7,7 @@
 #include "core/Live.h"
 #include "core/Kinds.h"
 #include "core/Insights.h"
+#include "core/Routine.h"
 #include <QSqlQuery>
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
@@ -592,6 +593,30 @@ private slots:
         QCOMPARE(s[2].pomos, 1);
         const auto d = insights::daily(db, day, day, nullptr, QDateTime(day.addDays(1), QTime(12, 0)));
         QCOMPARE(d.value(day).sessions, 3);
+    }
+
+    void routineExplainsInactive()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const qint64 f = db.addFolder(0, "SO");
+        const QDate day(2026, 11, 18);   // miércoles
+        routine::Event fac; fac.title = "Cursada"; fac.category = "Facultad"; fac.startMin = 8 * 60; fac.endMin = 12 * 60; fac.weekdays = 1 | 2 | 4 | 8 | 16;
+        routine::Event gym; gym.title = "Gym"; gym.category = "Gimnasio"; gym.startMin = 18 * 60; gym.endMin = 19 * 60; gym.weekdays = 0; gym.day = day;
+        routine::save(db, fac);
+        routine::save(db, gym);
+        const auto evs = routine::events(db);
+        QCOMPARE(evs.size(), 2);
+        Pomodoro p; p.folderId = f; p.day = day;
+        p.startedAt = QDateTime(day, QTime(10, 0)).toSecsSinceEpoch();   // estudia durante la cursada: no se cuenta dos veces
+        p.plannedSec = p.studiedSec = 3600; p.endedAt = p.startedAt + 3600; p.status = PomoStatus::Completed;
+        db.insertPomodoro(p);
+        const auto ex = routine::explain(db, evs, day, QDateTime(day.addDays(1), QTime(4, 0)));
+        QCOMPARE(ex.byCategory.value("Facultad"), qint64(3 * 3600));
+        QCOMPARE(ex.byCategory.value("Gimnasio"), qint64(3600));
+        QCOMPARE(ex.total, qint64(23 * 3600));
+        QCOMPARE(ex.unexplained, qint64(19 * 3600));
+        QCOMPARE(routine::weekdaysText(31), QString("Lun a Vie"));
     }
 
     void insightsAndDiary()

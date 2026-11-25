@@ -109,6 +109,7 @@ public:
 
     // Celu-3: acceso directo para la sincronización (core/Sync).
     QSqlDatabase& handle() { return m_db; }
+    const QSqlDatabase& handle() const { return m_db; }
 
 private:
     void setupSync(bool firstTime);
