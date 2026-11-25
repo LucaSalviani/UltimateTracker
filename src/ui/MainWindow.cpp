@@ -143,10 +143,16 @@ void setTopmost(QWidget* w, bool on)
 #endif
 }
 
-void forceForeground(QWidget* w, bool keepTopmost)
+void forceForeground(QWidget* w, bool keepTopmost, bool takeFocus = true)
 {
 #ifdef Q_OS_WIN
     HWND hwnd = reinterpret_cast<HWND>(w->winId());
+    if (!takeFocus) {   // Mejoras 5.0: se muestra adelante pero sin quitarle el teclado a lo que estés usando
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        if (!keepTopmost)
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        return;
+    }
     // Truco clásico: subirla a "topmost" un instante para que Windows la muestre
     // aunque otra app tenga el foco, y después devolverla a la normalidad.
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
@@ -156,7 +162,7 @@ void forceForeground(QWidget* w, bool keepTopmost)
 #else
     Q_UNUSED(keepTopmost);
     w->raise();
-    w->activateWindow();
+    if (takeFocus) w->activateWindow();
 #endif
 }
 } // namespace win
@@ -397,7 +403,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_session, &SessionController::pomodoroCompleted, this, [this](qint64 id) {
         m_sounds->playChime();
         notifyWindows(QStringLiteral("Terminó el pomodoro"), QStringLiteral("Tomate un recreo o seguí con otro."));
-        bringToFront();
+        bringToFront(false);
         m_lastCompletedId = id;   // M18: el cuadradito espera a que termine el festejo grande
         // M8: animación de logro
         const auto p = m_db->pomodoro(id);
@@ -411,7 +417,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(m_session, &SessionController::breakFinished, this, [this] {
         m_sounds->startAlarm();
         notifyWindows(QStringLiteral("Terminó el recreo"), QStringLiteral("A seguir: dale play al próximo pomodoro."));
-        bringToFront();
+        bringToFront(false);
     });
 
     connect(m_grid, &GridWidget::goalClicked, this, &MainWindow::openGoalPanel);
@@ -433,7 +439,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     auto* leave = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+Q")), this);
     connect(leave, &QShortcut::activated, this, &MainWindow::leaveSession);
     auto* space = new QShortcut(QKeySequence(Qt::Key_Space), this);
-    connect(space, &QShortcut::activated, this, &MainWindow::togglePlay);
+    connect(space, &QShortcut::activated, this, [this] { if (!keyGuarded()) togglePlay(); });
     auto* zoomOut = new QShortcut(QKeySequence::ZoomOut, this);
     connect(zoomOut, &QShortcut::activated, this, [this] { setZoom(GridWidget::Zoom(qMin(2, int(m_grid->zoom()) + 1))); });
     auto* zoomIn = new QShortcut(QKeySequence::ZoomIn, this);
@@ -537,10 +543,14 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         else if (isFullScreen()) toggleFullScreen();
     });
     auto* mKey = new QShortcut(QKeySequence(Qt::Key_M), this);
-    connect(mKey, &QShortcut::activated, this, &MainWindow::toggleMini);
+    connect(mKey, &QShortcut::activated, this, [this] { if (!keyGuarded()) toggleMini(); });
     // M37: más atajos
     auto key = [this](const QKeySequence& seq, auto fn) {
-        connect(new QShortcut(seq, this), &QShortcut::activated, this, fn);
+        const bool single = seq.count() == 1 && !(seq[0].keyboardModifiers());
+        connect(new QShortcut(seq, this), &QShortcut::activated, this, [this, single, fn] {
+            if (single && keyGuarded()) return;   // Mejoras 5.0: ver bringToFront(false)
+            fn();
+        });
     };
     key(QKeySequence(Qt::Key_Left), [this] {
         if (m_overlay == Overlay::Stats) m_stats->step(-1); else if (m_overlay == Overlay::None) navigate(-1);
@@ -886,7 +896,7 @@ void MainWindow::buildTray()
     m_tray = new QSystemTrayIcon(icons::get(icons::Id::AppLogo), this);
     m_tray->setToolTip(QStringLiteral("UltimateTracker"));
     auto* menu = new QMenu(this);
-    menu->addAction(QStringLiteral("Mostrar"), this, &MainWindow::bringToFront);
+    menu->addAction(QStringLiteral("Mostrar"), this, [this] { bringToFront(); });
     menu->addAction(QStringLiteral("Mini reproductor"), this, &MainWindow::toggleMini);
     menu->addAction(QStringLiteral("Me voy (terminar la sesión)"), this, &MainWindow::leaveSession);
     menu->addSeparator();
@@ -2024,8 +2034,9 @@ void MainWindow::notifyWindows(const QString& title, const QString& text)
     m_tray->showMessage(title, text, QSystemTrayIcon::Information, 6000);
 }
 
-void MainWindow::bringToFront()
+void MainWindow::bringToFront(bool takeFocus)
 {
+    if (!takeFocus) m_keyGuardUntil = QDateTime::currentMSecsSinceEpoch() + 4000;   // Mejoras 5.0: las teclas sueltas no valen justo después de un aviso automático
     // M9: si estás en pantalla completa (juego, presentación, video), no se
     // mete adelante: avisa en la bandeja y titila en la barra de tareas.
     if (m_db->setting("quiet_fullscreen", 1).toBool() && sysint::userBusy() && !isActiveWindow()) {
@@ -2043,7 +2054,7 @@ void MainWindow::bringToFront()
     }
     if (isMinimized()) showNormal();
     show();
-    win::forceForeground(this, m_btnPin->isChecked());
+    win::forceForeground(this, m_btnPin->isChecked(), takeFocus);
     QApplication::alert(this);
 }
 
@@ -2078,7 +2089,7 @@ void MainWindow::toggleMini()
         connect(m_mini, &MiniPlayer::skipBreakClicked, m_session, &SessionController::skipBreak);
         connect(m_mini, &MiniPlayer::endBreakClicked, m_session, &SessionController::endBreakEarly);
         connect(m_mini, &MiniPlayer::silenceClicked, m_session, &SessionController::silenceAlarm);
-        connect(m_mini, &MiniPlayer::openAppClicked, this, &MainWindow::bringToFront);
+        connect(m_mini, &MiniPlayer::openAppClicked, this, [this] { bringToFront(); });
         connect(m_mini, &MiniPlayer::moved, this, [this](const QPoint& pos) { m_db->setSetting("mini_pos", pos); });
         connect(m_mini, &MiniPlayer::closed, this, [this] { m_db->setSetting("mini_open", 0); });
         const QPoint saved = m_db->setting("mini_pos").toPoint();

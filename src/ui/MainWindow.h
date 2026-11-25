@@ -15,6 +15,7 @@
 #include "core/Kinds.h"
 #include <QSystemTrayIcon>
 #include <QTimer>
+#include <QDateTime>
 #include <QWidget>
 
 class QLabel;
@@ -37,7 +38,7 @@ class MainWindow : public QWidget {
 public:
     MainWindow(Database* db, QWidget* parent = nullptr);
     ~MainWindow() override;
-    void bringToFront();
+    void bringToFront(bool takeFocus = true);
     void notifyWindows(const QString& title, const QString& text);
     void leaveSession();
     kinds::Kind todayKind() const;   // Mejoras 3.0
@@ -183,6 +184,8 @@ private:
     class NotePad*   m_notePad = nullptr;       // Mejoras 4.1: anotador al lado del objetivo
     QPointer<QPropertyAnimation> m_noteAnim;
     bool        m_notePadOpen = false;
+    qint64      m_keyGuardUntil = 0;   // Mejoras 5.0: hasta cuándo se ignoran las teclas sueltas
+    bool keyGuarded() const { return QDateTime::currentMSecsSinceEpoch() < m_keyGuardUntil; }
     class Celebration* m_celebration = nullptr;
     class GlobalHotkey* m_hotkey = nullptr;   // M9
     class WakeWatcher*  m_wake = nullptr;     // B2-4
