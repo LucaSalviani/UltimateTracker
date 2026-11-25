@@ -282,6 +282,15 @@ QWidget* SettingsDialog::pageGeneral()
         l->addLayout(f);
         l->addWidget(note(QStringLiteral("El cambio del inicio del día se aplica al reiniciar la app."), w));
     }));
+    {
+        auto* act = new QPushButton(QStringLiteral("Abrir actividades…"), w);
+        act->setCursor(Qt::PointingHandCursor);
+        connect(act, &QPushButton::clicked, this, [this] { m_openActivities = true; accept(); });
+        lay->addSpacing(6);
+        lay->addWidget(subheading(QStringLiteral("Actividades"), w));
+        lay->addWidget(note(QStringLiteral("Crear, renombrar, ordenar, colorear y borrar actividades (también con la tecla A)."), w));
+        lay->addWidget(act, 0, Qt::AlignLeft);
+    }
     lay->addStretch();
     return w;
 }
@@ -652,7 +661,7 @@ QWidget* SettingsDialog::pageTiles()
     return w;
 }
 
-// M44: hitos. Lo mismo que el menú ⋯ › Hitos, más los números.
+// M44: hitos (se prenden, se apagan y se ajustan solo desde acá).
 namespace {
 const char* kMsKeys[6] = {"ms_day", "ms_streaks", "ms_weekly", "ms_hours", "ms_stages", "ms_month"};
 }
@@ -704,7 +713,6 @@ QWidget* SettingsDialog::pageMilestones()
     lay->addWidget(m_msToggle[4]);
     lay->addWidget(note(QStringLiteral("De Novato a Maestro pasando por 8 etapas, con tres subniveles cada una."), w));
     lay->addWidget(m_msToggle[5]);
-    lay->addWidget(note(QStringLiteral("Lo mismo se prende y se apaga desde el menú ⋯ › Hitos."), w));
     lay->addStretch();
     return w;
 }

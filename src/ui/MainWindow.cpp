@@ -667,10 +667,9 @@ QWidget* MainWindow::buildTitleBar()
         showOverlay(m_overlay == Overlay::Stats ? Overlay::None : Overlay::Stats);
     });
 
-    auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: actividades, ajustes, fijar, borde, pantalla completa, salir"));
+    auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: ajustes, fijar, borde, pantalla completa, salir"));
     menuBtn->setObjectName("TbMenu");
     auto* menu = new QMenu(menuBtn);
-    menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
     // Mejoras 5.0: el tamaño de los cuadraditos sale de la barra y se elige acá.
     auto* sizeMenu = menu->addMenu(QStringLiteral("Tamaño de los cuadraditos"));
     connect(sizeMenu, &QMenu::aboutToShow, this, [this, sizeMenu] {
@@ -688,45 +687,15 @@ QWidget* MainWindow::buildTitleBar()
         }
     });
     menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
-    // M44: hitos, cada uno se prende o se apaga por separado (los números, en Ajustes › Hitos).
-    auto* hitos = menu->addMenu(QStringLiteral("Hitos"));
-    connect(hitos, &QMenu::aboutToShow, this, [this, hitos] {
-        hitos->clear();
-        const QList<QPair<QString, QString>> items = {
-            {"ms_day", QStringLiteral("Marca del día (bronce, plata, oro)")},
-            {"ms_streaks", QStringLiteral("Rachas y récords")},
-            {"ms_weekly", QStringLiteral("Meta semanal")},
-            {"ms_hours", QStringLiteral("Horas por actividad")},
-            {"ms_stages", QStringLiteral("Etapas hacia las 10.000 h")},
-            {"ms_month", QStringLiteral("Resumen del mes")},
-        };
-        auto* sec = hitos->addAction(QStringLiteral("Corto plazo"));
-        sec->setEnabled(false);
-        int i = 0;
-        for (const auto& [key, label] : items) {
-            if (i == 3) hitos->addSection(QStringLiteral("Mediano y largo plazo"));
-            QAction* a = hitos->addAction(label);
-            a->setCheckable(true);
-            a->setChecked(m_db->setting(key, 1).toBool());
-            connect(a, &QAction::toggled, this, [this, key](bool on) {
-                m_db->setSetting(key, on ? 1 : 0);
-                reloadGrid();
-                if (m_overlay == Overlay::Stats) m_stats->refresh();
-            });
-            ++i;
-        }
-        hitos->addSeparator();
-        hitos->addAction(QStringLiteral("Ajustar números…"), this, [this] { openSettings(5); });
-    });
     menu->addAction(QStringLiteral("Sincronizar con el celu…"), this, [this] {
         if (!m_sync) { toast(QStringLiteral("En el modo de pruebas no se sincroniza")); return; }
         SyncDialog dlg(m_sync, this);
         win::applyChrome(&dlg);
         dlg.exec();
     });
-    menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });
     menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);
     menu->addAction(QStringLiteral("Ver tutorial"), this, [this] { startTour(); });   // Mejoras 2.0
+    menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });   // Mejoras 5.0: al final, antes de Salir
     menu->addSeparator();
     menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
     connect(menuBtn, &QToolButton::clicked, this, [menuBtn, menu] {
@@ -2836,6 +2805,7 @@ void MainWindow::openSettings(int page)
     const int result = dlg.exec();
     m_settingsOpen = false;
     if (result != QDialog::Accepted) return;
+    if (dlg.openActivitiesRequested()) QTimer::singleShot(0, this, [this] { showOverlay(Overlay::Activities); });
     if (dlg.restartRequested()) {
         // Se prendió o apagó el modo de pruebas: reinicio por dentro, en cuanto se
         // cierre el diálogo (antes esta llamada faltaba y había que reabrir a mano).

@@ -13,7 +13,7 @@ class Database;
 //  · Mediano (semanas y meses): horas por actividad con una curva que se estira,
 //    semanas seguidas cumpliendo la meta y el resumen del mes.
 //  · Largo: etapas camino a las 10.000 h (por actividad y un nivel global).
-// Todo se puede prender o apagar por separado (menú ⋯ › Hitos).
+// Todo se puede prender o apagar por separado (Ajustes › Hitos).
 namespace ms {
 
 struct Config {

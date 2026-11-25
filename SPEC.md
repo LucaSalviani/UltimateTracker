@@ -124,7 +124,7 @@ App de escritorio minimalista para gamificar el estudio: cuenta horas por tema, 
 - Cambiar de período o actividad hace un fundido corto; los períodos vacíos lo dicen ("Sin horas esta semana").
 
 ## Hitos
-Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, en *Ajustes › Hitos*).
+Tres plazos; cada uno se prende, se apaga y se ajusta en *Ajustes › Hitos*.
 - **Corto plazo**
   - *Marca del día*: bronce, plata y oro (2 h, 4 h y 6 h por defecto). Tres puntitos al lado de "estudiado" (vista de todo el día).
   - *Rachas*: aviso a los 3, 7, 14, 30, 60, 100, 180 y 365 días. *Récords*: mejor día, mejor semana y racha más larga.
@@ -225,3 +225,4 @@ Tres plazos; cada uno se prende o se apaga en **⋯ › Hitos** (los números, e
 - **Barra de arriba**: un solo botón de vista (día/semana/mes); el tamaño de los cuadraditos pasa al menú ⋯ (`size_button` apagado por defecto).
 - **Evolución**: cuatro fichas con número grande y variación "↑ 12 % vs 28 días antes" (estudio, pomodoros, indebido, inactivo), tarjetas más bajas y sin bordes, titular en lenguaje natural más grande.
 - Pendiente de la tanda: color con significado y menos líneas en el resto de la app. Siguen 5.1 (cantidad de sesiones, rutina) y 5.2 (personalizar paneles).
+- **Menú ⋯ más corto**: se sacaron *Hitos* (ahora solo en Ajustes › Hitos) y *Actividades* (tecla A, menú de actividad › administrar, o *Ajustes › General › Abrir actividades…*). *Ajustes* queda al final, debajo de *Ver tutorial* y arriba de *Salir*.

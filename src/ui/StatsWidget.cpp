@@ -765,7 +765,7 @@ private:
         if (data.rows.isEmpty()) {
             p.setPen(theme::textFaint);
             p.setFont(theme::uiFont(9));
-            p.drawText(QPointF(L, y + 14), QStringLiteral("Todavía no hay actividades: creá una desde ⋯ › Actividades…"));
+            p.drawText(QPointF(L, y + 14), QStringLiteral("Todavía no hay actividades: creá una con la tecla A o en Ajustes › General"));
             return;
         }
         const auto vis = visibleRows();
