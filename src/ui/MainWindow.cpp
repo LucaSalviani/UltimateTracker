@@ -649,8 +649,9 @@ QWidget* MainWindow::buildTitleBar()
 
     m_btnZoomIn = iconButton(bar, icons::Id::ZoomIn, QStringLiteral("Acercar: mes → semana → día (Ctrl +)"));
     m_btnZoomOut = iconButton(bar, icons::Id::ZoomOut, QStringLiteral("Alejar: día → semana → mes (Ctrl −)"));
-    connect(m_btnZoomIn, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMax(0, int(m_grid->zoom()) - 1))); });
-    connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMin(2, int(m_grid->zoom()) + 1))); });
+    // Mejoras 5.0: un solo botón de vista que cicla Día → Semana → Mes (Ctrl +/− siguen andando).
+    connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom((int(m_grid->zoom()) + 1) % 3)); });
+    m_btnZoomIn->hide();
 
     auto* goalBtn = iconButton(bar, icons::Id::Goal, QStringLiteral("Objetivo del día (G)"));
     goalBtn->setObjectName("TbGoal");
@@ -669,6 +670,7 @@ QWidget* MainWindow::buildTitleBar()
     menuBtn->setObjectName("TbMenu");
     auto* menu = new QMenu(menuBtn);
     menu->addAction(QStringLiteral("Actividades…"), this, [this] { showOverlay(Overlay::Activities); });
+    menu->addAction(QStringLiteral("Tamaño de los cuadraditos"), this, [this] { m_btnProportional->click(); });   // Mejoras 5.0: sale de la barra
     menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
     // M44: hitos, cada uno se prende o se apaga por separado (los números, en Ajustes › Hitos).
     auto* hitos = menu->addMenu(QStringLiteral("Hitos"));
@@ -1151,8 +1153,9 @@ void MainWindow::setZoom(GridWidget::Zoom z)
         m_pages->setCurrentIndex(PageGrid);
     }
     m_grid->setZoom(z);
-    m_btnZoomIn->setEnabled(z != GridWidget::Zoom::Day);
-    m_btnZoomOut->setEnabled(z != GridWidget::Zoom::Month);
+    m_btnZoomOut->setEnabled(true);
+    static const char* names[] = {"Día", "Semana", "Mes"};
+    m_btnZoomOut->setToolTip(QStringLiteral("Vista: %1 (click: %2)").arg(QString::fromUtf8(names[int(z)]), QString::fromUtf8(names[(int(z) + 1) % 3])));
     refreshBand();
     reloadGrid();
     applyViewSize();
@@ -2066,8 +2069,10 @@ void MainWindow::applySizeMode(GridWidget::SizeMode mode, bool announce)
 {
     static const char* names[] = {"Tamaño: todos iguales", "Tamaño: proporcional solo a lo ancho",
                                   "Tamaño: proporcional completo"};
-    const bool button = m_db->setting("size_button", 1).toBool();
-    if (!button) mode = GridWidget::SizeMode(m_db->setting("size_default", 0).toInt());
+    const bool button = m_db->setting("size_button", 0).toBool();   // Mejoras 5.0: por defecto va en el menú ⋯
+    // Sin botón: si elegiste un tamaño fijo en Ajustes se respeta; si no, vale lo último que ciclaste desde ⋯.
+    if (!button && !announce && m_db->setting("size_default", -1).toInt() >= 0)
+        mode = GridWidget::SizeMode(m_db->setting("size_default", 0).toInt());
     m_grid->setSizeMode(mode);
     m_db->setSetting("size_mode", int(mode));
     m_btnProportional->setVisible(button);
