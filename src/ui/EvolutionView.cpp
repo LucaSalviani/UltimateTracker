@@ -14,7 +14,8 @@
 
 namespace {
 constexpr double kPad = 16;
-constexpr double kCardH = 214;
+constexpr double kCardH = 168;
+constexpr double kTilesH = 96;
 constexpr double kGap = 14;
 QColor ink() { return theme::pomoAccent; }
 
@@ -111,27 +112,27 @@ QString EvolutionView::summaryHtml() const
 
 int EvolutionView::contentHeight(int) const
 {
-    // pastillas + resumen + 5 tarjetas
-    return int(8 + 40 + 136 + 14 + 5 * (kCardH + kGap) + 20);
+    // pastillas + fichas + 5 tarjetas
+    return int(8 + 40 + kTilesH + kGap + 5 * (kCardH + kGap) + 20);
 }
 
 void EvolutionView::card(QPainter& p, const QRectF& r, const QString& title, const QString& sentence) const
 {
-    p.setPen(QPen(theme::line, 1));
+    p.setPen(Qt::NoPen);
     p.setBrush(theme::surface);
     p.drawRoundedRect(r, 10, 10);
-    p.setFont(theme::uiFont(8.5, QFont::DemiBold));
+    p.setFont(theme::uiFont(8, QFont::DemiBold));
     p.setPen(theme::textDim);
-    p.drawText(QPointF(r.left() + 14, r.top() + 22), title.toUpper());
-    p.setFont(theme::uiFont(9));
+    p.drawText(QPointF(r.left() + 14, r.top() + 20), title.toUpper());
+    p.setFont(theme::uiFont(10.5, QFont::DemiBold));
     p.setPen(theme::text);
-    p.drawText(QRectF(r.left() + 14, r.top() + 28, r.width() - 28, 18), Qt::AlignLeft | Qt::AlignVCenter,
+    p.drawText(QRectF(r.left() + 14, r.top() + 26, r.width() - 28, 22), Qt::AlignLeft | Qt::AlignVCenter,
                QFontMetrics(p.font()).elidedText(sentence, Qt::ElideRight, int(r.width() - 28)));
 }
 
 QRectF EvolutionView::plotArea(const QRectF& c) const
 {
-    return QRectF(c.left() + 44, c.top() + 56, c.width() - 44 - 16, c.height() - 56 - 30);
+    return QRectF(c.left() + 44, c.top() + 58, c.width() - 44 - 16, c.height() - 58 - 26);
 }
 
 void EvolutionView::paintEvent(QPaintEvent*)
@@ -168,21 +169,7 @@ void EvolutionView::paintEvent(QPaintEvent*)
         y += 40;
     }
 
-    // Resumen
-    {
-        const QRectF r(L, y, W, 136);
-        card(p, r, QStringLiteral("En resumen"), m_trend.sentence());
-        p.save();
-        p.translate(r.left() + 14, r.top() + 50);
-        QTextDocument doc;
-        doc.setDefaultFont(theme::uiFont(9));
-        doc.setDefaultStyleSheet(QStringLiteral("body { color: %1; }").arg(theme::text.name()));
-        doc.setHtml(QStringLiteral("<body>") + m_summary + QStringLiteral("</body>"));
-        doc.setTextWidth(r.width() - 28);
-        doc.drawContents(&p, QRectF(0, 0, r.width() - 28, r.height() - 54));
-        p.restore();
-        y += r.height() + kGap;
-    }
+    paintTiles(p, QRectF(L, y, W, kTilesH)); y += kTilesH + kGap;
 
     paintHours(p, QRectF(L, y, W, kCardH)); y += kCardH + kGap;
     paintWeeklyBars(p, QRectF(L, y, W, kCardH), QStringLiteral("Recreo indebido por semana"), QString(),
@@ -193,6 +180,56 @@ void EvolutionView::paintEvent(QPaintEvent*)
                     theme::mix(theme::surface, theme::text, 0.7), QStringLiteral("inactivo")); y += kCardH + kGap;
     paintGoals(p, QRectF(L, y, W, kCardH)); y += kCardH + kGap;
     paintMood(p, QRectF(L, y, W, kCardH));
+}
+
+
+// Fichas: número grande + variación de los últimos 28 días contra los 28 anteriores.
+void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
+{
+    const int n = int(m_days.size());
+    const int rr = qMin(28, n), pr = qMin(28, n - rr);
+    struct M { QString name; std::function<double(const insights::DayStat&)> get; bool lowerBetter; bool count; };
+    const QVector<M> ms = {
+        {m_studyLabel + QStringLiteral(" / día"), [](const insights::DayStat& d) { return double(d.study); }, false, false},
+        {QStringLiteral("Pomodoros / día"), [](const insights::DayStat& d) { return double(d.pomos); }, false, true},
+        {QStringLiteral("Indebido / día"), [](const insights::DayStat& d) { return double(d.undue); }, true, false},
+        {QStringLiteral("Inactivo / día"), [](const insights::DayStat& d) { return double(d.inactive); }, true, false},
+    };
+    auto avg = [&](const M& m, int from, int to) { double s = 0; for (int i = from; i < to; ++i) s += m.get(m_days[i]); return s / qMax(1, to - from); };
+    const double gap = 8, w = (r.width() - 3 * gap) / 4;
+    for (int k = 0; k < ms.size(); ++k) {
+        const M& m = ms[k];
+        const QRectF t(r.left() + k * (w + gap), r.top(), w, r.height());
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::surface);
+        p.drawRoundedRect(t, 10, 10);
+        p.setFont(theme::uiFont(8, QFont::DemiBold));
+        p.setPen(theme::textDim);
+        p.drawText(QRectF(t.left() + 12, t.top() + 8, t.width() - 24, 16), Qt::AlignLeft | Qt::AlignVCenter, m.name.toUpper());
+        const double a = rr > 0 ? avg(m, n - rr, n) : 0;
+        p.setFont(theme::uiFont(17, QFont::DemiBold));
+        p.setPen(theme::text);
+        p.drawText(QRectF(t.left() + 12, t.top() + 28, t.width() - 24, 32), Qt::AlignLeft | Qt::AlignVCenter, m.count ? QString::number(a, 'f', 1) : fmtH(a));
+        QString line = QStringLiteral("sin comparación todavía");
+        QColor col = theme::textFaint;
+        if (pr >= 14) {
+            const double b = avg(m, n - rr - pr, n - rr);
+            if (b > 0) {
+                const double ch = (a - b) / b;
+                if (std::abs(ch) < 0.05) { line = QStringLiteral("→ parejo"); col = theme::textDim; }
+                else {
+                    line = QStringLiteral("%1 %2 %").arg(ch > 0 ? QStringLiteral("↑") : QStringLiteral("↓")).arg(int(std::llround(std::abs(ch) * 100)));
+                    col = ((ch > 0) != m.lowerBetter) ? theme::breakAccent : theme::squareFinal.lighter(125);
+                }
+                line += QStringLiteral(" vs 28 días antes");
+            }
+        }
+        p.setFont(theme::uiFont(8.5));
+        p.setPen(col);
+        p.drawText(QRectF(t.left() + 12, t.top() + 64, t.width() - 24, 20), Qt::AlignLeft | Qt::AlignVCenter,
+                   QFontMetrics(p.font()).elidedText(line, Qt::ElideRight, int(t.width() - 24)));
+        m_zones.append({t, QStringLiteral("%1\nÚltimos %2 días: %3\nPromedio por día.").arg(m.name).arg(rr).arg(m.count ? QString::number(a, 'f', 1) : fmtH(a)), QString()});
+    }
 }
 
 // ---------------------------------------------------------------------------

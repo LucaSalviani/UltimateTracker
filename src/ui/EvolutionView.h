@@ -52,6 +52,7 @@ private:
                          const QColor& ink, const QString& unit);
     void paintGoals(QPainter& p, const QRectF& r);
     void paintMood(QPainter& p, const QRectF& r);
+    void paintTiles(QPainter& p, const QRectF& r);
 
     Database* m_db = nullptr;
     const QSet<qint64>* m_filter = nullptr;
