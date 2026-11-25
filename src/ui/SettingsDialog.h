@@ -52,6 +52,7 @@ private:
     QWidget* pageCelebrations();   // M32
     QWidget* pageSystem();
     QWidget* pageMilestones();   // M44
+    QWidget* pageRoutine();      // Mejoras 5.1
     void resetSection(int page);   // M38: valores por defecto de la sección visible
 
     Database* m_db;
@@ -66,6 +67,9 @@ private:
     QSpinBox*  m_jokers;
     QComboBox* m_dateFormat;
     QSpinBox*  m_dayStart;
+    QListWidget* m_routineList = nullptr;
+    void reloadRoutine();
+    void editRoutine(qint64 id);
     QSpinBox*  m_sessionGap;
     QComboBox* m_goalInput;   // M17
     QComboBox* m_goalRunning; // B2-1

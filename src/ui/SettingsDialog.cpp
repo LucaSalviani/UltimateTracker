@@ -1,6 +1,7 @@
 #include "ui/SettingsDialog.h"
 #include "core/DayClock.h"
 #include "core/Stats.h"
+#include "core/Routine.h"
 #include "ui/FocusGuard.h"
 #include "ui/Theme.h"
 #include "ui/Tiles.h"
@@ -26,6 +27,8 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QDoubleSpinBox>
+#include <QDateEdit>
+#include <QTimeEdit>
 #include <QScrollArea>
 #include <cmath>
 #include <functional>
@@ -167,7 +170,7 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     m_nav->setFixedWidth(150);
     for (const QString& s : {QStringLiteral("General"), QStringLiteral("Cronómetro"), QStringLiteral("Apariencia"),
                              QStringLiteral("Cuadraditos"), QStringLiteral("Festejos y sonidos"), QStringLiteral("Hitos"),
-                             QStringLiteral("Sistema")})
+                             QStringLiteral("Sistema"), QStringLiteral("Rutina")})
         m_nav->addItem(s);
 
     m_pages = new QStackedWidget(this);
@@ -189,6 +192,7 @@ SettingsDialog::SettingsDialog(Database* db, QWidget* parent)
     m_pages->addWidget(wrap(pageCelebrations()));
     m_pages->addWidget(wrap(pageMilestones()));
     m_pages->addWidget(wrap(pageSystem()));
+    m_pages->addWidget(wrap(pageRoutine()));
     connect(m_nav, &QListWidget::currentRowChanged, m_pages, &QStackedWidget::setCurrentIndex);
     m_nav->setCurrentRow(0);
 
@@ -722,6 +726,118 @@ QWidget* SettingsDialog::pageMilestones()
 void SettingsDialog::showPage(int page)
 {
     m_nav->setCurrentRow(qBound(0, page, m_nav->count() - 1));
+}
+
+// Mejoras 5.1: rutina. Los cambios se guardan al instante (no esperan a "Guardar").
+QWidget* SettingsDialog::pageRoutine()
+{
+    auto* w = new QWidget(this);
+    auto* lay = new QVBoxLayout(w);
+    lay->addWidget(heading(QStringLiteral("Rutina"), w));
+    lay->addWidget(note(QStringLiteral("Lo que hacés por fuera de la app: facultad, trabajo, gimnasio, médico. No avisa nada: sirve para explicar las "
+                                       "horas inactivas («9 h inactivo: 4 h facultad, 1 h gimnasio, 4 h sin motivo») en Estadísticas. "
+                                       "Los cambios se guardan al instante."), w));
+    m_routineList = new QListWidget(w);
+    m_routineList->setMinimumHeight(220);
+    connect(m_routineList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* it) { editRoutine(it->data(Qt::UserRole).toLongLong()); });
+    lay->addWidget(m_routineList);
+    auto* row = new QHBoxLayout;
+    auto* add = new QPushButton(QStringLiteral("Agregar…"), w);
+    auto* edit = new QPushButton(QStringLiteral("Editar…"), w);
+    auto* del = new QPushButton(QStringLiteral("Borrar"), w);
+    for (QPushButton* b : {add, edit, del}) { b->setAutoDefault(false); row->addWidget(b); }
+    row->addStretch();
+    lay->addLayout(row);
+    connect(add, &QPushButton::clicked, this, [this] { editRoutine(0); });
+    connect(edit, &QPushButton::clicked, this, [this] {
+        if (auto* it = m_routineList->currentItem()) editRoutine(it->data(Qt::UserRole).toLongLong());
+    });
+    connect(del, &QPushButton::clicked, this, [this] {
+        if (auto* it = m_routineList->currentItem()) { routine::remove(*m_db, it->data(Qt::UserRole).toLongLong()); reloadRoutine(); }
+    });
+    lay->addStretch();
+    reloadRoutine();
+    return w;
+}
+
+void SettingsDialog::reloadRoutine()
+{
+    m_routineList->clear();
+    auto evs = routine::events(*m_db);
+    for (const routine::Event& e : evs) {
+        const QString when = e.weekdays ? routine::weekdaysText(e.weekdays) : e.day.toString(QStringLiteral("dd/MM/yy"));
+        const QString time = QStringLiteral("%1–%2").arg(QTime(0, 0).addSecs(e.startMin * 60).toString(QStringLiteral("HH:mm")),
+                                                         QTime(0, 0).addSecs(e.endMin * 60).toString(QStringLiteral("HH:mm")));
+        auto* it = new QListWidgetItem(QStringLiteral("%1 · %2 · %3  [%4]").arg(e.title.isEmpty() ? e.category : e.title, when, time, e.category));
+        it->setData(Qt::UserRole, e.id);
+        m_routineList->addItem(it);
+    }
+    if (evs.isEmpty()) m_routineList->addItem(QStringLiteral("Todavía no cargaste nada. Probá con «Agregar…» (ej. Facultad, lunes a viernes, 8:00–12:00)."));
+}
+
+void SettingsDialog::editRoutine(qint64 id)
+{
+    routine::Event e;
+    for (const routine::Event& x : routine::events(*m_db)) if (x.id == id) e = x;
+    QDialog dlg(this);
+    dlg.setWindowTitle(id ? QStringLiteral("Editar actividad de la rutina") : QStringLiteral("Nueva actividad de la rutina"));
+    auto* form = new QFormLayout;
+    auto* title = new QLineEdit(e.title, &dlg);
+    title->setPlaceholderText(QStringLiteral("ej. Cursada de Sistemas"));
+    auto* cat = new QComboBox(&dlg);
+    cat->setEditable(true);
+    cat->addItems(routine::defaultCategories());
+    cat->setCurrentText(e.category.isEmpty() ? routine::defaultCategories().first() : e.category);
+    auto* from = new QTimeEdit(QTime(0, 0).addSecs((id ? e.startMin : 8 * 60) * 60), &dlg);
+    auto* to = new QTimeEdit(QTime(0, 0).addSecs((id ? e.endMin : 12 * 60) * 60), &dlg);
+    from->setDisplayFormat(QStringLiteral("HH:mm"));
+    to->setDisplayFormat(QStringLiteral("HH:mm"));
+    auto* once = new QCheckBox(QStringLiteral("Solo un día"), &dlg);
+    auto* date = new QDateEdit(e.day.isValid() ? e.day : QDate::currentDate(), &dlg);
+    date->setCalendarPopup(true);
+    once->setChecked(id && e.weekdays == 0);
+    date->setEnabled(once->isChecked());
+    auto* days = new QHBoxLayout;
+    QVector<QCheckBox*> dayBoxes;
+    static const char* dn[] = {"L", "M", "X", "J", "V", "S", "D"};
+    for (int i = 0; i < 7; ++i) {
+        auto* c = new QCheckBox(QString::fromUtf8(dn[i]), &dlg);
+        c->setChecked(id ? (e.weekdays & (1 << i)) : i < 5);
+        c->setEnabled(!once->isChecked());
+        dayBoxes << c;
+        days->addWidget(c);
+    }
+    connect(once, &QCheckBox::toggled, &dlg, [=](bool on) { date->setEnabled(on); for (QCheckBox* c : dayBoxes) c->setEnabled(!on); });
+    form->addRow(QStringLiteral("Nombre"), title);
+    form->addRow(QStringLiteral("Categoría"), cat);
+    form->addRow(QStringLiteral("Desde"), from);
+    form->addRow(QStringLiteral("Hasta"), to);
+    form->addRow(QStringLiteral("Se repite"), days);
+    form->addRow(once, date);
+    auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    bb->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Guardar"));
+    bb->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Cancelar"));
+    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    auto* v = new QVBoxLayout(&dlg);
+    v->addLayout(form);
+    v->addWidget(note(QStringLiteral("Si «Hasta» es antes que «Desde», cruza la medianoche."), &dlg));
+    v->addWidget(bb);
+    if (dlg.exec() != QDialog::Accepted) return;
+    e.title = title->text().trimmed();
+    e.category = cat->currentText().trimmed();
+    e.startMin = from->time().hour() * 60 + from->time().minute();
+    e.endMin = to->time().hour() * 60 + to->time().minute();
+    if (once->isChecked()) { e.weekdays = 0; e.day = date->date(); }
+    else {
+        e.weekdays = 0;
+        for (int i = 0; i < 7; ++i) if (dayBoxes[i]->isChecked()) e.weekdays |= 1 << i;
+        e.day = QDate();
+        if (e.weekdays == 0) return;
+    }
+    if (e.title.isEmpty() && e.category.isEmpty()) return;
+    routine::save(*m_db, e);
+    reloadRoutine();
 }
 
 QWidget* SettingsDialog::pageSystem()

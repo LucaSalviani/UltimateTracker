@@ -1,4 +1,5 @@
 #include "ui/StatsWidget.h"
+#include "core/Routine.h"
 #include "core/Kinds.h"
 #include "ui/DetailCard.h"
 #include "ui/EvolutionView.h"
@@ -1243,6 +1244,23 @@ static QString moodWord(int m)
     return QString::fromUtf8(w[qBound(0, m, 5)]);
 }
 
+// Mejoras 5.1: cuánto de lo inactivo explica la rutina, sumado de `from` a `to`.
+static routine::Explain routineExplain(Database* db, const QDate& from, const QDate& to)
+{
+    routine::Explain sum;
+    const auto evs = routine::events(*db);
+    if (evs.isEmpty()) return sum;
+    const QDateTime now = QDateTime::currentDateTime();
+    const QDate last = qMin(to, dayclock::logicalDate(now));
+    for (QDate d = from; d <= last; d = d.addDays(1)) {
+        const routine::Explain e = routine::explain(*db, evs, d, now);
+        sum.total += e.total;
+        sum.unexplained += e.unexplained;
+        for (auto it = e.byCategory.cbegin(); it != e.byCategory.cend(); ++it) sum.byCategory[it.key()] += it.value();
+    }
+    return sum;
+}
+
 QString StatsWidget::dayHtml(const QDate& day, bool brief) const
 {
     const StatsData& d = m_canvas->data;
@@ -1252,6 +1270,11 @@ QString StatsWidget::dayHtml(const QDate& day, bool brief) const
     rows << row(QStringLiteral("Recreos"), fmt::duration(int(s.breaks)));
     rows << row(QStringLiteral("Recreo indebido"), fmt::duration(int(s.undue)));
     rows << row(QStringLiteral("Inactivo"), fmt::hours(s.inactive));
+    if (!brief) {
+        const routine::Explain ex = routineExplain(m_db, day, day);
+        for (auto it = ex.byCategory.cbegin(); it != ex.byCategory.cend(); ++it) rows << row(QStringLiteral("   · ") + it.key().toHtmlEscaped(), fmt::hours(it.value()));
+        if (!ex.byCategory.isEmpty()) rows << row(QStringLiteral("   · sin motivo"), fmt::hours(ex.unexplained));
+    }
     {
         int ns = 0; qint64 sec = 0;
         for (const auto& se : d.sessions) if (se.day == day) { ++ns; sec += se.length(); }
@@ -1461,6 +1484,16 @@ void StatsWidget::showDetail(const QString& key)
         rows << row(d.studyLabel, fmt::hours(d.totals.study), pct(d.totals.study)) << row(QStringLiteral("Recreos"), fmt::hours(d.totals.breaks), pct(d.totals.breaks))
              << row(QStringLiteral("Recreos indebidos"), fmt::hours(d.totals.undue), pct(d.totals.undue)) << row(QStringLiteral("Inactivas"), fmt::hours(d.totals.inactive), pct(d.totals.inactive));
         html = para(dim(QStringLiteral("Todo lo que no es pomodoro ni recreo: dormir, comer, cursar, la vida. Así se reparte el período:"))) + table(rows);
+        const routine::Explain ex = routineExplain(m_db, d.from, d.to);
+        if (!ex.byCategory.isEmpty()) {
+            QStringList rr;
+            auto pc = [&](qint64 v) { return QStringLiteral("%1 %").arg(ex.total ? qRound(100.0 * v / ex.total) : 0); };
+            for (auto it = ex.byCategory.cbegin(); it != ex.byCategory.cend(); ++it) rr << row(it.key().toHtmlEscaped(), fmt::hours(it.value()), pc(it.value()));
+            rr << row(QStringLiteral("Sin motivo"), fmt::hours(ex.unexplained), pc(ex.unexplained));
+            html += para(QStringLiteral("<br>") + dim(QStringLiteral("Lo inactivo, según tu rutina:"))) + table(rr);
+        } else {
+            html += para(QStringLiteral("<br>") + dim(QStringLiteral("Cargá tu rutina en Ajustes › Rutina (facultad, gimnasio, médico…) y acá vas a ver en qué se fue este tiempo.")));
+        }
     } else if (key == "streak") {
         title = QStringLiteral("Racha: %1 %2").arg(d.streak.days).arg(d.streak.days == 1 ? "día" : "días");
         const stats::StreakRules rules = stats::StreakRules::load(*m_db);

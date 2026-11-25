@@ -50,6 +50,10 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 8
+- **Sesiones**: en Estadísticas (vista avanzada) ves cuántas sesiones tuviste. Una sesión termina con «Me voy» o con una pausa larga (se cambia en Ajustes › General).
+- **Rutina**: en Ajustes › Rutina cargás lo que hacés por fuera (facultad, gimnasio, médico…) con horario y días. En el detalle de *Horas inactivas* y de cada día, la app te cuenta en qué se fue ese tiempo.
+
 ### Novedades de la beta 7
 - **Avisos en cola**: no se pisan ni tapan el *Deshacer*, y duran menos. Los avisos automáticos ya no te sacan el foco ni activan teclas sueltas.
 - **Próximo pomodoro**: arranca con los minutos del próximo cuadradito fantasma (si faltan 16, 16).
