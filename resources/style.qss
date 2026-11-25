@@ -315,13 +315,13 @@ QListWidget#SettingsNav { background: transparent; border: none; border-right: 1
 QListWidget#SettingsNav::item { padding: 8px 10px; border-radius: 6px; color: @t3; margin: 1px 0; }
 QListWidget#SettingsNav::item:hover { background: @s3; color: @t1; }
 QListWidget#SettingsNav::item:selected { background: @s5; color: @t1; }
-QToolButton#ThemeChoice { background: @s2; border: 1px solid @s4; border-radius: 8px; padding: 8px 6px 6px 6px; color: @t2; }
+QToolButton#ThemeChoice { background: @s2; border: 1px solid transparent; border-radius: 8px; padding: 8px 6px 6px 6px; color: @t2; }
 QToolButton#ThemeChoice:hover { background: @s4; border-color: @s7; }
 QToolButton#ThemeChoice:checked { background: @s5; border: 1px solid @t3; color: @t1; }
 
 /* Nota del pomodoro en el reproductor */
 QLineEdit#DeckNote {
-    background: @s1; border: 1px solid @s4; border-radius: 8px;
+    background: @s1; border: 1px solid transparent; border-radius: 8px;
     padding: 6px 9px; color: @t1; font-size: 9.5pt;
 }
 QLineEdit#DeckNote:focus { border-color: @s8; }
@@ -330,13 +330,13 @@ QLineEdit#DeckNote:focus { border-color: @s8; }
 QFrame#GoalPanel { background: @bg2; border-left: 1px solid @s5; }
 QScrollArea#GoalScroll, QWidget#GoalContent { background: transparent; }
 QLabel[role="caption"] { color: @t3; font-size: 7.5pt; font-weight: 600; letter-spacing: 1px; }
-QLineEdit#GoalField { background: @s2; border: 1px solid @s4; border-radius: 7px; padding: 6px 8px; color: @t1; }
+QLineEdit#GoalField { background: @s2; border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; color: @t1; }
 QLineEdit#GoalField:focus { border-color: @s8; }
-QPushButton#GoalSeg { background: @s2; border: 1px solid @s4; padding: 6px 8px; color: @t3; }
+QPushButton#GoalSeg { background: @s2; border: 1px solid transparent; padding: 6px 8px; color: @t3; }
 QPushButton#GoalSeg:first { border-top-left-radius: 7px; border-bottom-left-radius: 7px; }
 QPushButton#GoalSeg:last { border-top-right-radius: 7px; border-bottom-right-radius: 7px; border-left: none; }
 QPushButton#GoalSeg:checked { background: @s6; color: @t1; }
-QToolButton#GoalDay { background: @s2; border: 1px solid @s4; border-radius: 13px; min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px; color: @t3; font-weight: 600; }
+QToolButton#GoalDay { background: @s2; border: 1px solid transparent; border-radius: 13px; min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px; color: @t3; font-weight: 600; }
 QToolButton#GoalDay:checked { background: @t2; color: @bg; border-color: @t2; }
 QToolButton#GoalClose { background: transparent; border: none; border-radius: 6px; padding: 4px; }
 QToolButton#GoalClose:hover { background: @s4; }
@@ -360,20 +360,20 @@ QPushButton#GreetActivity { background: @s3; color: @t1; border: 1px solid @s6; 
 QPushButton#GreetActivity:hover { border-color: @acc; }
 QPushButton#GreetGo { background: @acc; color: #ffffff; border: none; border-radius: 9px; padding: 9px 20px; font-weight: 600; font-size: 10.5pt; }
 QPushButton#GreetGo:hover { background: @accHi; }
-QPushButton#MoodBtn { background: @s2; border: 1px solid @s4; border-radius: 15px; padding: 0; color: @t3; font-weight: 600; }
+QPushButton#MoodBtn { background: @s2; border: 1px solid transparent; border-radius: 15px; padding: 0; color: @t3; font-weight: 600; }
 QPushButton#MoodBtn:hover { border-color: @s8; color: @t1; }
 QPushButton#MoodBtn:checked { background: @t2; color: @bg; border-color: @t2; }
-QPlainTextEdit#DiaryNote, QLineEdit#DiaryLine { background: @s2; border: 1px solid @s4; border-radius: 7px; padding: 6px 8px; color: @t1; }
+QPlainTextEdit#DiaryNote, QLineEdit#DiaryLine { background: @s2; border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; color: @t1; }
 QPlainTextEdit#DiaryNote:focus, QLineEdit#DiaryLine:focus { border-color: @s8; }
 QToolButton#SettingsFold { background: transparent; border: none; color: @t3; padding: 4px 0; font-weight: 600; }
 QToolButton#SettingsFold:hover { color: @t1; }
 QFrame#NotePad { background: @bg2; border: 1px solid @s5; border-left: none; }
 QLabel#NotePadTitle { color: @t1; font-size: 11pt; font-weight: 600; }
-QPlainTextEdit#NotePadText { background: @s2; border: 1px solid @s4; border-radius: 7px; padding: 8px 10px; color: @t1; }
+QPlainTextEdit#NotePadText { background: @s2; border: 1px solid transparent; border-radius: 7px; padding: 8px 10px; color: @t1; }
 QPlainTextEdit#NotePadText:focus { border-color: @s8; }
 QPushButton#NotePadClose { background: transparent; border: none; color: @t3; padding: 2px 6px; }
 QPushButton#NotePadClose:hover { color: @t1; }
-QPushButton#NotePadBtn { background: @s2; border: 1px solid @s4; border-radius: 7px; padding: 8px 10px; color: @t2; text-align: left; }
+QPushButton#NotePadBtn { background: @s2; border: 1px solid transparent; border-radius: 7px; padding: 8px 10px; color: @t2; text-align: left; }
 QPushButton#NotePadBtn:hover { border-color: @s8; color: @t1; }
 QPushButton#GreetLater { background: transparent; color: @t3; border: 1px solid @s5; border-radius: 9px; padding: 9px 16px; }
 QPushButton#GreetLater:hover { color: @t1; border-color: @s8; }
@@ -382,7 +382,7 @@ QPushButton#GreetLater:hover { color: @t1; border-color: @s8; }
 QToolButton#GoalStep { background: @s3; border: 1px solid @s5; border-radius: 12px; min-width: 24px; max-width: 24px; min-height: 24px; max-height: 24px; color: @t2; font-weight: 600; }
 QToolButton#GoalStep:hover { background: @s5; color: @t1; }
 QLabel#GoalRowValue { color: @t1; font-weight: 600; font-family: "Bahnschrift", "Inter", "Segoe UI"; font-size: 10.5pt; }
-QToolButton#GoalRowActivity { background: transparent; border: 1px solid @s4; border-radius: 10px; color: @t2; padding: 1px 7px 1px 5px; font-size: 11px; }
+QToolButton#GoalRowActivity { background: transparent; border: 1px solid transparent; border-radius: 10px; color: @t2; padding: 1px 7px 1px 5px; font-size: 11px; }
 QToolButton#GoalRowActivity:hover { background: @s4; color: @t1; }
 QToolButton#GoalRowDelete { background: transparent; border: none; color: @t3; padding: 2px 6px; border-radius: 6px; }
 QToolButton#GoalRowDelete:hover { background: @s4; color: @t1; }
@@ -404,3 +404,6 @@ QToolButton#DevButton { background: transparent; border: 1px dashed @acc; border
 QToolButton#DevButton:hover { background: @s4; }
 
 QScrollArea#SettingsScroll, QWidget#SettingsPage { background: transparent; }
+
+/* Mejoras 5.0: menos líneas; los campos se distinguen por el fondo y marcan el borde solo al editar. */
+QLineEdit#GoalField:focus, QPlainTextEdit#DiaryNote:focus, QLineEdit#DiaryLine:focus, QPlainTextEdit#NotePadText:focus { border: 1px solid @s6; }

@@ -226,3 +226,4 @@ Tres plazos; cada uno se prende, se apaga y se ajusta en *Ajustes › Hitos*.
 - **Evolución**: cuatro fichas con número grande y variación "↑ 12 % vs 28 días antes" (estudio, pomodoros, indebido, inactivo), tarjetas más bajas y sin bordes, titular en lenguaje natural más grande.
 - Pendiente de la tanda: color con significado y menos líneas en el resto de la app. Siguen 5.1 (cantidad de sesiones, rutina) y 5.2 (personalizar paneles).
 - **Menú ⋯ más corto**: se sacaron *Hitos* (ahora solo en Ajustes › Hitos) y *Actividades* (tecla A, menú de actividad › administrar, o *Ajustes › General › Abrir actividades…*). *Ajustes* queda al final, debajo de *Ver tutorial* y arriba de *Salir*.
+- **Menos líneas**: los campos del panel Objetivo, el anotador, el ánimo y las pastillas de tema pierden el borde (se distinguen por el fondo); el borde aparece solo al editar. Colores: rojo = pomodoro, verde agua = recreo, dorado = hitos (sin cambios de paleta).
