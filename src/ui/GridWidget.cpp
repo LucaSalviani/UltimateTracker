@@ -860,7 +860,10 @@ void GridWidget::contextMenuEvent(QContextMenuEvent* e)
     for (const Placed& pl : m_placed) {
         if (!pl.rect.contains(e->pos())) continue;
         const Pomodoro& pm = m_pomos[pl.index];
-        if (isGhost(pm)) break;   // un fantasma es parte del día: menú del día
+        if (isGhost(pm)) {   // un fantasma es parte del día: menú del día, con su duración y actividad para marcarlo
+            emit ghostMenuRequested(pm.day, qMax(1, int(pm.plannedSec / 60)), pm.folderId, e->globalPos());
+            return;
+        }
         // Varios elegidos y el click es sobre uno de ellos: menú para todos.
         if (m_selected.size() > 1 && m_selected.contains(pm.id)) {
             emit selectionMenuRequested(QList<qint64>(m_selected.begin(), m_selected.end()), e->globalPos());

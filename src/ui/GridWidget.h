@@ -69,6 +69,7 @@ signals:
     void pomodoroMenuRequested(qint64 pomodoroId, const QPoint& globalPos);
     // Click derecho en un día fuera de los cuadraditos, o click en un fantasma.
     void dayMenuRequested(const QDate& day, const QPoint& globalPos);
+    void ghostMenuRequested(const QDate& day, int minutes, qint64 folder, const QPoint& globalPos);   // Mejoras 5.0
     void goalClicked(const QDate& day);
     // Mejoras 2.0: varios elegidos (Ctrl / Shift + click) y click derecho sobre ellos.
     void selectionMenuRequested(const QList<qint64>& ids, const QPoint& globalPos);

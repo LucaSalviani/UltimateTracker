@@ -421,7 +421,8 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     });
 
     connect(m_grid, &GridWidget::goalClicked, this, &MainWindow::openGoalPanel);
-    connect(m_grid, &GridWidget::dayMenuRequested, this, &MainWindow::showDayMenu);
+    connect(m_grid, &GridWidget::dayMenuRequested, this, [this](const QDate& d, const QPoint& p) { showDayMenu(d, p); });
+    connect(m_grid, &GridWidget::ghostMenuRequested, this, [this](const QDate& d, int m, qint64 f, const QPoint& p) { showDayMenu(d, p, m, f); });
     connect(m_grid, &GridWidget::dayActivated, this, [this](const QDate& d) {
         m_grid->setAnchor(d);
         setZoom(GridWidget::Zoom::Day);
@@ -2589,7 +2590,7 @@ void MainWindow::preloadFromGoal()
     refreshDeck();
 }
 
-void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)
+void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos, int ghostMinutes, qint64 ghostFolder)
 {
     QMenu menu(this);
     const auto r = goals::resolve(m_db->goals(), day);
@@ -2603,13 +2604,15 @@ void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos)
             setZoom(GridWidget::Zoom::Day);
         });
     if (day <= m_today)
-        menu.addAction(QStringLiteral("Marcar un pomodoro como hecho…"), this, [this, day] { markManual(day); });
+        menu.addAction(ghostMinutes > 0 ? QStringLiteral("Marcar este pomodoro (%1) como hecho…").arg(fmt::duration(ghostMinutes * 60))
+                                        : QStringLiteral("Marcar un pomodoro como hecho…"),
+                       this, [this, day, ghostMinutes, ghostFolder] { markManual(day, ghostMinutes, ghostFolder); });
     menu.exec(globalPos);
 }
 
 // Mejoras 4.0 · 1: un pomodoro que se hizo pero no se cronometró. Cuenta igual
 // que los demás (horas y racha) y se distingue con una marquita "manual".
-void MainWindow::markManual(const QDate& day)
+void MainWindow::markManual(const QDate& day, int minutes, qint64 folder)
 {
     QDialog dlg(this);
     dlg.setWindowTitle(QStringLiteral("Marcar pomodoro como hecho"));
@@ -2618,13 +2621,13 @@ void MainWindow::markManual(const QDate& day)
     int cur = 0;
     for (const Folder& f : m_tree.all()) {
         who->addItem(m_tree.path(f.id), f.id);
-        if (f.id == m_session->folderId()) cur = who->count() - 1;
+        if (f.id == (folder > 0 ? folder : m_session->folderId())) cur = who->count() - 1;
     }
     who->setCurrentIndex(cur);
     auto* mins = new QSpinBox(&dlg);
     mins->setRange(1, 600);
     mins->setSuffix(QStringLiteral(" min"));
-    mins->setValue(m_db->setting("work_min", 25).toInt());
+    mins->setValue(minutes > 0 ? minutes : m_db->setting("work_min", 25).toInt());   // Mejoras 5.0: la duración del fantasma tocado
     auto* at = new QTimeEdit(&dlg);
     at->setDisplayFormat(QStringLiteral("HH:mm"));
     // Hoy: termina ahora. Otro día: a media mañana, que se puede cambiar.
