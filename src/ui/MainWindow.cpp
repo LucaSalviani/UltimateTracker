@@ -652,7 +652,11 @@ QWidget* MainWindow::buildTitleBar()
     m_btnZoomIn = iconButton(bar, icons::Id::ZoomIn, QStringLiteral("Acercar: mes → semana → día (Ctrl +)"));
     m_btnZoomOut = iconButton(bar, icons::Id::ZoomOut, QStringLiteral("Alejar: día → semana → mes (Ctrl −)"));
     connect(m_btnZoomOut, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMin(2, int(m_grid->zoom()) + 1))); });
-    connect(m_btnZoomIn, &QToolButton::clicked, this, [this] { setZoom(GridWidget::Zoom(qMax(0, int(m_grid->zoom()) - 1))); });
+    // Mejoras 6.0: desde Estadísticas o Actividades, «acercar» vuelve a la vista principal.
+    connect(m_btnZoomIn, &QToolButton::clicked, this, [this] {
+        if (m_overlay != Overlay::None) { showOverlay(Overlay::None); return; }
+        setZoom(GridWidget::Zoom(qMax(0, int(m_grid->zoom()) - 1)));
+    });
 
     auto* goalBtn = iconButton(bar, icons::Id::Goal, QStringLiteral("Objetivo del día (G)"));
     goalBtn->setObjectName("TbGoal");
@@ -1165,6 +1169,8 @@ void MainWindow::showOverlay(Overlay o)
         m_pages->setCurrentIndex(PageGrid);
         break;
     }
+    m_btnZoomIn->setEnabled(o != Overlay::None || m_grid->zoom() != GridWidget::Zoom::Day);
+    m_btnZoomIn->setToolTip(o != Overlay::None ? QStringLiteral("Volver a la vista principal") : QStringLiteral("Acercar la vista"));
     applyViewSize();
 }
 
