@@ -61,6 +61,9 @@ private:
     QScrollArea*   m_evoScroll = nullptr;
     QPushButton*   m_monthBtn = nullptr;
     QPushButton*   m_viewBtn = nullptr;   // Mejoras 4.1: simple / avanzada
+    QPushButton*   m_layoutBtn = nullptr; // Mejoras 5.2: Personalizar (solo en avanzada)
+    bool           m_editing = false;
+    void           layoutAction(const QString& key);
     QToolButton*   m_prev = nullptr;
     QToolButton*   m_next = nullptr;
 };

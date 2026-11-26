@@ -72,10 +72,42 @@ struct StatsData {
     qint64 todaySec = 0, weekSec = 0, allSec = 0;
     ms::Records records;   // incluye hoy
     int bestStreak = 0;
+    // Mejoras 5.2: paneles de la pantalla (orden, visibilidad y tamaño 0/1/2 = S/M/L), editables en la vista avanzada
+    struct Panel { QString id; bool visible = true; int size = 1; };
+    QVector<Panel> layout;
+    bool editing = false;
+    int sizeOf(const QString& id) const { for (const Panel& pn : layout) if (pn.id == id) return pn.size; return 1; }
     QSet<qint64> hiddenRows;   // Mejoras 5.0: actividades que el usuario sacó de la lista
     QHash<qint64, QColor> colors;   // M35: color de cada actividad (vacío si están apagados)
     QColor colorOf(qint64 id) const { return colors.value(id, statsInk()); }
 };
+
+// Mejoras 5.2: orden, visibilidad y tamaño de los paneles ("hero:1:1,chips:1:1,…" = id:visible:tamaño 0/1/2).
+static QVector<StatsData::Panel> parseLayout(const QString& s)
+{
+    static const QStringList all = {QStringLiteral("hero"), QStringLiteral("chips"), QStringLiteral("chart"), QStringLiteral("folders")};
+    QVector<StatsData::Panel> out;
+    for (const QString& part : s.split(',', Qt::SkipEmptyParts)) {
+        const QStringList f = part.split(':');
+        if (f.size() < 3 || !all.contains(f[0])) continue;
+        bool dup = false;
+        for (const auto& o : out) if (o.id == f[0]) dup = true;
+        if (dup) continue;
+        out.append({f[0], f[1] != QLatin1String("0"), qBound(0, f[2].toInt(), 2)});
+    }
+    for (const QString& id : all) {   // lo que falte vuelve con el valor por defecto
+        bool has = false;
+        for (const auto& o : out) if (o.id == id) has = true;
+        if (!has) out.append({id, true, 1});
+    }
+    return out;
+}
+static QString serializeLayout(const QVector<StatsData::Panel>& v)
+{
+    QStringList l;
+    for (const auto& p : v) l << QStringLiteral("%1:%2:%3").arg(p.id).arg(p.visible ? 1 : 0).arg(p.size);
+    return l.join(',');
+}
 
 class StatsCanvas : public QWidget {
 public:
@@ -140,14 +172,24 @@ protected:
         double y = 8;
         zones.clear();
 
-        y = paintHero(p, L, y, W) + 18;
-        if (hasChips()) y = paintChips(p, L, y, W) + 18;   // M44
-        y = paintChart(p, L, y, W) + 22;
-        paintFolders(p, L, y, W);
+        if (data.editing) y = paintEditHeader(p, L, y, W) + 10;
+        for (const StatsData::Panel& pn : data.layout) {
+            const bool present = panelHeight(pn.id, W) > 0;
+            if (!present) continue;
+            if (!pn.visible) {
+                if (data.editing) y = paintEditBar(p, L, y, W, pn, true) + 10;
+                continue;
+            }
+            if (data.editing) y = paintEditBar(p, L, y, W, pn, false) + 6;
+            if (pn.id == QLatin1String("hero")) y = paintHero(p, L, y, W) + 18;
+            else if (pn.id == QLatin1String("chips")) y = paintChips(p, L, y, W) + 18;
+            else if (pn.id == QLatin1String("chart")) y = paintChart(p, L, y, W) + 22;
+            else paintFolders(p, L, y, W), y += 24 + foldersBodyH() + 24;
+        }
     }
 
 private:
-    static constexpr int kMaxFolderRows = 6;   // Mejoras 5.0: más que eso → scroll adentro del bloque
+    int maxFolderRows() const { static const int v[3] = {3, 6, 12}; return v[qBound(0, data.sizeOf(QStringLiteral("folders")), 2)]; }   // más que eso → scroll adentro del bloque
     static constexpr double kRowH = 26;
     static constexpr double kChipH = 52;
 
@@ -211,8 +253,8 @@ private:
         return chips;
     }
     static constexpr double kChipGap = 10;
-    static constexpr double kChipMinW = 200;
-    int chipsPerRow(double W, int n) const { return qBound(1, int((W + kChipGap) / (kChipMinW + kChipGap)), qMax(1, n)); }
+    double chipMinW() const { static const double v[3] = {150, 200, 300}; return v[qBound(0, data.sizeOf(QStringLiteral("chips")), 2)]; }
+    int chipsPerRow(double W, int n) const { return qBound(1, int((W + kChipGap) / (chipMinW() + kChipGap)), qMax(1, n)); }
     double chipsHeight(double W) const
     {
         const int n = int(buildChips().size());
@@ -277,16 +319,78 @@ private:
         switch (data.period) {
         case StatsWidget::Period::Day:  return 24 + 66;
         case StatsWidget::Period::Year: return 24 + 30 + 7 * (heatCell(W) + 3) + 18 + 24;
-        default:                        return 24 + 168;
+        default:                        return 24 + plotH() + 40;
         }
     }
+    double plotH() const { static const double v[3] = {92, 128, 190}; return v[qBound(0, data.sizeOf(QStringLiteral("chart")), 2)]; }
     static double heatCell(double W) { return qBound(6.0, (W - 30) / 53.0 - 3, 14.0); }
 
+    // Mejoras 5.2: alto de cada panel (0 = no hay nada que mostrar), con su separación de abajo.
+    double panelHeight(const QString& id, double W) const
+    {
+        if (id == QLatin1String("hero")) return heroHeight() + 18;
+        if (id == QLatin1String("chips")) return hasChips() ? chipsHeight(W) + 18 : 0;
+        if (id == QLatin1String("chart")) return chartHeight(W) + 22;
+        return 24 + foldersBodyH() + 24;
+    }
+    static constexpr double kEditBarH = 28;
     int contentHeight(int w) const
     {
         const double W = w - 32;
-        return int(8 + heroHeight() + 18 + (hasChips() ? chipsHeight(W) + 18 : 0) + chartHeight(W) + 22 + 24 +
-                   foldersBodyH() + 24);
+        double h = 8;
+        if (data.editing) h += 34 + 10;
+        for (const StatsData::Panel& pn : data.layout) {
+            const double ph = panelHeight(pn.id, W);
+            if (ph <= 0) continue;
+            if (!pn.visible) { if (data.editing) h += kEditBarH + 10; continue; }
+            h += ph + (data.editing ? kEditBarH + 6 : 0);
+        }
+        return int(h);
+    }
+
+    // Botoncito de la barra de edición (con su zona de click).
+    QRectF editPill(QPainter& p, double right, double y, const QString& t, const QString& key, bool on = false)
+    {
+        p.setFont(theme::uiFont(8, on ? QFont::DemiBold : QFont::Normal));
+        const double w = qMax(22.0, QFontMetricsF(p.font()).horizontalAdvance(t) + 16);
+        const QRectF r(right - w, y + 3, w, 22);
+        p.setPen(Qt::NoPen);
+        p.setBrush(on ? theme::mix(theme::surface, statsInk(), 0.45) : theme::surface);
+        p.drawRoundedRect(r, 11, 11);
+        p.setPen(on ? theme::text : theme::textDim);
+        p.drawText(r, Qt::AlignCenter, t);
+        zone(r, key, p);
+        return r;
+    }
+    double paintEditHeader(QPainter& p, double L, double y, double W)
+    {
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::surface);
+        p.drawRoundedRect(QRectF(L, y, W, 34), 10, 10);
+        p.setFont(theme::uiFont(9));
+        p.setPen(theme::textDim);
+        p.drawText(QRectF(L + 14, y, W - 200, 34), Qt::AlignLeft | Qt::AlignVCenter,
+                   QStringLiteral("Personalizar: ocultá, ordená y cambiá el tamaño de cada panel"));
+        QRectF r = editPill(p, L + W - 8, y + 3, QStringLiteral("Listo"), QStringLiteral("lay:done"), true);
+        editPill(p, r.left() - 6, y + 3, QStringLiteral("Restablecer"), QStringLiteral("lay:reset"));
+        return y + 34;
+    }
+    double paintEditBar(QPainter& p, double L, double y, double W, const StatsData::Panel& pn, bool hidden)
+    {
+        static const QMap<QString, QString> names = {{"hero", "Resumen"}, {"chips", "Hitos y objetivos"}, {"chart", "Gráfico"}, {"folders", "Actividades"}};
+        p.setFont(theme::uiFont(9, QFont::DemiBold));
+        p.setPen(hidden ? theme::textFaint : theme::textDim);
+        p.drawText(QRectF(L, y, 240, kEditBarH), Qt::AlignLeft | Qt::AlignVCenter, names.value(pn.id).toUpper() + (hidden ? QStringLiteral("  (oculto)") : QString()));
+        double x = L + W;
+        x = editPill(p, x, y, hidden ? QStringLiteral("Mostrar") : QStringLiteral("Ocultar"), QStringLiteral("lay:vis:") + pn.id).left() - 6;
+        x = editPill(p, x, y, QStringLiteral("▼"), QStringLiteral("lay:down:") + pn.id).left() - 2;
+        x = editPill(p, x, y, QStringLiteral("▲"), QStringLiteral("lay:up:") + pn.id).left() - 10;
+        if (!hidden) {
+            static const char* sz[] = {"S", "M", "L"};
+            for (int i = 2; i >= 0; --i)
+                x = editPill(p, x, y, QString::fromUtf8(sz[i]), QStringLiteral("lay:size:%1:%2").arg(pn.id).arg(i), pn.size == i).left() - 2;
+        }
+        return y + kEditBarH;
     }
 
     void sectionTitle(QPainter& p, double x, double y, const QString& t) const
@@ -298,8 +402,9 @@ private:
 
     // Mejoras 5.0: arriba de todo, tres datos con jerarquía: la racha (protagonista), lo estudiado y el foco.
     // En la vista avanzada, abajo van los datos finos (recreos, indebidos, inactivas).
-    static constexpr double kHeroH = 96, kSmallH = 58;
-    double heroHeight() const { return data.simple ? kHeroH : kHeroH + 10 + kSmallH; }
+    static constexpr double kSmallH = 58;
+    double heroH() const { static const double v[3] = {76, 96, 120}; return v[qBound(0, data.sizeOf(QStringLiteral("hero")), 2)]; }
+    double heroHeight() const { return data.simple ? heroH() : heroH() + 10 + kSmallH; }
     int focusPct() const
     {
         const qint64 den = data.totals.study + data.totals.breaks + data.totals.undue;
@@ -333,7 +438,7 @@ private:
         const double sw = qMax(230.0, W * 0.44);                  // racha
         const double cw = (W - sw - 2 * gap) / 2;
         // ---- racha: el número grande
-        const QRectF sr(L, y, sw, kHeroH);
+        const QRectF sr(L, y, sw, heroH());
         p.setPen(Qt::NoPen);
         p.setBrush(theme::surface);
         p.drawRoundedRect(sr, 10, 10);
@@ -347,7 +452,7 @@ private:
         const double numW = QFontMetricsF(p.font()).horizontalAdvance(num);
         p.setFont(theme::uiFont(10));
         p.setPen(theme::textDim);
-        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, kHeroH - 14), Qt::AlignLeft | Qt::AlignBottom,
+        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, heroH() - 14), Qt::AlignLeft | Qt::AlignBottom,
                    data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
         // columna derecha: comodines, récord y lo que pasa hoy
         QStringList side;
@@ -374,12 +479,12 @@ private:
         zone(sr, QStringLiteral("streak"), p);
 
         // ---- estudio y foco
-        card(p, QRectF(L + sw + gap, y, cw, kHeroH), data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, QStringLiteral("study"));
+        card(p, QRectF(L + sw + gap, y, cw, heroH()), data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, QStringLiteral("study"));
         const int fp = focusPct();
-        card(p, QRectF(L + sw + gap + cw + gap, y, cw, kHeroH), QStringLiteral("Foco"),
+        card(p, QRectF(L + sw + gap + cw + gap, y, cw, heroH()), QStringLiteral("Foco"),
              fp >= 0 ? QStringLiteral("%1 %").arg(fp) : QStringLiteral("—"),
              QStringLiteral("del tiempo de sesión"), 20, theme::text, QStringLiteral("focus"));
-        y += kHeroH;
+        y += heroH();
         if (data.simple) return y;
 
         // ---- avanzada: datos finos
@@ -391,8 +496,9 @@ private:
         card(p, QRectF(L + 2 * (fw + gap), y, fw, kSmallH), QStringLiteral("Horas inactivas"), fmt::hours(data.totals.inactive), QString(), 13, theme::textDim, QStringLiteral("inactive"));
         qint64 sesSec = 0;
         for (const auto& s : data.sessions) sesSec += s.length();
-        card(p, QRectF(L + 3 * (fw + gap), y, fw, kSmallH), QStringLiteral("Sesiones"), QString::number(data.sessions.size()),
-             data.sessions.isEmpty() ? QString() : QStringLiteral("prom. %1").arg(fmt::duration(int(sesSec / data.sessions.size()))), 13, theme::text, QStringLiteral("sessions"));
+        card(p, QRectF(L + 3 * (fw + gap), y, fw, kSmallH), QStringLiteral("Sesiones"),
+             data.sessions.isEmpty() ? QStringLiteral("0") : QStringLiteral("%1 · prom. %2").arg(data.sessions.size()).arg(fmt::duration(int(sesSec / data.sessions.size()))),
+             QString(), 13, theme::text, QStringLiteral("sessions"));
         return y + kSmallH;
     }
 
@@ -466,7 +572,7 @@ private:
         sectionTitle(p, L, y, QStringLiteral("Horas por día"));
         y += 24;
         const int n = int(data.from.daysTo(data.to)) + 1;
-        const double chartH = 128;
+        const double chartH = plotH();
         const double labelRoom = 18;   // espacio para el número arriba de la barra
         const double slot = W / n;
         const double bw = qMax(3.0, slot * 0.62);
@@ -729,7 +835,7 @@ private:
     double foldersBodyH() const
     {
         const int n = visibleRows().size();
-        return qMax(1, qMin(n, kMaxFolderRows)) * kRowH;
+        return qMax(1, qMin(n, maxFolderRows())) * kRowH;
     }
     double m_foldScroll = 0, m_foldMax = 0;
     QRectF m_foldRect;
@@ -952,6 +1058,11 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     });
     top->insertWidget(top->indexOf(m_folder), m_monthBtn);
     top->insertWidget(top->indexOf(m_folder) + 1, m_viewBtn);
+    m_layoutBtn = new QPushButton(QStringLiteral("Personalizar"), this);   // Mejoras 5.2
+    m_layoutBtn->setCursor(Qt::PointingHandCursor);
+    m_layoutBtn->setToolTip(QStringLiteral("Ocultar, ordenar y cambiar el tamaño de los paneles"));
+    connect(m_layoutBtn, &QPushButton::clicked, this, [this] { m_editing = !m_editing; fade::cross(m_canvas, 150); refresh(); });
+    top->insertWidget(top->indexOf(m_viewBtn) + 1, m_layoutBtn);
     top->addWidget(info);
 
     m_canvas = new StatsCanvas(this);
@@ -1117,6 +1228,8 @@ void StatsWidget::refresh()
     m_monthBtn->setText(rolling() ? QStringLiteral("30 días") : QStringLiteral("Calendario"));
     const bool advanced = m_db->setting("stats_advanced", 0).toBool();
     m_viewBtn->setText(advanced ? QStringLiteral("Avanzada") : QStringLiteral("Simple"));
+    if (!advanced) m_editing = false;
+    m_layoutBtn->setVisible(advanced && m_period != Period::Evolution);
     m_periodGroup->button(int(Period::Evolution))->setVisible(advanced);   // la Evolución es de la vista avanzada
     if (!advanced && m_period == Period::Evolution) { m_period = Period::Week; m_periodGroup->button(int(m_period))->setChecked(true); m_label->setText(periodLabel()); }
     const bool evo = m_period == Period::Evolution;
@@ -1148,6 +1261,8 @@ void StatsWidget::refresh()
     d.byDay = stats::studyByDay(*m_db, d.from, d.to, d.filter);
     d.sessions = insights::sessions(*m_db, d.from, qMin(d.to, now.date().addDays(1)), d.filter);
     d.simple = !m_db->setting("stats_advanced", 0).toBool();
+    d.layout = parseLayout(m_db->setting("stats_layout", "").toString());
+    d.editing = m_editing && !d.simple;
     d.heatMetric = d.simple ? QStringLiteral("hours") : m_db->setting("stats/heat", "hours").toString();
     if (m_period != Period::Day) {
         d.daily = insights::daily(*m_db, d.from, d.to, d.filter, now);
@@ -1385,8 +1500,26 @@ void StatsWidget::pickFolders()
     pickFolders();   // el menú se vuelve a abrir para marcar varias de una
 }
 
+void StatsWidget::layoutAction(const QString& key)
+{
+    auto lay = parseLayout(m_db->setting("stats_layout", "").toString());
+    const QStringList f = key.split(':');   // lay:acción[:panel[:valor]]
+    auto find = [&](const QString& id) { for (int i = 0; i < lay.size(); ++i) if (lay[i].id == id) return i; return -1; };
+    const QString act = f.value(1);
+    const int i = find(f.value(2));
+    if (act == QLatin1String("done")) m_editing = false;
+    else if (act == QLatin1String("reset")) lay = parseLayout(QString());
+    else if (i >= 0 && act == QLatin1String("vis")) lay[i].visible = !lay[i].visible;
+    else if (i >= 0 && act == QLatin1String("size")) lay[i].size = qBound(0, f.value(3).toInt(), 2);
+    else if (i > 0 && act == QLatin1String("up")) lay.swapItemsAt(i, i - 1);
+    else if (i >= 0 && i + 1 < lay.size() && act == QLatin1String("down")) lay.swapItemsAt(i, i + 1);
+    m_db->setSetting("stats_layout", serializeLayout(lay));
+    refresh();
+}
+
 void StatsWidget::showDetail(const QString& key)
 {
+    if (key.startsWith(QLatin1String("lay:"))) { layoutAction(key); return; }
     if (key == QLatin1String("folders:pick")) { pickFolders(); return; }
     const StatsData& d = m_canvas->data;
     const QDate last = qMin(d.to, d.today);

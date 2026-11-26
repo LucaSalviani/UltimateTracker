@@ -50,6 +50,9 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 9
+- **Personalizar las estadísticas**: en la vista *Avanzada* tocá *Personalizar* y, para cada panel (Resumen, Hitos, Gráfico, Actividades), elegí ocultarlo, subirlo o bajarlo, y su tamaño S / M / L. *Restablecer* vuelve a como venía; *Listo* termina.
+
 ### Novedades de la beta 8
 - **Sesiones**: en Estadísticas (vista avanzada) ves cuántas sesiones tuviste. Una sesión termina con «Me voy» o con una pausa larga (se cambia en Ajustes › General).
 - **Rutina**: en Ajustes › Rutina cargás lo que hacés por fuera (facultad, gimnasio, médico…) con horario y días. En el detalle de *Horas inactivas* y de cada día, la app te cuenta en qué se fue ese tiempo.
