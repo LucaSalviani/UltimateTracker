@@ -274,7 +274,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     // Ajuste viejo "proportional" (sí/no) → modo de tamaño.
     if (m_db->setting("size_mode").toString().isEmpty())
         m_db->setSetting("size_mode", m_db->setting("proportional", 0).toBool() ? 2 : 0);
-    m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
+    applyGroupStyle();
     m_grid->setBaseScale(m_db->setting("tile_size", 100).toInt() / 100.0);
     m_toast = new QLabel(gridPage);
     m_toast->setProperty("role", "toast");
@@ -306,10 +306,20 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
     connect(&m_toastTimer, &QTimer::timeout, this, [this] { m_toastShowing = false; m_toastAction = nullptr; showNextToast(); });
 
     m_liveStats = new LiveStats(gridPage);
-    m_liveActivityScope = m_db->setting("live_scope", "day").toString() == QLatin1String("activity");
+    // Mejoras 6.0: tres vistas: «Esta actividad» (solo lo de la actividad), «Todo el día · por actividad»
+    // (todo, separado por actividad) y «Todo el día · junto» (todo, sin separar).
+    {
+        const QString ls = m_db->setting("live_scope", "day").toString();
+        m_liveActivityScope = ls == QLatin1String("activity");
+        m_liveFlat = ls == QLatin1String("flat");
+        applyGroupStyle();
+    }
     connect(m_liveStats, &LiveStats::scopeToggled, this, [this] {
-        m_liveActivityScope = !m_liveActivityScope;
-        m_db->setSetting("live_scope", m_liveActivityScope ? "activity" : "day");
+        if (m_liveActivityScope) { m_liveActivityScope = false; m_liveFlat = false; }
+        else if (!m_liveFlat) m_liveFlat = true;
+        else { m_liveFlat = false; m_liveActivityScope = true; }
+        m_db->setSetting("live_scope", m_liveActivityScope ? "activity" : (m_liveFlat ? "flat" : "day"));
+        applyGroupStyle();
         reloadGrid();
     });
 
@@ -1219,6 +1229,14 @@ void MainWindow::refreshBand()
     m_btnToday->setVisible(!showingToday);
 }
 
+void MainWindow::applyGroupStyle()
+{
+    int style = m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt();
+    if (m_liveFlat) style = 0;                                  // «junto»: sin separar
+    else if (!m_liveActivityScope && style == 0) style = 1;     // «por actividad»: separado aunque en Ajustes esté sin agrupar
+    m_grid->setGroupStyle(GridWidget::GroupStyle(style));
+}
+
 void MainWindow::reloadGrid()
 {
     // "Ver esta actividad" filtra los cuadraditos (y su numeración); "todo el día" muestra todo.
@@ -1374,6 +1392,7 @@ void MainWindow::refreshLiveStats()
 
     LiveStats::Data d;
     d.activityScope = m_liveActivityScope;
+    d.flat = m_liveFlat;
     d.scopeName = m_tree.find(folder) ? m_tree.find(folder)->name : QStringLiteral("Sin actividad");
     QSet<qint64> activities;
     for (const Pomodoro& p : m_todayPomos) {
@@ -2827,7 +2846,7 @@ void MainWindow::openSettings(int page)
     m_deck->setAdjustOptions(deckAdjustFrom(m_db));
     m_deck->setVisorStyle(m_db->setting("visor_style", 0).toInt());
     applySizePreset();
-    m_grid->setGroupStyle(GridWidget::GroupStyle(m_db->setting("group_style", m_db->setting("group_by_activity", 1).toBool() ? 1 : 0).toInt()));
+    applyGroupStyle();
     applySystemSettings();
     applySoundSettings();
     applyGuardSettings();

@@ -47,7 +47,7 @@ void LiveStats::paintEvent(QPaintEvent*)
     // histórico va aparte, chiquito, para que no se mezcle.
     const QString scope = m_data.activityScope
         ? QStringLiteral("HOY · %1").arg(m_data.scopeName.toUpper())
-        : QStringLiteral("HOY · TODO EL DÍA");
+        : (m_data.flat ? QStringLiteral("HOY · TODO EL DÍA · JUNTO") : QStringLiteral("HOY · TODO EL DÍA · POR ACTIVIDAD"));
     const QString history = m_data.activityScope && m_data.activityTotalSec > 0
         ? QStringLiteral("   en total: %1").arg(fmt::hours(m_data.activityTotalSec)) : QString();
     QFont hf = condensed(11, QFont::DemiBold);
@@ -70,7 +70,7 @@ void LiveStats::paintEvent(QPaintEvent*)
     p.setFont(tf);
     p.setPen(m_hoverToggle ? theme::text : theme::textFaint);
     p.drawText(tr, Qt::AlignRight | Qt::AlignVCenter,
-               m_data.activityScope ? QStringLiteral("ver todo el día ⇄") : QStringLiteral("ver esta actividad ⇄"));
+               m_data.activityScope ? QStringLiteral("ver todo el día ⇄") : (m_data.flat ? QStringLiteral("ver esta actividad ⇄") : QStringLiteral("ver todo junto ⇄")));
 
     // Tres bloques: número grande + etiqueta
     struct Block { QString big; QString small; };

@@ -226,6 +226,8 @@ private:
     FolderMenu* m_folderMenu = nullptr;
     LiveStats*  m_liveStats = nullptr;
     bool        m_liveActivityScope = true;
+    bool        m_liveFlat = false;   // Mejoras 6.0: todo el día, sin separar por actividad
+    void        applyGroupStyle();
     QVector<Pomodoro> m_todayPomos;      // pomodoros de hoy ya guardados (para stats en vivo)
     bool        m_numericDate = true;
 

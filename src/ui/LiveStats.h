@@ -8,6 +8,7 @@ class LiveStats : public QWidget {
     Q_OBJECT
 public:
     struct Data {
+        bool    flat = false;          // Mejoras 6.0: todo el día, junto (sin separar)
         bool    activityScope = true;  // true = esta actividad · false = todo el día
         QString doneWord = QStringLiteral("estudiado");   // Mejoras 3.0: "trabajado", "leído", "de foco"…
         QString scopeName;             // nombre de la actividad (si activityScope)
