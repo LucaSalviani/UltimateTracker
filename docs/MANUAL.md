@@ -50,6 +50,9 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 11
+- **Evolución**: períodos de **7, 15, 30, 90 días, 12 meses y Todo**. Cada ficha compara el período elegido con el anterior de igual largo ("↑ 42 % vs 30 días antes") y muestra la diferencia por día y el total ("+21m por día · total 35h45 (antes 25h10)"). Sirve para ver si este mes estudiaste más y cuánto. Sólo cuentan los días desde que empezaste a usar la app, y alcanza con unos días de datos previos.
+
 ### Novedades de la beta 10
 - **Acercar vuelve**: en Estadísticas, el botón de acercar te lleva de nuevo a la vista principal.
 - **Tres vistas de actividad** debajo de la grilla: *esta actividad*, *todo el día por actividad* y *todo el día junto* (sin separar).
@@ -69,7 +72,7 @@
 - **Próximo pomodoro**: arranca con los minutos del próximo cuadradito fantasma (si faltan 16, 16).
 - **Click derecho en un fantasma › marcar a mano** usa su duración y actividad.
 - **Estadísticas**: racha grande, *Foco %*, actividades acotadas con selector, y en Mes podés alternar *Calendario* y *Últimos 30 días* (el default se elige en Ajustes).
-- **Evolución** con fichas de variación contra los 28 días anteriores.
+- **Evolución** con fichas de variación contra el período anterior de igual largo (ver beta 11).
 - **Barra de arriba** más simple: el tamaño de los cuadraditos se elige en ⋯ › *Tamaño de los cuadraditos*. Los botones de acercar y alejar la vista siguen en la barra.
 
 ### Novedades de la beta 4

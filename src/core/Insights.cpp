@@ -100,14 +100,14 @@ Trend trend(const QVector<double>& perDay, int recentDays)
         for (int i = n - r - pr; i < n - r; ++i) prev += perDay[i];
         t.previous = prev / pr;
     }
-    t.enough = n >= 21 && pr >= 14 && t.previous > 0;
+    t.enough = r >= 7 && pr >= qMin(7, recentDays) && t.previous > 0;
     t.pct = t.previous > 0 ? (t.recent - t.previous) / t.previous : 0;
     return t;
 }
 
 QString Trend::sentence() const
 {
-    if (!enough) return QStringLiteral("Todavía no hay datos suficientes para una tendencia (hacen falta unas 3 semanas).");
+    if (!enough) return QStringLiteral("Todavía no hay datos suficientes para una tendencia (hace falta al menos una semana de estudio antes del período).");
     const int p = int(std::lround(std::abs(pct) * 100));
     if (std::abs(pct) < 0.05) return QStringLiteral("Estás parejo: casi lo mismo que el período anterior.");
     return pct > 0 ? QStringLiteral("Vas al alza: +%1 % que el período anterior.").arg(p)

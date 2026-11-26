@@ -237,6 +237,9 @@ Tres plazos; cada uno se prende, se apaga y se ajusta en *Ajustes › Hitos*.
 - **Personalizar estadísticas**: botón *Personalizar* en la vista avanzada (en la simple no existe). Cuatro paneles: *Resumen*, *Hitos y objetivos*, *Gráfico* y *Actividades*. Cada uno se puede **ocultar/mostrar**, **subir/bajar** y tiene tres tamaños **S / M / L**: Resumen (alto de las tarjetas), Hitos (ancho mínimo → cuántos por fila), Gráfico (alto de las barras), Actividades (3 / 6 / 12 filas antes del scroll). **Restablecer** vuelve al orden y tamaños originales; **Listo** sale del modo edición. Se guarda en `stats_layout` (`id:visible:tamaño`, p. ej. `hero:1:1,chips:1:1,chart:1:1,folders:1:1`). Vale también para la vista simple (lo que ocultes o reordenes sigue igual), pero solo se edita desde la avanzada.
 - Los paneles ocultos solo aparecen (apagados, con «Mostrar») mientras editás.
 
+## Mejoras 6.1 (beta 11, PC)
+- **Evolución**: pastillas 7 / 15 / 30 / 90 días / 12 meses / Todo. Ventana de comparación = período elegido (en "Todo", entre 7 y 30 días según los datos); se carga aparte el período anterior de igual largo (`m_cmp`, 2×largo días). Las fichas muestran promedio diario, "↑ X % vs <período> antes", diferencia por día y totales. Sólo se cuentan los días desde el primero con datos; hacen falta ≥3 días previos. `insights::trend` pide ahora ≥7 días recientes y ≥7 previos (antes 21 y 14). La tendencia usa la misma ventana.
+
 ## Mejoras 6.0 (beta 10, PC)
 - **Volver a la vista principal**: desde Estadísticas o Actividades, el botón *acercar* de la barra vuelve a la vista principal (tooltip «Volver a la vista principal»).
 - **Tres vistas de actividad** (el selector de abajo de la grilla, `live_scope`): **Esta actividad** (solo sus pomodoros) → **Todo el día · por actividad** (todo, separado por actividad aunque en Ajustes esté sin agrupar) → **Todo el día · junto** (todo, sin separar: menos ruido). Rota con un click y se recuerda.

@@ -62,6 +62,11 @@ private:
     QVector<QDate> m_dates;           // un día por entrada
     QVector<insights::DayStat> m_days;
     QVector<Week> m_weeks;
+    // Comparación: los últimos m_cmpLen días contra los m_cmpLen anteriores (m_cmp = 2*len días).
+    int m_cmpLen = 30;
+    QVector<insights::DayStat> m_cmp;
+    QDate m_first;                    // primer día con datos
+    QString cmpLabel() const;         // "semana anterior", "15 días antes"…
     QHash<QDate, Database::DayDiary> m_diary;
     insights::Trend m_trend;
     QVector<Zone> m_zones;

@@ -15,7 +15,7 @@
 namespace {
 constexpr double kPad = 16;
 constexpr double kCardH = 168;
-constexpr double kTilesH = 96;
+constexpr double kTilesH = 112;
 constexpr double kGap = 14;
 QColor ink() { return theme::pomoAccent; }
 
@@ -69,22 +69,42 @@ void EvolutionView::reload(Database* db, const QSet<qint64>* filter)
     for (auto it = weeks.begin(); it != weeks.end(); ++it) it->goalMin = goals.value(it.key(), -1);
     m_weeks = weeks.values().toVector();
 
-    QVector<double> series;
+    // Ventana de comparación: el período elegido (7, 15, 30…); en "Todo", hasta 30 días.
+    m_first = first;
+    m_cmpLen = m_range > 0 ? m_range : qBound(7, int(m_from.daysTo(m_today) + 1) / 2, 30);
+    const auto cmp = insights::daily(*db, m_today.addDays(-2 * m_cmpLen + 1), m_today, m_filter, now);
+    m_cmp.clear();
+    for (QDate d = m_today.addDays(-2 * m_cmpLen + 1); d <= m_today; d = d.addDays(1)) m_cmp << cmp.value(d);
+
+    QVector<double> series, cmpSeries;
     for (const auto& d : m_days) series << double(d.study);
-    m_trend = insights::trend(series, 28);
+    // Sólo cuentan los días desde el primero con datos (antes de usar la app no es "0 horas").
+    for (int i = 0; i < m_cmp.size(); ++i)
+        if (m_today.addDays(-(m_cmp.size() - 1 - i)) >= m_first) cmpSeries << double(m_cmp[i].study);
+    m_trend = insights::trend(series, m_cmpLen);
+    const auto ct = insights::trend(cmpSeries, m_cmpLen);
+    m_trend.recent = ct.recent; m_trend.previous = ct.previous; m_trend.pct = ct.pct; m_trend.enough = ct.enough;
     m_diary = db->dayDiaries(m_from, m_today);
     m_summary = summaryHtml();
     setMinimumHeight(contentHeight(width()));
     update();
 }
 
-// Compara las últimas 4 semanas con las 4 anteriores, métrica por métrica.
+QString EvolutionView::cmpLabel() const
+{
+    if (m_cmpLen == 7) return QStringLiteral("semana anterior");
+    if (m_cmpLen == 365) return QStringLiteral("12 meses antes");
+    return QStringLiteral("%1 días antes").arg(m_cmpLen);
+}
+
+// Compara el período elegido con el anterior de igual largo, métrica por métrica.
 QString EvolutionView::summaryHtml() const
 {
-    const int n = int(m_days.size());
-    const int r = qMin(28, n), pr = qMin(28, n - r);
-    if (pr < 14) return QStringLiteral("Todavía no hay datos suficientes para comparar (hacen falta unas 6 semanas con la app).");
-    auto avg = [&](auto get, int from, int to) { double s = 0; for (int i = from; i < to; ++i) s += get(m_days[i]); return s / qMax(1, to - from); };
+    const int L = m_cmpLen;
+    const int curDays = int(qMax<qint64>(0, m_first.daysTo(m_today) + 1));
+    const int cn = qMin(L, curDays), pn = qMin(L, qMax(0, curDays - L));
+    if (pn < 3) return QStringLiteral("Todavía no hay datos suficientes para comparar (hacen falta unos días antes del período).");
+    auto avg = [&](auto get, int from, int to) { double s = 0; for (int i = from; i < to; ++i) s += get(m_cmp[i]); return s / qMax(1, to - from); };
     struct M { QString name; std::function<double(const insights::DayStat&)> get; bool lowerBetter; };
     const QVector<M> ms = {
         {m_studyLabel + QStringLiteral(" por día"), [](const insights::DayStat& d) { return double(d.study); }, false},
@@ -92,9 +112,10 @@ QString EvolutionView::summaryHtml() const
         {QStringLiteral("Horas inactivas"), [](const insights::DayStat& d) { return double(d.inactive); }, true},
         {QStringLiteral("Pomodoros por día"), [](const insights::DayStat& d) { return double(d.pomos); }, false},
     };
+    const int N = int(m_cmp.size());
     QStringList lines;
     for (const M& m : ms) {
-        const double a = avg(m.get, n - r, n), b = avg(m.get, n - r - pr, n - r);
+        const double a = avg(m.get, N - cn, N), b = avg(m.get, N - L - pn, N - L);
         if (b <= 0 && a <= 0) continue;
         const double ch = b > 0 ? (a - b) / b : 1.0;
         QString verdict, color;
@@ -147,11 +168,11 @@ void EvolutionView::paintEvent(QPaintEvent*)
 
     // Rango
     {
-        static const int ranges[] = {30, 90, 365, 0};
-        static const char* names[] = {"30 días", "90 días", "12 meses", "Todo"};
+        static const int ranges[] = {7, 15, 30, 90, 365, 0};
+        static const char* names[] = {"7 días", "15 días", "30 días", "90 días", "12 meses", "Todo"};
         p.setFont(theme::uiFont(8.5, QFont::DemiBold));
         double x = L;
-        for (int k = 0; k < 4; ++k) {
+        for (int k = 0; k < 6; ++k) {
             const double w = QFontMetricsF(p.font()).horizontalAdvance(QString::fromUtf8(names[k])) + 22;
             const QRectF pill(x, y, w, 24);
             const bool on = m_range == ranges[k];
@@ -183,11 +204,13 @@ void EvolutionView::paintEvent(QPaintEvent*)
 }
 
 
-// Fichas: número grande + variación de los últimos 28 días contra los 28 anteriores.
+// Fichas: promedio diario del período elegido y variación contra el período anterior de igual largo.
 void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
 {
-    const int n = int(m_days.size());
-    const int rr = qMin(28, n), pr = qMin(28, n - rr);
+    const int L = m_cmpLen, N = int(m_cmp.size());
+    // Sólo cuentan los días desde el primero con datos.
+    const int sinceFirst = int(qMax<qint64>(0, m_first.daysTo(m_today) + 1));
+    const int cn = qMin(L, sinceFirst), pn = qMin(L, qMax(0, sinceFirst - L));
     struct M { QString name; std::function<double(const insights::DayStat&)> get; bool lowerBetter; bool count; };
     const QVector<M> ms = {
         {m_studyLabel + QStringLiteral(" / día"), [](const insights::DayStat& d) { return double(d.study); }, false, false},
@@ -195,7 +218,8 @@ void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
         {QStringLiteral("Indebido / día"), [](const insights::DayStat& d) { return double(d.undue); }, true, false},
         {QStringLiteral("Inactivo / día"), [](const insights::DayStat& d) { return double(d.inactive); }, true, false},
     };
-    auto avg = [&](const M& m, int from, int to) { double s = 0; for (int i = from; i < to; ++i) s += m.get(m_days[i]); return s / qMax(1, to - from); };
+    auto sum = [&](const M& m, int from, int to) { double s = 0; for (int i = from; i < to; ++i) s += m.get(m_cmp[i]); return s; };
+    auto fmtV = [&](const M& m, double v) { return m.count ? QString::number(v, 'f', 1) : fmtH(v); };
     const double gap = 8, w = (r.width() - 3 * gap) / 4;
     for (int k = 0; k < ms.size(); ++k) {
         const M& m = ms[k];
@@ -206,14 +230,17 @@ void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
         p.setFont(theme::uiFont(8, QFont::DemiBold));
         p.setPen(theme::textDim);
         p.drawText(QRectF(t.left() + 12, t.top() + 8, t.width() - 24, 16), Qt::AlignLeft | Qt::AlignVCenter, m.name.toUpper());
-        const double a = rr > 0 ? avg(m, n - rr, n) : 0;
+        const double totA = cn > 0 ? sum(m, N - cn, N) : 0;
+        const double a = cn > 0 ? totA / cn : 0;
         p.setFont(theme::uiFont(17, QFont::DemiBold));
         p.setPen(theme::text);
-        p.drawText(QRectF(t.left() + 12, t.top() + 28, t.width() - 24, 32), Qt::AlignLeft | Qt::AlignVCenter, m.count ? QString::number(a, 'f', 1) : fmtH(a));
-        QString line = QStringLiteral("sin comparación todavía");
+        p.drawText(QRectF(t.left() + 12, t.top() + 28, t.width() - 24, 32), Qt::AlignLeft | Qt::AlignVCenter, fmtV(m, a));
+        QString line = QStringLiteral("sin comparación todavía"), line2;
         QColor col = theme::textFaint;
-        if (pr >= 14) {
-            const double b = avg(m, n - rr - pr, n - rr);
+        double b = 0;
+        if (pn >= 3) {
+            const double totB = sum(m, N - L - pn, N - L);
+            b = totB / pn;
             if (b > 0) {
                 const double ch = (a - b) / b;
                 if (std::abs(ch) < 0.05) { line = QStringLiteral("→ parejo"); col = theme::textDim; }
@@ -221,14 +248,24 @@ void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
                     line = QStringLiteral("%1 %2 %").arg(ch > 0 ? QStringLiteral("↑") : QStringLiteral("↓")).arg(int(std::llround(std::abs(ch) * 100)));
                     col = ((ch > 0) != m.lowerBetter) ? theme::breakAccent : theme::squareFinal.lighter(125);
                 }
-                line += QStringLiteral(" vs 28 días antes");
+                line += QStringLiteral(" vs %1").arg(cmpLabel());
+                const double d = a - b;
+                const QString ds = m.count ? QString::number(std::abs(d), 'f', 1) : fmtH(std::abs(d));
+                line2 = QStringLiteral("%1%2 por día · total %3 (antes %4)").arg(d >= 0 ? QStringLiteral("+") : QStringLiteral("−"), ds, fmtV(m, totA).replace(QLatin1Char('.'), QLatin1Char('.')), fmtV(m, totB));
+                if (m.count) line2 = QStringLiteral("%1%2 por día · total %3 (antes %4)").arg(d >= 0 ? QStringLiteral("+") : QStringLiteral("−"), ds).arg(int(std::llround(totA))).arg(int(std::llround(totB)));
             }
         }
         p.setFont(theme::uiFont(8.5));
         p.setPen(col);
-        p.drawText(QRectF(t.left() + 12, t.top() + 64, t.width() - 24, 20), Qt::AlignLeft | Qt::AlignVCenter,
+        p.drawText(QRectF(t.left() + 12, t.top() + 62, t.width() - 24, 18), Qt::AlignLeft | Qt::AlignVCenter,
                    QFontMetrics(p.font()).elidedText(line, Qt::ElideRight, int(t.width() - 24)));
-        m_zones.append({t, QStringLiteral("%1\nÚltimos %2 días: %3\nPromedio por día.").arg(m.name).arg(rr).arg(m.count ? QString::number(a, 'f', 1) : fmtH(a)), QString()});
+        if (!line2.isEmpty()) {
+            p.setFont(theme::uiFont(8));
+            p.setPen(theme::textDim);
+            p.drawText(QRectF(t.left() + 12, t.top() + 80, t.width() - 24, 18), Qt::AlignLeft | Qt::AlignVCenter,
+                       QFontMetrics(p.font()).elidedText(line2, Qt::ElideRight, int(t.width() - 24)));
+        }
+        m_zones.append({t, QStringLiteral("%1\nPeríodo: últimos %2 días (promedio por día: %3).\n%4").arg(m.name).arg(cn).arg(fmtV(m, a), line2.isEmpty() ? QStringLiteral("Sin período anterior con datos para comparar.") : line + QStringLiteral(" · ") + line2), QString()});
     }
 }
 
@@ -236,7 +273,7 @@ void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
 void EvolutionView::paintHours(QPainter& p, const QRectF& r)
 {
     const QString sentence = m_trend.enough
-        ? QStringLiteral("%1 Últimos 28 días: %2 por día (antes %3).").arg(m_trend.sentence().section('.', 0, 0) + QLatin1Char('.'), fmtH(m_trend.recent), fmtH(m_trend.previous))
+        ? QStringLiteral("%1 %2: %3 por día (antes %4).").arg(m_trend.sentence().section('.', 0, 0) + QLatin1Char('.'), m_cmpLen == 7 ? QStringLiteral("Última semana") : QStringLiteral("Últimos %1 días").arg(m_cmpLen), fmtH(m_trend.recent), fmtH(m_trend.previous))
         : m_trend.sentence();
     card(p, r, QStringLiteral("Horas con tendencia"), sentence);
     const QRectF a = plotArea(r);
