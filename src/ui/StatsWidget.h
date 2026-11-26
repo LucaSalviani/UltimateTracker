@@ -30,12 +30,15 @@ public:
     // Mejoras 3.0: el detalle de un dato (hover = resumen, click = mini ventana)
     QString tipFor(const QString& key) const;
     void showDetail(const QString& key);
+    void setEditing(bool on);   // Mejoras 6.0: modo personalizar (desde el menú ⋯)
+    bool isEditing() const { return m_editing; }
     QString dayHtml(const QDate& day, bool brief) const;
 
 signals:
     void backRequested();
     void dayRequested(const QDate& day);   // Mejoras 4.0: click en un día del gráfico
     void message(const QString& text);   // M39: aviso abajo (toast)
+    void editingChanged(bool on);
 
 private:
     void shift(int dir);
@@ -61,7 +64,6 @@ private:
     QScrollArea*   m_evoScroll = nullptr;
     QPushButton*   m_monthBtn = nullptr;
     QPushButton*   m_viewBtn = nullptr;   // Mejoras 4.1: simple / avanzada
-    QPushButton*   m_layoutBtn = nullptr; // Mejoras 5.2: Personalizar (solo en avanzada)
     bool           m_editing = false;
     void           layoutAction(const QString& key);
     QToolButton*   m_prev = nullptr;

@@ -684,6 +684,13 @@ QWidget* MainWindow::buildTitleBar()
     auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: ajustes, fijar, borde, pantalla completa, salir"));
     menuBtn->setObjectName("TbMenu");
     auto* menu = new QMenu(menuBtn);
+    // Mejoras 6.0: en Estadísticas, el menú ofrece personalizar (cada vista, simple o avanzada, tiene su diseño).
+    auto* editAct = menu->addAction(QStringLiteral("Personalizar estadísticas"), this, [this] { m_stats->setEditing(!m_stats->isEditing()); });
+    editAct->setCheckable(true);
+    connect(menu, &QMenu::aboutToShow, this, [this, editAct] {
+        editAct->setVisible(m_overlay == Overlay::Stats);
+        editAct->setChecked(m_stats->isEditing());
+    });
     // Mejoras 5.0: el tamaño de los cuadraditos sale de la barra y se elige acá.
     auto* sizeMenu = menu->addMenu(QStringLiteral("Tamaño de los cuadraditos"));
     connect(sizeMenu, &QMenu::aboutToShow, this, [this, sizeMenu] {
@@ -1165,6 +1172,7 @@ void MainWindow::showOverlay(Overlay o)
     fade::cross(m_pages);   // M36
     m_floatToast->hide();
     m_overlay = o;
+    if (o != Overlay::Stats && m_stats->isEditing()) m_stats->setEditing(false);
     switch (o) {
     case Overlay::Stats:
         m_stats->resetToToday();

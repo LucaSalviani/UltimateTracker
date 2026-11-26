@@ -75,12 +75,47 @@ struct StatsData {
     // Mejoras 5.2: paneles de la pantalla (orden, visibilidad y tamaño 0/1/2 = S/M/L), editables en la vista avanzada
     struct Panel { QString id; bool visible = true; int size = 1; };
     QVector<Panel> layout;
+    QSet<QString> cards;   // Mejoras 6.0: tarjetas sueltas que se ven (cada vista, simple o avanzada, tiene las suyas)
+    bool has(const QString& id) const { return cards.contains(id); }
     bool editing = false;
     int sizeOf(const QString& id) const { for (const Panel& pn : layout) if (pn.id == id) return pn.size; return 1; }
     QSet<qint64> hiddenRows;   // Mejoras 5.0: actividades que el usuario sacó de la lista
     QHash<qint64, QColor> colors;   // M35: color de cada actividad (vacío si están apagados)
     QColor colorOf(qint64 id) const { return colors.value(id, statsInk()); }
 };
+
+// Mejoras 6.0: tarjetas sueltas. Cada vista (simple / avanzada) guarda las suyas.
+static const QStringList& allCards()
+{
+    static const QStringList l = {"streak", "study", "focus", "breaks", "undue", "inactive", "sessions", "goals", "mark", "weekly", "records", "level"};
+    return l;
+}
+static QString cardName(const QString& id)
+{
+    static const QMap<QString, QString> m = {{"streak", "Racha"}, {"study", "Estudio"}, {"focus", "Foco %"}, {"breaks", "Recreos"},
+        {"undue", "Recreo indebido"}, {"inactive", "Horas inactivas"}, {"sessions", "Sesiones"}, {"goals", "Objetivos"},
+        {"mark", "Marca de hoy"}, {"weekly", "Meta semanal"}, {"records", "Tus récords"}, {"level", "Nivel global"}};
+    return m.value(id, id);
+}
+static QSet<QString> defaultCards(bool simple)
+{
+    QSet<QString> s;
+    for (const QString& id : allCards()) {
+        const bool advancedOnly = id == QLatin1String("breaks") || id == QLatin1String("undue") || id == QLatin1String("inactive") ||
+                                  id == QLatin1String("sessions") || id == QLatin1String("level");
+        if (!simple || !advancedOnly) s.insert(id);
+    }
+    return s;
+}
+static QSet<QString> parseCards(const QString& s, bool simple)
+{
+    if (s.isEmpty()) return defaultCards(simple);
+    QSet<QString> out;   // «none» = todas sacadas
+    for (const QString& id : s.split(',', Qt::SkipEmptyParts)) if (allCards().contains(id)) out.insert(id);
+    return out;
+}
+static QString cardsKey(bool simple) { return simple ? QStringLiteral("stats_cards_simple") : QStringLiteral("stats_cards_adv"); }
+static QString layoutKey(bool simple) { return simple ? QStringLiteral("stats_layout_simple") : QStringLiteral("stats_layout_adv"); }
 
 // Mejoras 5.2: orden, visibilidad y tamaño de los paneles ("hero:1:1,chips:1:1,…" = id:visible:tamaño 0/1/2).
 static QVector<StatsData::Panel> parseLayout(const QString& s)
@@ -171,6 +206,7 @@ protected:
         const double L = 16, W = width() - 32;
         double y = 8;
         zones.clear();
+        pendingX.clear();
 
         if (data.editing) y = paintEditHeader(p, L, y, W) + 10;
         for (const StatsData::Panel& pn : data.layout) {
@@ -186,6 +222,7 @@ protected:
             else if (pn.id == QLatin1String("chart")) y = paintChart(p, L, y, W) + 22;
             else paintFolders(p, L, y, W), y += 24 + foldersBodyH() + 24;
         }
+        if (!pendingX.isEmpty()) zones = pendingX + zones;   // las ✕ van adelante
     }
 
 private:
@@ -245,12 +282,9 @@ private:
                           st.toSec ? QStringLiteral("%1 · próx. %2").arg(st.label, roundHours(st.toSec)) : st.label,
                           st.toSec ? st.progress : 1.0});
         }
-        if (data.simple) {   // simple: objetivos, meta semanal, marca de hoy y récords (el nivel global queda en avanzada)
-            QVector<Chip> keep;
-            for (const Chip& ch : chips) if (ch.key != QLatin1String("level")) keep << ch;
-            return keep;
-        }
-        return chips;
+        QVector<Chip> keep;   // Mejoras 6.0: solo las tarjetas que esa vista tiene activadas
+        for (const Chip& ch : chips) if (data.has(ch.key)) keep << ch;
+        return keep;
     }
     static constexpr double kChipGap = 10;
     double chipMinW() const { static const double v[3] = {150, 200, 300}; return v[qBound(0, data.sizeOf(QStringLiteral("chips")), 2)]; }
@@ -310,6 +344,7 @@ private:
                 p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * qMin(1.0, c.frac), 3), 1.5, 1.5);
             }
             zone(r, c.key, p);
+            xButton(p, r, c.key);
         }
         return y + chipsHeight(W);
     }
@@ -328,7 +363,7 @@ private:
     // Mejoras 5.2: alto de cada panel (0 = no hay nada que mostrar), con su separación de abajo.
     double panelHeight(const QString& id, double W) const
     {
-        if (id == QLatin1String("hero")) return heroHeight() + 18;
+        if (id == QLatin1String("hero")) return heroHeight() > 0 ? heroHeight() + 18 : 0;
         if (id == QLatin1String("chips")) return hasChips() ? chipsHeight(W) + 18 : 0;
         if (id == QLatin1String("chart")) return chartHeight(W) + 22;
         return 24 + foldersBodyH() + 24;
@@ -369,10 +404,11 @@ private:
         p.drawRoundedRect(QRectF(L, y, W, 34), 10, 10);
         p.setFont(theme::uiFont(9));
         p.setPen(theme::textDim);
-        p.drawText(QRectF(L + 14, y, W - 200, 34), Qt::AlignLeft | Qt::AlignVCenter,
-                   QStringLiteral("Personalizar: ocultá, ordená y cambiá el tamaño de cada panel"));
+        p.drawText(QRectF(L + 14, y, W - 330, 34), Qt::AlignLeft | Qt::AlignVCenter,
+                   QStringLiteral("Personalizar · ✕ saca una tarjeta"));
         QRectF r = editPill(p, L + W - 8, y + 3, QStringLiteral("Listo"), QStringLiteral("lay:done"), true);
-        editPill(p, r.left() - 6, y + 3, QStringLiteral("Restablecer"), QStringLiteral("lay:reset"));
+        r = editPill(p, r.left() - 6, y + 3, QStringLiteral("Restablecer"), QStringLiteral("lay:reset"));
+        editPill(p, r.left() - 6, y + 3, QStringLiteral("＋ Tarjetas"), QStringLiteral("lay:add"));
         return y + 34;
     }
     double paintEditBar(QPainter& p, double L, double y, double W, const StatsData::Panel& pn, bool hidden)
@@ -404,7 +440,23 @@ private:
     // En la vista avanzada, abajo van los datos finos (recreos, indebidos, inactivas).
     static constexpr double kSmallH = 58;
     double heroH() const { static const double v[3] = {76, 96, 120}; return v[qBound(0, data.sizeOf(QStringLiteral("hero")), 2)]; }
-    double heroHeight() const { return data.simple ? heroH() : heroH() + 10 + kSmallH; }
+    bool heroRow() const { return data.has("streak") || data.has("study") || data.has("focus"); }
+    bool smallRow() const { return data.has("breaks") || data.has("undue") || data.has("inactive") || data.has("sessions"); }
+    double heroHeight() const { return (heroRow() ? heroH() : 0) + (heroRow() && smallRow() ? 10 : 0) + (smallRow() ? kSmallH : 0); }
+    // En edición, cada tarjeta lleva una ✕ (zona delante de las demás: se agrega al final de paintEvent).
+    QVector<Zone> pendingX;
+    void xButton(QPainter& p, const QRectF& r, const QString& id)
+    {
+        if (!data.editing) return;
+        const QRectF b(r.right() - 24, r.top() + 6, 18, 18);
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::mix(theme::surface, theme::text, 0.18));
+        p.drawEllipse(b);
+        p.setPen(theme::text);
+        p.setFont(theme::uiFont(8, QFont::DemiBold));
+        p.drawText(b, Qt::AlignCenter, QStringLiteral("✕"));
+        pendingX.append({b, QStringLiteral("card:hide:") + id, QString()});
+    }
     int focusPct() const
     {
         const qint64 den = data.totals.study + data.totals.breaks + data.totals.undue;
@@ -430,15 +482,22 @@ private:
                        QFontMetrics(p.font()).elidedText(sub, Qt::ElideRight, int(r.width() - 22)));
         }
         zone(r, key, p);
+        xButton(p, r, key);
     }
 
     double paintHero(QPainter& p, double L, double y, double W)
     {
         const double gap = 10;
-        const double sw = qMax(230.0, W * 0.44);                  // racha
-        const double cw = (W - sw - 2 * gap) / 2;
+        const bool hs = data.has("streak"), hst = data.has("study"), hf = data.has("focus");
+        const int others = (hst ? 1 : 0) + (hf ? 1 : 0);
+        double sw = 0, cw = 0;
+        if (hs) { sw = others ? qMax(230.0, W * 0.44) : W; }
+        if (others) cw = (W - (hs ? sw + gap : 0) - (others - 1) * gap) / others;
+        const bool row1 = heroRow();
+        const double h1 = heroH();
+        if (hs) {
         // ---- racha: el número grande
-        const QRectF sr(L, y, sw, heroH());
+        const QRectF sr(L, y, sw, h1);
         p.setPen(Qt::NoPen);
         p.setBrush(theme::surface);
         p.drawRoundedRect(sr, 10, 10);
@@ -452,7 +511,7 @@ private:
         const double numW = QFontMetricsF(p.font()).horizontalAdvance(num);
         p.setFont(theme::uiFont(10));
         p.setPen(theme::textDim);
-        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, heroH() - 14), Qt::AlignLeft | Qt::AlignBottom,
+        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, h1 - 14), Qt::AlignLeft | Qt::AlignBottom,
                    data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
         // columna derecha: comodines, récord y lo que pasa hoy
         QStringList side;
@@ -477,28 +536,44 @@ private:
             }
         }
         zone(sr, QStringLiteral("streak"), p);
+        xButton(p, sr, QStringLiteral("streak"));
+        }
 
         // ---- estudio y foco
-        card(p, QRectF(L + sw + gap, y, cw, heroH()), data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, QStringLiteral("study"));
-        const int fp = focusPct();
-        card(p, QRectF(L + sw + gap + cw + gap, y, cw, heroH()), QStringLiteral("Foco"),
-             fp >= 0 ? QStringLiteral("%1 %").arg(fp) : QStringLiteral("—"),
-             QStringLiteral("del tiempo de sesión"), 20, theme::text, QStringLiteral("focus"));
-        y += heroH();
-        if (data.simple) return y;
+        double cx = L + (hs ? sw + gap : 0);
+        if (hst) {
+            card(p, QRectF(cx, y, cw, h1), data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, QStringLiteral("study"));
+            cx += cw + gap;
+        }
+        if (hf) {
+            const int fp = focusPct();
+            card(p, QRectF(cx, y, cw, h1), QStringLiteral("Foco"),
+                 fp >= 0 ? QStringLiteral("%1 %").arg(fp) : QStringLiteral("—"),
+                 QStringLiteral("del tiempo de sesión"), 20, theme::text, QStringLiteral("focus"));
+        }
+        if (row1) y += h1;
+        if (!smallRow()) return y;
 
-        // ---- avanzada: datos finos
-        y += 10;
-        const double fw = (W - 3 * gap) / 4;
-        card(p, QRectF(L, y, fw, kSmallH), QStringLiteral("Recreos"), fmt::hours(data.totals.breaks), QString(), 13, theme::text, QStringLiteral("breaks"));
-        card(p, QRectF(L + fw + gap, y, fw, kSmallH), QStringLiteral("Recreo indebido"), fmt::hours(data.totals.undue), QString(), 13,
-             data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text, QStringLiteral("undue"));
-        card(p, QRectF(L + 2 * (fw + gap), y, fw, kSmallH), QStringLiteral("Horas inactivas"), fmt::hours(data.totals.inactive), QString(), 13, theme::textDim, QStringLiteral("inactive"));
+        // ---- datos finos (los que tengas activados)
+        if (row1) y += 10;
+        struct Small { QString id, label, value, sub; QColor col; };
         qint64 sesSec = 0;
         for (const auto& s : data.sessions) sesSec += s.length();
-        card(p, QRectF(L + 3 * (fw + gap), y, fw, kSmallH), QStringLiteral("Sesiones"),
-             data.sessions.isEmpty() ? QStringLiteral("0") : QStringLiteral("%1 · prom. %2").arg(data.sessions.size()).arg(fmt::duration(int(sesSec / data.sessions.size()))),
-             QString(), 13, theme::text, QStringLiteral("sessions"));
+        const QVector<Small> smalls = {
+            {"breaks", QStringLiteral("Recreos"), fmt::hours(data.totals.breaks), QString(), theme::text},
+            {"undue", QStringLiteral("Recreo indebido"), fmt::hours(data.totals.undue), QString(), data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text},
+            {"inactive", QStringLiteral("Horas inactivas"), fmt::hours(data.totals.inactive), QString(), theme::textDim},
+            {"sessions", QStringLiteral("Sesiones"),
+             data.sessions.isEmpty() ? QStringLiteral("0") : QStringLiteral("%1 · prom. %2").arg(data.sessions.size()).arg(fmt::duration(int(sesSec / data.sessions.size()))), QString(), theme::text}};
+        int cnt = 0;
+        for (const Small& s : smalls) if (data.has(s.id)) ++cnt;
+        const double fw = (W - (cnt - 1) * gap) / cnt;
+        double sx2 = L;
+        for (const Small& s : smalls) {
+            if (!data.has(s.id)) continue;
+            card(p, QRectF(sx2, y, fw, kSmallH), s.label, s.value, s.sub, 13, s.col, s.id);
+            sx2 += fw + gap;
+        }
         return y + kSmallH;
     }
 
@@ -1058,11 +1133,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     });
     top->insertWidget(top->indexOf(m_folder), m_monthBtn);
     top->insertWidget(top->indexOf(m_folder) + 1, m_viewBtn);
-    m_layoutBtn = new QPushButton(QStringLiteral("Personalizar"), this);   // Mejoras 5.2
-    m_layoutBtn->setCursor(Qt::PointingHandCursor);
-    m_layoutBtn->setToolTip(QStringLiteral("Ocultar, ordenar y cambiar el tamaño de los paneles"));
-    connect(m_layoutBtn, &QPushButton::clicked, this, [this] { m_editing = !m_editing; fade::cross(m_canvas, 150); refresh(); });
-    top->insertWidget(top->indexOf(m_viewBtn) + 1, m_layoutBtn);
+
     top->addWidget(info);
 
     m_canvas = new StatsCanvas(this);
@@ -1228,8 +1299,6 @@ void StatsWidget::refresh()
     m_monthBtn->setText(rolling() ? QStringLiteral("30 días") : QStringLiteral("Calendario"));
     const bool advanced = m_db->setting("stats_advanced", 0).toBool();
     m_viewBtn->setText(advanced ? QStringLiteral("Avanzada") : QStringLiteral("Simple"));
-    if (!advanced) m_editing = false;
-    m_layoutBtn->setVisible(advanced && m_period != Period::Evolution);
     m_periodGroup->button(int(Period::Evolution))->setVisible(advanced);   // la Evolución es de la vista avanzada
     if (!advanced && m_period == Period::Evolution) { m_period = Period::Week; m_periodGroup->button(int(m_period))->setChecked(true); m_label->setText(periodLabel()); }
     const bool evo = m_period == Period::Evolution;
@@ -1261,8 +1330,9 @@ void StatsWidget::refresh()
     d.byDay = stats::studyByDay(*m_db, d.from, d.to, d.filter);
     d.sessions = insights::sessions(*m_db, d.from, qMin(d.to, now.date().addDays(1)), d.filter);
     d.simple = !m_db->setting("stats_advanced", 0).toBool();
-    d.layout = parseLayout(m_db->setting("stats_layout", "").toString());
-    d.editing = m_editing && !d.simple;
+    d.layout = parseLayout(m_db->setting(layoutKey(d.simple), m_db->setting("stats_layout", "").toString()).toString());
+    d.cards = parseCards(m_db->setting(cardsKey(d.simple), "").toString(), d.simple);
+    d.editing = m_editing && m_period != Period::Evolution;
     d.heatMetric = d.simple ? QStringLiteral("hours") : m_db->setting("stats/heat", "hours").toString();
     if (m_period != Period::Day) {
         d.daily = insights::daily(*m_db, d.from, d.to, d.filter, now);
@@ -1500,26 +1570,64 @@ void StatsWidget::pickFolders()
     pickFolders();   // el menú se vuelve a abrir para marcar varias de una
 }
 
+void StatsWidget::setEditing(bool on)
+{
+    if (m_editing == on) return;
+    m_editing = on;
+    if (on && m_period == Period::Evolution) { m_period = Period::Week; m_periodGroup->button(int(m_period))->setChecked(true); m_label->setText(periodLabel()); }
+    fade::cross(m_canvas, 150);
+    refresh();
+    emit editingChanged(on);
+}
+
 void StatsWidget::layoutAction(const QString& key)
 {
-    auto lay = parseLayout(m_db->setting("stats_layout", "").toString());
-    const QStringList f = key.split(':');   // lay:acción[:panel[:valor]]
+    const bool simple = !m_db->setting("stats_advanced", 0).toBool();
+    const QStringList f = key.split(':');   // lay:acción[:panel[:valor]] · card:hide|toggle:id
+    if (f.value(0) == QLatin1String("card")) {
+        QSet<QString> cs = parseCards(m_db->setting(cardsKey(simple), "").toString(), simple);
+        const QString id = f.value(2);
+        if (f.value(1) == QLatin1String("hide")) cs.remove(id);
+        else if (cs.contains(id)) cs.remove(id); else cs.insert(id);
+        QStringList l;
+        for (const QString& s : allCards()) if (cs.contains(s)) l << s;
+        m_db->setSetting(cardsKey(simple), l.isEmpty() ? QStringLiteral("none") : l.join(','));
+        refresh();
+        return;
+    }
+    auto lay = parseLayout(m_db->setting(layoutKey(simple), m_db->setting("stats_layout", "").toString()).toString());
     auto find = [&](const QString& id) { for (int i = 0; i < lay.size(); ++i) if (lay[i].id == id) return i; return -1; };
     const QString act = f.value(1);
     const int i = find(f.value(2));
-    if (act == QLatin1String("done")) m_editing = false;
-    else if (act == QLatin1String("reset")) lay = parseLayout(QString());
+    if (act == QLatin1String("done")) { setEditing(false); return; }
+    else if (act == QLatin1String("add")) {   // ＋ Tarjetas: lista con tildes
+        const QSet<QString> cs = parseCards(m_db->setting(cardsKey(simple), "").toString(), simple);
+        QMenu menu(this);
+        for (const QString& id : allCards()) {
+            QAction* a = menu.addAction(cardName(id));
+            a->setCheckable(true);
+            a->setChecked(cs.contains(id));
+            connect(a, &QAction::triggered, this, [this, id] { layoutAction(QStringLiteral("card:toggle:") + id); });
+        }
+        menu.exec(QCursor::pos());
+        return;
+    }
+    else if (act == QLatin1String("reset")) {
+        lay = parseLayout(QString());
+        m_db->setSetting(cardsKey(simple), "");
+    }
     else if (i >= 0 && act == QLatin1String("vis")) lay[i].visible = !lay[i].visible;
     else if (i >= 0 && act == QLatin1String("size")) lay[i].size = qBound(0, f.value(3).toInt(), 2);
     else if (i > 0 && act == QLatin1String("up")) lay.swapItemsAt(i, i - 1);
     else if (i >= 0 && i + 1 < lay.size() && act == QLatin1String("down")) lay.swapItemsAt(i, i + 1);
-    m_db->setSetting("stats_layout", serializeLayout(lay));
+    m_db->setSetting(layoutKey(simple), serializeLayout(lay));
     refresh();
 }
 
 void StatsWidget::showDetail(const QString& key)
 {
-    if (key.startsWith(QLatin1String("lay:"))) { layoutAction(key); return; }
+    if (key.startsWith(QLatin1String("lay:")) || key.startsWith(QLatin1String("card:"))) { layoutAction(key); return; }
+    if (m_editing) return;   // editando, un click no abre detalles
     if (key == QLatin1String("folders:pick")) { pickFolders(); return; }
     const StatsData& d = m_canvas->data;
     const QDate last = qMin(d.to, d.today);
