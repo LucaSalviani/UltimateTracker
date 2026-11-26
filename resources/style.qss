@@ -371,6 +371,16 @@ QFrame#NotePad { background: @bg2; border: 1px solid @s5; border-left: none; }
 QLabel#NotePadTitle { color: @t1; font-size: 11pt; font-weight: 600; }
 QPlainTextEdit#NotePadText { background: @s2; border: 1px solid transparent; border-radius: 7px; padding: 8px 10px; color: @t1; }
 QPlainTextEdit#NotePadText:focus { border-color: @s8; }
+QLineEdit#NotePadText { background: @s2; border: 1px solid transparent; border-radius: 7px; padding: 7px 10px; color: @t1; }
+QLineEdit#NotePadText:focus { border-color: @s8; }
+QPushButton#NotePadTab { background: transparent; border: none; border-bottom: 2px solid transparent; color: @t3; font-size: 11pt; font-weight: 600; padding: 2px 8px 4px 2px; }
+QPushButton#NotePadTab:checked { color: @t1; border-bottom-color: @t1; }
+QPushButton#NotePadTab:hover { color: @t1; }
+QListWidget#LibretaList { background: @s2; border-radius: 7px; padding: 4px; color: @t2; outline: none; }
+QListWidget#LibretaList::item { padding: 5px 6px; border-radius: 5px; }
+QListWidget#LibretaList::item:selected { background: @s4; color: @t1; }
+QPushButton#LibretaBtn { background: @s2; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; color: @t2; }
+QPushButton#LibretaBtn:hover { color: @t1; border-color: @s8; }
 QPushButton#NotePadClose { background: transparent; border: none; color: @t3; padding: 2px 6px; }
 QPushButton#NotePadClose:hover { color: @t1; }
 QPushButton#NotePadBtn { background: @s2; border: 1px solid transparent; border-radius: 7px; padding: 8px 10px; color: @t2; text-align: left; }

@@ -591,6 +591,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
         if (!m_todayPomos.isEmpty()) { editNote(m_todayPomos.last().id); return; }
         toast(QStringLiteral("Hoy todavía no hay pomodoros para anotar"));
     });
+    key(QKeySequence(Qt::Key_L), [this] { toggleLibreta(); });
     key(QKeySequence(Qt::Key_S), [this] { showOverlay(m_overlay == Overlay::Stats ? Overlay::None : Overlay::Stats); });
     key(QKeySequence(Qt::Key_A), [this] { showOverlay(m_overlay == Overlay::Activities ? Overlay::None : Overlay::Activities); });
     key(QKeySequence(QStringLiteral("Ctrl+,")), [this] { openSettings(); });
@@ -722,6 +723,7 @@ QWidget* MainWindow::buildTitleBar()
         win::applyChrome(&dlg);
         dlg.exec();
     });
+    menu->addAction(QStringLiteral("Libreta  (L)"), this, [this] { toggleLibreta(); });   // Mejoras 6.0
     menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);
     menu->addAction(QStringLiteral("Ver tutorial"), this, [this] { startTour(); });   // Mejoras 2.0
     menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });   // Mejoras 5.0: al final, antes de Salir
@@ -2314,7 +2316,7 @@ void MainWindow::openGoalPanel(const QDate& day)
         m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
         connect(m_goalPanel, &GoalPanel::closeRequested, this, &MainWindow::closeGoalPanel);
         connect(m_goalPanel, &GoalPanel::notepadRequested, this, [this] {
-            if (m_notePadOpen) closeNotePad(); else openNotePad(m_goalPanel->day());
+            if (m_notePadOpen) closeNotePad(); else { openNotePad(m_goalPanel->day()); m_notePad->showTab(0); m_notePad->focusNote(); }
         });
         connect(m_goalPanel, &GoalPanel::dayTitleEdited, this, [this](const QDate& d, const QString& t) {
             m_db->setDayTitle(d, t);
@@ -2359,7 +2361,8 @@ void MainWindow::openGoalPanel(const QDate& day)
     { const auto dy = m_db->dayDiary(day); m_goalPanel->setDiary(dy.note, dy.mood); }
     m_goalPanel->setNotepadMode(m_db->setting("notepad_on", 1).toBool());
     if (m_notePadOpen) {
-        if (m_db->setting("notepad_on", 1).toBool()) openNotePad(day); else closeNotePad(false);
+        if (m_notePad && m_notePad->tab() == 1) { /* la libreta no depende del día */ }
+        else if (m_db->setting("notepad_on", 1).toBool()) openNotePad(day); else closeNotePad(false);
     }
     if (!wasOpen) placeGoalPanel(true, true);
     refreshGoals();   // con el panel visible, también carga su progreso
@@ -2374,7 +2377,7 @@ void MainWindow::closeGoalPanel()
 void MainWindow::openNotePad(const QDate& day)
 {
     if (!m_notePad) {
-        m_notePad = new NotePad(this);   // ventanita propia (aleta), con la principal de dueña
+        m_notePad = new NotePad(m_db, this);   // ventanita propia (aleta), con la principal de dueña
         m_notePad->hide();
         connect(m_notePad, &NotePad::closeRequested, this, [this] { closeNotePad(); });
         connect(m_notePad, &NotePad::noteEdited, this, [this](const QDate& d, const QString& t) { m_db->setDayNote(d, t); });
@@ -2384,8 +2387,17 @@ void MainWindow::openNotePad(const QDate& day)
     m_notePad->setDay(day, dy.note, dy.mood, day == m_today);
     const bool wasOpen = m_notePadOpen;
     m_notePadOpen = true;
-    m_goalPanel->setNotepadOpen(true);
+    if (m_goalPanel) m_goalPanel->setNotepadOpen(true);
     if (!wasOpen) { placeNotePad(true, true); m_notePad->focusNote(); }
+}
+
+// Mejoras 6.0: la libreta (páginas permanentes) vive en la misma aleta, solapa «Libreta».
+void MainWindow::toggleLibreta()
+{
+    if (m_notePadOpen && m_notePad && m_notePad->tab() == 1) { closeNotePad(); return; }
+    openNotePad(m_grid->anchor());
+    m_notePad->showTab(1);
+    m_notePad->focusCurrent();
 }
 
 void MainWindow::closeNotePad(bool animate)
@@ -2893,7 +2905,7 @@ void MainWindow::openSettings(int page)
     applyGuardSettings();
     reloadFolders();   // M25: colores por actividad prendidos/apagados
     applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
-    if (m_goalPanel) { m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString()); m_goalPanel->setNotepadMode(m_db->setting("notepad_on", 1).toBool()); if (!m_db->setting("notepad_on", 1).toBool()) closeNotePad(false); }
+    if (m_goalPanel) { m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString()); m_goalPanel->setNotepadMode(m_db->setting("notepad_on", 1).toBool()); if (!m_db->setting("notepad_on", 1).toBool() && !(m_notePad && m_notePad->tab() == 1)) closeNotePad(false); }
     if (!m_session->inProgress()) {
         m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
         m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);

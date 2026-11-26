@@ -8,6 +8,9 @@ class QPlainTextEdit;
 class QPushButton;
 class QTimer;
 class MoodBar;
+class Libreta;
+class Database;
+class QStackedWidget;
 
 // Mejoras 4.1: el anotador. Una hoja libre por día (lo que querés hacer, cómo salió,
 // lo que sea) con el "¿cómo te va?" abajo. Se despliega al lado del panel del objetivo.
@@ -15,11 +18,14 @@ class MoodBar;
 class NotePad : public QFrame {
     Q_OBJECT
 public:
-    explicit NotePad(QWidget* parent = nullptr);
+    explicit NotePad(Database* db, QWidget* parent = nullptr);
+    void showTab(int tab);   // 0 = Diario (el día), 1 = Libreta (permanente)
+    int  tab() const { return m_tab; }
     void setDay(const QDate& day, const QString& note, int mood, bool isToday);
     QDate day() const { return m_day; }
     void flush();   // manda lo escrito que todavía no se guardó
     void focusNote();
+    void focusCurrent();
 
 signals:
     void noteEdited(const QDate& day, const QString& note);
@@ -27,6 +33,11 @@ signals:
     void closeRequested();
 
 private:
+    int             m_tab = 0;
+    QStackedWidget* m_stack = nullptr;
+    QPushButton*    m_tabDiary = nullptr;
+    QPushButton*    m_tabBook = nullptr;
+    Libreta*        m_libreta = nullptr;
     QDate           m_day;
     QLabel*         m_date;
     QLabel*         m_moodLabel;

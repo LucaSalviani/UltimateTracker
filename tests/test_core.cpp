@@ -8,6 +8,7 @@
 #include "core/Kinds.h"
 #include "core/Insights.h"
 #include "core/Routine.h"
+#include "core/Notebook.h"
 #include <QSqlQuery>
 #include "core/DayClock.h"
 #include "core/FolderTree.h"
@@ -617,6 +618,28 @@ private slots:
         QCOMPARE(ex.total, qint64(23 * 3600));
         QCOMPARE(ex.unexplained, qint64(19 * 3600));
         QCOMPARE(routine::weekdaysText(31), QString("Lun a Vie"));
+    }
+
+    void notebookPages()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        notebook::Page a; a.title = "Ideas"; a.body = "- [ ] leer apunte";
+        notebook::Page b; b.title = "Fórmulas"; b.body = "derivadas"; b.pinned = true;
+        const qint64 ia = notebook::save(db, a);
+        notebook::save(db, b);
+        auto all = notebook::pages(db);
+        QCOMPARE(all.size(), 2);
+        QVERIFY(all[0].pinned);                                   // fijadas primero
+        QCOMPARE(notebook::pages(db, "apunte").size(), 1);        // busca en el texto
+        QCOMPARE(notebook::pages(db, "Fórm").size(), 1);          // y en el título
+        a = notebook::get(db, ia);
+        a.body = "- [x] leer apunte";
+        notebook::save(db, a);
+        QCOMPARE(notebook::get(db, ia).body, QString("- [x] leer apunte"));
+        QVERIFY(notebook::exportText(notebook::pages(db)).contains("Ideas"));
+        notebook::remove(db, ia);
+        QCOMPARE(notebook::pages(db).size(), 1);
     }
 
     void insightsAndDiary()

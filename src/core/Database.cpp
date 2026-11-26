@@ -7,7 +7,7 @@
 #include <QUuid>
 
 namespace {
-constexpr int kSchemaVersion = 11;
+constexpr int kSchemaVersion = 12;
 
 const char* kSchema[] = {
     R"(CREATE TABLE IF NOT EXISTS folders (
@@ -41,6 +41,14 @@ const char* kSchema[] = {
     ))",
     "CREATE INDEX IF NOT EXISTS idx_intervals_day ON intervals(day)",
     "CREATE TABLE IF NOT EXISTS session_ends (at INTEGER PRIMARY KEY)",   // Mejoras 5.1
+    R"(CREATE TABLE IF NOT EXISTS notebook_pages (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        title      TEXT NOT NULL DEFAULT '',
+        body       TEXT NOT NULL DEFAULT '',
+        pinned     INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL DEFAULT 0
+    ))",   // Mejoras 6.0: libreta permanente
     R"(CREATE TABLE IF NOT EXISTS routine_events (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         title     TEXT NOT NULL DEFAULT '',

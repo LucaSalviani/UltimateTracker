@@ -109,6 +109,7 @@ private:
     // ---- meta del día (M7)
     void openGoalPanel(const QDate& day);
     void closeGoalPanel();
+    void toggleLibreta();   // Mejoras 6.0
     void openNotePad(const QDate& day);
     void closeNotePad(bool animate = true);
     void placeNotePad(bool open, bool animate);

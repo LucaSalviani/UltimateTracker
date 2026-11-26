@@ -26,6 +26,7 @@ add_library(constancia_core STATIC
     src/core/Kinds.h           src/core/Kinds.cpp
     src/core/Insights.h        src/core/Insights.cpp
     src/core/Routine.h         src/core/Routine.cpp
+    src/core/Notebook.h        src/core/Notebook.cpp
     src/core/SessionController.h src/core/SessionController.cpp
 )
 target_include_directories(constancia_core PUBLIC src)
@@ -48,6 +49,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/Sounds.h            src/ui/Sounds.cpp
     src/ui/GridWidget.h        src/ui/GridWidget.cpp
     src/ui/RoutineDialog.h     src/ui/RoutineDialog.cpp
+    src/ui/Libreta.h           src/ui/Libreta.cpp
     src/ui/EdgeTab.h           src/ui/EdgeTab.cpp
     src/ui/FolderMenu.h        src/ui/FolderMenu.cpp
     src/ui/ActivitiesWidget.h  src/ui/ActivitiesWidget.cpp

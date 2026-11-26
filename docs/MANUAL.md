@@ -50,6 +50,13 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 10
+- **Acercar vuelve**: en Estadísticas, el botón de acercar te lleva de nuevo a la vista principal.
+- **Tres vistas de actividad** debajo de la grilla: *esta actividad*, *todo el día por actividad* y *todo el día junto* (sin separar).
+- **Personalizar las estadísticas** ahora está en el menú ⋯ cuando estás en Estadísticas: sacás tarjetas sueltas con la ✕, las volvés a poner con *＋ Tarjetas*, y la vista simple y la avanzada tienen cada una su diseño.
+- **Rutina en el calendario**: botón *Rutina* en semana y mes; click derecho en un día para agregar un evento (como Google Calendar).
+- **Libreta**: la aleta tiene dos solapas, *Diario* y *Libreta* (atajo `L`), con páginas permanentes, buscador, fijar, casillas y exportar.
+
 ### Novedades de la beta 9
 - **Personalizar las estadísticas**: en la vista *Avanzada* tocá *Personalizar* y, para cada panel (Resumen, Hitos, Gráfico, Actividades), elegí ocultarlo, subirlo o bajarlo, y su tamaño S / M / L. *Restablecer* vuelve a como venía; *Listo* termina.
 
