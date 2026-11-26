@@ -35,6 +35,9 @@ struct Occurrence { const Event* ev; qint64 start, end; };   // segundos epoch
 // Lo que cae dentro del día de la app `day` (de dayStart a dayStart + 24 h).
 QVector<Occurrence> occurrences(const QVector<Event>& evs, const QDate& day);
 
+// Mejoras 6.0: lo que cae en la fecha de calendario `cal` (para mostrar en semana y mes), ordenado por hora.
+QVector<Event> onDate(const QVector<Event>& evs, const QDate& cal);
+
 struct Explain {
     qint64 total = 0;                  // horas inactivas del día
     QMap<QString, qint64> byCategory;  // lo que explica la rutina

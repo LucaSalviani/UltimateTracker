@@ -1,4 +1,5 @@
 #include "ui/GridWidget.h"
+#include "ui/RoutineDialog.h"
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "ui/Theme.h"
@@ -615,6 +616,7 @@ void GridWidget::paintEvent(QPaintEvent*)
     p.fillRect(rect(), theme::bg);
     m_placed.clear();
     m_dayRects.clear();
+    m_routineBars.clear();
     m_paintOrder = 0;
     m_animating = false;
 
@@ -678,6 +680,40 @@ void GridWidget::paintDay(QPainter& p)
     paintSquares(p, area, m_anchor, 58, 10, 20, true);
 }
 
+// Mejoras 6.0: barritas de la rutina de un día (como Google Calendar). Devuelve la altura que ocuparon.
+double GridWidget::paintRoutine(QPainter& p, const QRectF& area, const QDate& d, double barH, int maxBars, bool showTime)
+{
+    if (!m_showRoutine) return 0;
+    const QVector<routine::Event> evs = routine::onDate(m_routine, d);
+    if (evs.isEmpty()) return 0;
+    const int shown = qMin(int(evs.size()), maxBars);
+    const bool more = evs.size() > maxBars;
+    double y = area.top();
+    p.setFont(theme::uiFont(barH > 14 ? 8 : 7.5));
+    for (int i = 0; i < shown; ++i) {
+        const routine::Event& e = evs[i];
+        const QRectF r(area.left(), y, area.width(), barH - 2);
+        QColor col = routinedlg::colorFor(e.category);
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::mix(theme::surface, col, 0.38));
+        p.drawRoundedRect(r, 3, 3);
+        p.setBrush(col);
+        p.drawRoundedRect(QRectF(r.left(), r.top(), 3, r.height()), 1.5, 1.5);
+        const QString t = (showTime ? QTime(0, 0).addSecs(e.startMin * 60).toString(QStringLiteral("HH:mm")) + QLatin1Char(' ') : QString())
+                          + (e.title.isEmpty() ? e.category : e.title);
+        p.setPen(theme::text);
+        p.drawText(r.adjusted(7, 0, -3, 0), Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(t, Qt::ElideRight, int(r.width() - 10)));
+        m_routineBars.append({r, e.id, d});
+        y += barH;
+    }
+    if (more) {
+        p.setPen(theme::textFaint);
+        p.drawText(QRectF(area.left() + 2, y, area.width(), barH - 2), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("+%1 más").arg(evs.size() - maxBars));
+        y += barH;
+    }
+    return y - area.top() + 2;
+}
+
 void GridWidget::paintWeek(QPainter& p)
 {
     const QRectF all = QRectF(rect()).adjusted(8, 4, -8, -6);
@@ -732,7 +768,9 @@ void GridWidget::paintWeek(QPainter& p)
             p.setPen(QPen(theme::line, 1));
             p.drawLine(QPointF(col.left(), col.top() + headerH + 8), QPointF(col.left(), col.bottom()));
         }
-        const QRectF area = col.adjusted(8, headerH + 10, -8, -2);
+        QRectF area = col.adjusted(8, headerH + 10, -8, -2);
+        const double used = paintRoutine(p, area, d, 17, 4, area.width() >= 90);
+        area.setTop(area.top() + used);
         paintSquares(p, area, d, 40, 6, area.width() >= 90 ? 15 : 0, true);
     }
 }
@@ -782,7 +820,9 @@ void GridWidget::paintMonth(QPainter& p)
                 p.setPen(theme::textDim);
                 p.drawText(box.adjusted(7, 4, -7, 0), Qt::AlignRight | Qt::AlignTop, fmt::duration(study));
             }
-            const QRectF area = box.adjusted(6, 21, -6, -5);
+            QRectF area = box.adjusted(6, 21, -6, -5);
+            const double used = paintRoutine(p, area, d, 13, rowH > 110 ? 3 : 2, false);
+            area.setTop(area.top() + used);
             paintSquares(p, area, d, 34, 3, 0, false);
         }
     }
@@ -857,6 +897,8 @@ QDate GridWidget::dayAt(const QPointF& pos) const
 
 void GridWidget::contextMenuEvent(QContextMenuEvent* e)
 {
+    for (const RoutineBar& b : m_routineBars)
+        if (b.rect.contains(e->pos())) { emit routineMenuRequested(b.id, b.day, e->globalPos()); return; }
     for (const Placed& pl : m_placed) {
         if (!pl.rect.contains(e->pos())) continue;
         const Pomodoro& pm = m_pomos[pl.index];
@@ -925,6 +967,10 @@ void GridWidget::mousePressEvent(QMouseEvent* e)
                 emit goalClicked(m_pomos[pl.index].day);
                 return;
             }
+    }
+    if (m_zoom != Zoom::Day && e->button() == Qt::LeftButton) {
+        for (const RoutineBar& b : m_routineBars)
+            if (b.rect.contains(e->position())) { emit routineClicked(b.id, b.day); return; }
     }
     if (m_zoom == Zoom::Day || e->button() != Qt::LeftButton) return;
     for (const auto& [r, d] : m_dayRects) {

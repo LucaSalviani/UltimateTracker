@@ -1,4 +1,5 @@
 #include "ui/MainWindow.h"
+#include "ui/RoutineDialog.h"
 
 #include <cmath>
 #include "core/DayClock.h"
@@ -436,6 +437,13 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
 
     connect(m_grid, &GridWidget::goalClicked, this, &MainWindow::openGoalPanel);
     connect(m_grid, &GridWidget::dayMenuRequested, this, [this](const QDate& d, const QPoint& p) { showDayMenu(d, p); });
+    connect(m_grid, &GridWidget::routineClicked, this, [this](qint64 id, const QDate& d) { editRoutineEvent(id, d); });
+    connect(m_grid, &GridWidget::routineMenuRequested, this, [this](qint64 id, const QDate& d, const QPoint& gp) {
+        QMenu menu(this);
+        menu.addAction(QStringLiteral("Editar…"), this, [this, id, d] { editRoutineEvent(id, d); });
+        menu.addAction(QStringLiteral("Agregar otro este día…"), this, [this, d] { editRoutineEvent(0, d); });
+        menu.exec(gp);
+    });
     connect(m_grid, &GridWidget::ghostMenuRequested, this, [this](const QDate& d, int m, qint64 f, const QPoint& p) { showDayMenu(d, p, m, f); });
     connect(m_grid, &GridWidget::dayActivated, this, [this](const QDate& d) {
         m_grid->setAnchor(d);
@@ -818,6 +826,15 @@ QWidget* MainWindow::buildDateBand()
 
     m_btnToday = textButton(m_band, QStringLiteral("Hoy"), "chip");
     connect(m_btnToday, &QPushButton::clicked, this, &MainWindow::goToday);
+    // Mejoras 6.0: capa de la rutina en semana y mes (se prende y se apaga).
+    m_btnRoutine = textButton(m_band, QStringLiteral("Rutina"), "chip");
+    m_btnRoutine->setCheckable(true);
+    m_btnRoutine->setChecked(m_db->setting("routine_layer", 0).toBool());
+    m_btnRoutine->setToolTip(QStringLiteral("Mostrar tu rutina (facultad, gimnasio…) en el calendario. Click derecho en un día: agregar."));
+    connect(m_btnRoutine, &QPushButton::toggled, this, [this](bool on) {
+        m_db->setSetting("routine_layer", on ? 1 : 0);
+        reloadRoutine();
+    });
 
     // Tarea a la izquierda, fecha a la derecha.
     auto* lay = new QHBoxLayout(m_band);
@@ -825,6 +842,7 @@ QWidget* MainWindow::buildDateBand()
     lay->setSpacing(4);
     lay->addWidget(m_objectiveBtn, 1);
     lay->addStretch(0);
+    lay->addWidget(m_btnRoutine);
     lay->addWidget(m_btnToday);
     lay->addSpacing(4);
     lay->addWidget(prev);
@@ -1235,6 +1253,19 @@ void MainWindow::refreshBand()
     m_objectiveBtn->setVisible(day);
     updateObjectiveBand();
     m_btnToday->setVisible(!showingToday);
+    m_btnRoutine->setVisible(!day);
+}
+
+void MainWindow::reloadRoutine()
+{
+    m_grid->setRoutine(routine::events(*m_db), m_btnRoutine && m_btnRoutine->isChecked() && m_grid->zoom() != GridWidget::Zoom::Day);
+}
+
+// Agregar o editar desde el calendario; al guardar, la capa se prende sola para que se vea.
+void MainWindow::editRoutineEvent(qint64 id, const QDate& day)
+{
+    if (!routinedlg::edit(m_db, id, day, this)) return;
+    if (!m_btnRoutine->isChecked()) m_btnRoutine->setChecked(true); else reloadRoutine();
 }
 
 void MainWindow::applyGroupStyle()
@@ -1254,6 +1285,7 @@ void MainWindow::reloadGrid()
         if (!m_liveActivityScope || scope.contains(p.folderId)) pomos.append(p);
     m_grid->setData(pomos, m_db->dayTitles(m_grid->rangeStart(), m_grid->rangeEnd()));
     m_grid->setLive(m_session->currentPomodoro(), m_session->progress());
+    reloadRoutine();
     m_grid->setFirstUse(pomos.isEmpty() && !m_session->currentPomodoro() && m_db->studiedDays().isEmpty());   // M36
     m_msCfg = ms::Config::load(*m_db);   // M44
     m_weekBeforeToday = 0;
@@ -2624,6 +2656,7 @@ void MainWindow::showDayMenu(const QDate& day, const QPoint& globalPos, int ghos
             m_grid->setAnchor(day);
             setZoom(GridWidget::Zoom::Day);
         });
+    menu.addAction(QStringLiteral("Agregar a la rutina…"), this, [this, day] { editRoutineEvent(0, day); });   // Mejoras 6.0
     if (day <= m_today)
         menu.addAction(ghostMinutes > 0 ? QStringLiteral("Marcar este pomodoro (%1) como hecho…").arg(fmt::duration(ghostMinutes * 60))
                                         : QStringLiteral("Marcar un pomodoro como hecho…"),

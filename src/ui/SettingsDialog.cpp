@@ -2,6 +2,7 @@
 #include "core/DayClock.h"
 #include "core/Stats.h"
 #include "core/Routine.h"
+#include "ui/RoutineDialog.h"
 #include "ui/FocusGuard.h"
 #include "ui/Theme.h"
 #include "ui/Tiles.h"
@@ -777,67 +778,7 @@ void SettingsDialog::reloadRoutine()
 
 void SettingsDialog::editRoutine(qint64 id)
 {
-    routine::Event e;
-    for (const routine::Event& x : routine::events(*m_db)) if (x.id == id) e = x;
-    QDialog dlg(this);
-    dlg.setWindowTitle(id ? QStringLiteral("Editar actividad de la rutina") : QStringLiteral("Nueva actividad de la rutina"));
-    auto* form = new QFormLayout;
-    auto* title = new QLineEdit(e.title, &dlg);
-    title->setPlaceholderText(QStringLiteral("ej. Cursada de Sistemas"));
-    auto* cat = new QComboBox(&dlg);
-    cat->setEditable(true);
-    cat->addItems(routine::defaultCategories());
-    cat->setCurrentText(e.category.isEmpty() ? routine::defaultCategories().first() : e.category);
-    auto* from = new QTimeEdit(QTime(0, 0).addSecs((id ? e.startMin : 8 * 60) * 60), &dlg);
-    auto* to = new QTimeEdit(QTime(0, 0).addSecs((id ? e.endMin : 12 * 60) * 60), &dlg);
-    from->setDisplayFormat(QStringLiteral("HH:mm"));
-    to->setDisplayFormat(QStringLiteral("HH:mm"));
-    auto* once = new QCheckBox(QStringLiteral("Solo un día"), &dlg);
-    auto* date = new QDateEdit(e.day.isValid() ? e.day : QDate::currentDate(), &dlg);
-    date->setCalendarPopup(true);
-    once->setChecked(id && e.weekdays == 0);
-    date->setEnabled(once->isChecked());
-    auto* days = new QHBoxLayout;
-    QVector<QCheckBox*> dayBoxes;
-    static const char* dn[] = {"L", "M", "X", "J", "V", "S", "D"};
-    for (int i = 0; i < 7; ++i) {
-        auto* c = new QCheckBox(QString::fromUtf8(dn[i]), &dlg);
-        c->setChecked(id ? (e.weekdays & (1 << i)) : i < 5);
-        c->setEnabled(!once->isChecked());
-        dayBoxes << c;
-        days->addWidget(c);
-    }
-    connect(once, &QCheckBox::toggled, &dlg, [=](bool on) { date->setEnabled(on); for (QCheckBox* c : dayBoxes) c->setEnabled(!on); });
-    form->addRow(QStringLiteral("Nombre"), title);
-    form->addRow(QStringLiteral("Categoría"), cat);
-    form->addRow(QStringLiteral("Desde"), from);
-    form->addRow(QStringLiteral("Hasta"), to);
-    form->addRow(QStringLiteral("Se repite"), days);
-    form->addRow(once, date);
-    auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
-    bb->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Guardar"));
-    bb->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Cancelar"));
-    connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-    auto* v = new QVBoxLayout(&dlg);
-    v->addLayout(form);
-    v->addWidget(note(QStringLiteral("Si «Hasta» es antes que «Desde», cruza la medianoche."), &dlg));
-    v->addWidget(bb);
-    if (dlg.exec() != QDialog::Accepted) return;
-    e.title = title->text().trimmed();
-    e.category = cat->currentText().trimmed();
-    e.startMin = from->time().hour() * 60 + from->time().minute();
-    e.endMin = to->time().hour() * 60 + to->time().minute();
-    if (once->isChecked()) { e.weekdays = 0; e.day = date->date(); }
-    else {
-        e.weekdays = 0;
-        for (int i = 0; i < 7; ++i) if (dayBoxes[i]->isChecked()) e.weekdays |= 1 << i;
-        e.day = QDate();
-        if (e.weekdays == 0) return;
-    }
-    if (e.title.isEmpty() && e.category.isEmpty()) return;
-    routine::save(*m_db, e);
-    reloadRoutine();
+    if (routinedlg::edit(m_db, id, QDate::currentDate(), this)) reloadRoutine();
 }
 
 QWidget* SettingsDialog::pageSystem()

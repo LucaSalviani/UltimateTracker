@@ -47,6 +47,7 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/EvolutionView.h     src/ui/EvolutionView.cpp
     src/ui/Sounds.h            src/ui/Sounds.cpp
     src/ui/GridWidget.h        src/ui/GridWidget.cpp
+    src/ui/RoutineDialog.h     src/ui/RoutineDialog.cpp
     src/ui/EdgeTab.h           src/ui/EdgeTab.cpp
     src/ui/FolderMenu.h        src/ui/FolderMenu.cpp
     src/ui/ActivitiesWidget.h  src/ui/ActivitiesWidget.cpp

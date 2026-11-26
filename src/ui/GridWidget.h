@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Types.h"
+#include "core/Routine.h"
 
 #include <QColor>
 #include <QDate>
@@ -62,6 +63,8 @@ public:
     void setTodayActive(bool active) { m_todayActive = active; update(); }
     // M36: todavía no hay ni un pomodoro en toda la historia (mensaje de bienvenida).
     void setFirstUse(bool on) { m_firstUse = on; update(); }
+    // Mejoras 6.0: la rutina como barritas de color en semana y mes (capa que se prende con un botón).
+    void setRoutine(const QVector<routine::Event>& evs, bool show) { m_routine = evs; m_showRoutine = show; update(); }
 
 signals:
     void dayActivated(const QDate& day);
@@ -71,6 +74,8 @@ signals:
     void dayMenuRequested(const QDate& day, const QPoint& globalPos);
     void ghostMenuRequested(const QDate& day, int minutes, qint64 folder, const QPoint& globalPos);   // Mejoras 5.0
     void goalClicked(const QDate& day);
+    void routineClicked(qint64 eventId, const QDate& day);                                   // Mejoras 6.0
+    void routineMenuRequested(qint64 eventId, const QDate& day, const QPoint& globalPos);
     // Mejoras 2.0: varios elegidos (Ctrl / Shift + click) y click derecho sobre ellos.
     void selectionMenuRequested(const QList<qint64>& ids, const QPoint& globalPos);
     void selectionChanged(int count);
@@ -152,4 +157,9 @@ private:
     QSet<qint64>                  m_selected;      // Mejoras 2.0
     qint64                        m_selectAnchor = 0;
     QVector<QPair<QRectF, QDate>> m_dayRects;
+    QVector<routine::Event> m_routine;
+    bool m_showRoutine = false;
+    struct RoutineBar { QRectF rect; qint64 id; QDate day; };
+    QVector<RoutineBar> m_routineBars;
+    double paintRoutine(QPainter& p, const QRectF& area, const QDate& d, double barH, int maxBars, bool showTime);   // devuelve lo que ocupó
 };

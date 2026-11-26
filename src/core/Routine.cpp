@@ -95,6 +95,18 @@ QVector<Occurrence> occurrences(const QVector<Event>& evs, const QDate& day)
     return out;
 }
 
+QVector<Event> onDate(const QVector<Event>& evs, const QDate& cal)
+{
+    QVector<Event> out;
+    for (const Event& e : evs) {
+        const bool on = e.weekdays == 0 ? e.day == cal
+                                        : (e.weekdays & (1 << (cal.dayOfWeek() - 1))) && (!e.from.isValid() || cal >= e.from) && (!e.to.isValid() || cal <= e.to);
+        if (on) out.append(e);
+    }
+    std::sort(out.begin(), out.end(), [](const Event& a, const Event& b) { return a.startMin < b.startMin; });
+    return out;
+}
+
 namespace {
 using Span = QPair<qint64, qint64>;
 // Resta [s, f] de una lista de tramos libres y devuelve cuántos segundos se cubrieron.

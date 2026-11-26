@@ -208,6 +208,9 @@ private:
     QLabel*      m_dateLabel = nullptr;
     QPushButton* m_objectiveBtn = nullptr;   // M14
     QPushButton* m_btnToday = nullptr;
+    QPushButton* m_btnRoutine = nullptr;   // Mejoras 6.0
+    void reloadRoutine();
+    void editRoutineEvent(qint64 id, const QDate& day);
 
     GridWidget* m_grid = nullptr;
     QLabel*     m_toast = nullptr;
