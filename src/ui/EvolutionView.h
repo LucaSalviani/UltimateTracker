@@ -62,6 +62,11 @@ private:
     QVector<QDate> m_dates;           // un día por entrada
     QVector<insights::DayStat> m_days;
     QVector<Week> m_weeks;
+    // Progreso por período (semana a semana, mes a mes, año a año).
+    struct Bucket { QDate start, end; qint64 study = 0; int pomos = 0; int days = 0; bool complete = false; };
+    QString m_gran = QStringLiteral("week");
+    QVector<Bucket> m_buckets;
+    void paintProgress(QPainter& p, const QRectF& r);
     // Comparación: los últimos m_cmpLen días contra los m_cmpLen anteriores (m_cmp = 2*len días).
     int m_cmpLen = 30;
     QVector<insights::DayStat> m_cmp;

@@ -50,6 +50,9 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 12
+- **Evolución › Semana a semana / Mes a mes / Año a año**: arriba de todo, las horas de cada semana (12), mes (12) o año, con el **% contra el período anterior** sobre cada barra, una **recta de tendencia** y una frase ("Última semana completa: 8h00 (−40 % vs la anterior). Tendencia: +24m por semana"). La barra clara es el período en curso: no entra en el % ni en la tendencia hasta que termina. Pasá el mouse o hacé click en una barra para ver horas, pomodoros y promedio por día.
+
 ### Novedades de la beta 11
 - **Evolución**: períodos de **7, 15, 30, 90 días, 12 meses y Todo**. Cada ficha compara el período elegido con el anterior de igual largo ("↑ 42 % vs 30 días antes") y muestra la diferencia por día y el total ("+21m por día · total 35h45 (antes 25h10)"). Sirve para ver si este mes estudiaste más y cuánto. Sólo cuentan los días desde que empezaste a usar la app, y alcanza con unos días de datos previos.
 

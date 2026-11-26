@@ -16,6 +16,8 @@ namespace {
 constexpr double kPad = 16;
 constexpr double kCardH = 168;
 constexpr double kTilesH = 112;
+constexpr double kGranH = 36;   // fila de pastillas Semanas | Meses | Años
+constexpr double kProgH = 200;
 constexpr double kGap = 14;
 QColor ink() { return theme::pomoAccent; }
 
@@ -84,6 +86,36 @@ void EvolutionView::reload(Database* db, const QSet<qint64>* filter)
     m_trend = insights::trend(series, m_cmpLen);
     const auto ct = insights::trend(cmpSeries, m_cmpLen);
     m_trend.recent = ct.recent; m_trend.previous = ct.previous; m_trend.pct = ct.pct; m_trend.enough = ct.enough;
+    // Buckets por período (siempre desde el primer día con datos, no depende del rango elegido).
+    m_gran = db->setting("stats/evo_gran", "week").toString();
+    {
+        auto startOf = [&](const QDate& d) {
+            if (m_gran == "month") return QDate(d.year(), d.month(), 1);
+            if (m_gran == "year") return QDate(d.year(), 1, 1);
+            return fmt::mondayOf(d);
+        };
+        auto next = [&](const QDate& s) {
+            if (m_gran == "month") return s.addMonths(1);
+            if (m_gran == "year") return s.addYears(1);
+            return s.addDays(7);
+        };
+        const int maxN = m_gran == "year" ? 10 : 12;
+        QDate st = startOf(m_today);
+        for (int i = 1; i < maxN && startOf(m_first) < st; ++i) {
+            const QDate prev = m_gran == "month" ? st.addMonths(-1) : m_gran == "year" ? st.addYears(-1) : st.addDays(-7);
+            st = prev;
+        }
+        const auto bd = insights::daily(*db, st, m_today, m_filter, now);
+        m_buckets.clear();
+        for (QDate s0 = st; s0 <= m_today; s0 = next(s0)) {
+            Bucket b; b.start = s0; b.end = next(s0).addDays(-1);
+            b.complete = b.end < m_today;
+            const QDate from = qMax(s0, m_first), to = qMin(b.end, m_today);
+            b.days = from <= to ? int(from.daysTo(to)) + 1 : 0;
+            for (QDate d = s0; d <= to; d = d.addDays(1)) { const auto it = bd.value(d); b.study += it.study; b.pomos += it.pomos; }
+            m_buckets << b;
+        }
+    }
     m_diary = db->dayDiaries(m_from, m_today);
     m_summary = summaryHtml();
     setMinimumHeight(contentHeight(width()));
@@ -134,7 +166,7 @@ QString EvolutionView::summaryHtml() const
 int EvolutionView::contentHeight(int) const
 {
     // pastillas + fichas + 5 tarjetas
-    return int(8 + 40 + kTilesH + kGap + 5 * (kCardH + kGap) + 20);
+    return int(8 + 40 + kGranH + kProgH + kGap + kTilesH + kGap + 5 * (kCardH + kGap) + 20);
 }
 
 void EvolutionView::card(QPainter& p, const QRectF& r, const QString& title, const QString& sentence) const
@@ -190,6 +222,28 @@ void EvolutionView::paintEvent(QPaintEvent*)
         y += 40;
     }
 
+    // Progreso por período
+    {
+        static const char* keys[] = {"week", "month", "year"};
+        static const char* names[] = {"Semana a semana", "Mes a mes", "Año a año"};
+        p.setFont(theme::uiFont(8.5, QFont::DemiBold));
+        double x = L;
+        for (int k = 0; k < 3; ++k) {
+            const double w = QFontMetricsF(p.font()).horizontalAdvance(QString::fromUtf8(names[k])) + 22;
+            const QRectF pill(x, y, w, 24);
+            const bool on = m_gran == keys[k];
+            p.setPen(on ? Qt::NoPen : QPen(theme::line, 1));
+            if (on) p.setBrush(theme::mix(theme::surface, ink(), 0.45)); else p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(pill, 12, 12);
+            p.setPen(on ? theme::text : theme::textDim);
+            p.drawText(pill, Qt::AlignCenter, QString::fromUtf8(names[k]));
+            m_zones.append({pill, QString(), QStringLiteral("gran:%1").arg(keys[k])});
+            x += w + 6;
+        }
+        y += kGranH;
+        paintProgress(p, QRectF(L, y, W, kProgH)); y += kProgH + kGap;
+    }
+
     paintTiles(p, QRectF(L, y, W, kTilesH)); y += kTilesH + kGap;
 
     paintHours(p, QRectF(L, y, W, kCardH)); y += kCardH + kGap;
@@ -203,6 +257,96 @@ void EvolutionView::paintEvent(QPaintEvent*)
     paintMood(p, QRectF(L, y, W, kCardH));
 }
 
+
+// Semana a semana (o mes a mes, año a año): total de cada período, % contra el anterior y tendencia.
+void EvolutionView::paintProgress(QPainter& p, const QRectF& r)
+{
+    const QString unit = m_gran == "month" ? QStringLiteral("mes") : m_gran == "year" ? QStringLiteral("año") : QStringLiteral("semana");
+    const QString units = m_gran == "month" ? QStringLiteral("meses") : m_gran == "year" ? QStringLiteral("años") : QStringLiteral("semanas");
+    const QString title = m_gran == "month" ? QStringLiteral("Mes a mes") : m_gran == "year" ? QStringLiteral("Año a año") : QStringLiteral("Semana a semana");
+    static const char* mon[] = {"ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"};
+    auto labelOf = [&](const Bucket& b) {
+        if (m_gran == "month") return QString::fromUtf8(mon[b.start.month() - 1]);
+        if (m_gran == "year") return QString::number(b.start.year());
+        return fmt::shortDate(b.start).section(' ', -2);
+    };
+    auto nameOf = [&](const Bucket& b) {
+        if (m_gran == "month") return QStringLiteral("%1 %2").arg(QString::fromUtf8(mon[b.start.month() - 1])).arg(b.start.year());
+        if (m_gran == "year") return QString::number(b.start.year());
+        return QStringLiteral("Semana del %1").arg(fmt::shortDate(b.start));
+    };
+    // Períodos completos con datos: base de la tendencia.
+    QVector<int> idx;
+    for (int i = 0; i < m_buckets.size(); ++i) if (m_buckets[i].complete && m_buckets[i].days > 0) idx << i;
+    QString sentence;
+    double slope = 0, icpt = 0;
+    const int n = int(idx.size());
+    if (n >= 2) {
+        double sx = 0, sy = 0, sxx = 0, sxy = 0;
+        for (int k = 0; k < n; ++k) { const double v = double(m_buckets[idx[k]].study); sx += k; sy += v; sxx += double(k) * k; sxy += k * v; }
+        const double den = n * sxx - sx * sx;
+        slope = den != 0 ? (n * sxy - sx * sy) / den : 0;
+        icpt = (sy - slope * sx) / n;
+        const double last = double(m_buckets[idx[n - 1]].study), prev = double(m_buckets[idx[n - 2]].study);
+        const QString lastTxt = QStringLiteral("%1 %2 completa: %3").arg(unit == "semana" || unit == "mes" ? QStringLiteral("Última") : QStringLiteral("Último"), unit, fmtH(last));
+        const QString chg = prev > 0 ? QStringLiteral(" (%1 vs la anterior)").arg(pct((last - prev) / prev)) : QString();
+        const double rel = sy > 0 ? slope / (sy / n) : 0;
+        const QString tr = std::abs(rel) < 0.03 ? QStringLiteral("Tendencia: estable.")
+            : QStringLiteral("Tendencia: %1%2 por %3.").arg(slope > 0 ? QStringLiteral("+") : QStringLiteral("−"), fmtH(std::abs(slope)), unit);
+        sentence = lastTxt + chg + QStringLiteral(". ") + tr;
+    } else {
+        sentence = QStringLiteral("Hace falta al menos 2 %1 completos para ver la tendencia.").arg(units);
+    }
+    card(p, r, title, sentence);
+    const QRectF a = plotArea(r);
+    const int m = int(m_buckets.size());
+    if (m == 0) return;
+    double maxV = 3600;
+    for (const Bucket& b : m_buckets) maxV = qMax(maxV, double(b.study));
+    maxV *= 1.18;   // lugar para el % arriba de la barra
+    p.setFont(theme::uiFont(7.5));
+    for (int g = 0; g <= 3; ++g) {
+        const double gy = a.bottom() - a.height() * g / 3.0;
+        p.setPen(QPen(theme::line, 1));
+        p.drawLine(QPointF(a.left(), gy), QPointF(a.right(), gy));
+        p.setPen(theme::textFaint);
+        p.drawText(QRectF(r.left() + 4, gy - 7, 36, 14), Qt::AlignRight | Qt::AlignVCenter, fmtH(maxV * g / 3.0));
+    }
+    const double slot = a.width() / m;
+    const double bw = qMin(60.0, qMax(4.0, slot * 0.62));
+    for (int i = 0; i < m; ++i) {
+        const Bucket& b = m_buckets[i];
+        const double h = a.height() * double(b.study) / maxV;
+        const double cx = a.left() + (i + 0.5) * slot;
+        const QRectF bar(cx - bw / 2, a.bottom() - h, bw, h);
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::mix(theme::surface, ink(), b.complete ? 0.62 : 0.3));
+        if (b.study > 0) p.drawRoundedRect(bar, 3, 3);
+        QString tip = QStringLiteral("%1%2\n%3 de estudio · %4 pomodoro(s)").arg(nameOf(b), b.complete ? QString() : QStringLiteral(" (en curso)"), fmtH(double(b.study))).arg(b.pomos);
+        if (b.days > 0) tip += QStringLiteral("\nPromedio: %1 por día").arg(fmtH(double(b.study) / b.days));
+        // % contra el anterior (solo entre períodos completos)
+        if (b.complete && i > 0 && m_buckets[i - 1].complete && m_buckets[i - 1].study > 0 && b.days > 0) {
+            const double ch = (double(b.study) - m_buckets[i - 1].study) / m_buckets[i - 1].study;
+            p.setFont(theme::uiFont(7.5, QFont::DemiBold));
+            p.setPen(std::abs(ch) < 0.05 ? theme::textDim : ch > 0 ? theme::breakAccent : theme::squareFinal.lighter(125));
+            p.drawText(QRectF(cx - slot / 2, bar.top() - 15, slot, 13), Qt::AlignCenter, pct(ch));
+            tip += QStringLiteral("\n%1 vs el anterior").arg(pct(ch));
+        }
+        m_zones.append({QRectF(a.left() + i * slot, a.top(), slot, a.height()), tip, QString()});
+        p.setFont(theme::uiFont(7));
+        p.setPen(theme::textFaint);
+        if (m <= 14 || i % 2 == 0) p.drawText(QRectF(cx - slot / 2 - 10, a.bottom() + 3, slot + 20, 12), Qt::AlignCenter, labelOf(b));
+    }
+    if (n >= 2) {   // recta de tendencia sobre los períodos completos
+        const auto pt = [&](int k) { return QPointF(a.left() + (idx[k] + 0.5) * slot, a.bottom() - a.height() * qBound(0.0, (icpt + slope * k) / maxV, 1.0)); };
+        p.setPen(QPen(theme::text, 1.3, Qt::DashLine));
+        p.drawLine(pt(0), pt(n - 1));
+    }
+    p.setFont(theme::uiFont(7.5));
+    p.setPen(theme::textDim);
+    p.drawText(QRectF(r.left() + 14, r.top() + 8, r.width() - 28, 14), Qt::AlignRight | Qt::AlignVCenter,
+               QStringLiteral("horas de cada %1 (la clara sigue en curso)   - -  tendencia").arg(unit));
+}
 
 // Fichas: promedio diario del período elegido y variación contra el período anterior de igual largo.
 void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
@@ -535,6 +679,11 @@ void EvolutionView::mouseReleaseEvent(QMouseEvent* e)
             return;
         }
     for (const Zone& z : m_zones) {
+        if (z.rect.contains(e->position()) && z.key.startsWith(QLatin1String("gran:"))) {
+            m_db->setSetting("stats/evo_gran", z.key.mid(5));
+            reload(m_db, m_filter);
+            return;
+        }
         if (!z.rect.contains(e->position()) || !z.key.startsWith(QLatin1String("range:"))) continue;
         m_db->setSetting("stats/evo_range", z.key.mid(6).toInt());
         reload(m_db, m_filter);
