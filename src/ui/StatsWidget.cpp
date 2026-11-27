@@ -269,8 +269,12 @@ protected:
         if (data.editing && !z) id = itemAt(e->position());
         if (!id.isEmpty()) {
             const int g = edgeAt(id, e->position());
-            setCursor(g == 3 ? Qt::SizeFDiagCursor : g == 1 ? Qt::SizeHorCursor : g == 2 ? Qt::SizeVerCursor : Qt::OpenHandCursor);
-        } else setCursor(z ? Qt::PointingHandCursor : Qt::ArrowCursor);
+            setCursor(g ? cursorFor(g) : Qt::OpenHandCursor);
+            if (id != m_hoverId || g != m_hoverMask) { m_hoverId = id; m_hoverMask = g; update(); }
+        } else {
+            setCursor(z ? Qt::PointingHandCursor : Qt::ArrowCursor);
+            if (!m_hoverId.isEmpty()) { m_hoverId.clear(); m_hoverMask = 0; update(); }
+        }
         const QString key = z ? z->key : QString();
         if (key != m_hoverKey) { m_hoverKey = key; update(); }
         if (hoverTips && z && tipFor) QToolTip::showText(e->globalPosition().toPoint(), tipFor(z->key), this, z->rect.toRect());
@@ -286,7 +290,7 @@ protected:
             (void)who;
             if (!m_preview.isEmpty()) {
                 data.grid = m_preview;
-                pinPositions(data.grid, flow(data.grid, m_W, presentSet(), QString()));   // suelta: todo se apoya sin huecos
+                pinPositions(data.grid, flow(data.grid, m_W, presentSet(), QString()));   // suelta: quedan fijas donde están (con lo que se corrió)
             }
             m_preview.clear();
             m_dragId.clear();
@@ -491,6 +495,7 @@ private:
     {
         if (id == QLatin1String("chart")) return {6, 12, isBarsChart() ? 5 : 0, isBarsChart() ? 16 : 0};
         if (id == QLatin1String("folders")) return {6, 12, 4, 24};
+        if (id == QLatin1String("streak") || id == QLatin1String("records")) return {3, 12, 3, 6};   // llevan varias líneas
         return {2, 12, 2, 6};
     }
     // Qué tarjetas tienen algo para mostrar hoy (las prendidas que tienen datos).
@@ -516,9 +521,9 @@ private:
             return rowsFor(chartHeight(cols * cellW(W, n) + (cols - 1) * kGridGap));
         return it.rows;
     }
-    // Reparte las tarjetas: las que tienen lugar elegido van ahí (si chocan, la de abajo se corre hacia abajo),
-    // después todas «suben» hasta apoyarse (sin huecos de más), y las automáticas van al primer hueco libre.
-    // `priority` (la que se arrastra o estira) se acomoda primero y no sube.
+    // Reparte las tarjetas como en el escritorio de Android: cada una queda exactamente donde la dejaste (se permiten huecos);
+    // si dos se pisan, la de abajo se corre hacia abajo. Las que no tienen lugar van al primer hueco libre.
+    // `priority` (la que se arrastra o estira) se acomoda primero.
     QVector<Placed> flow(const QVector<StatsData::Item>& items, double W, const QSet<QString>& pres, const QString& priority = QString()) const
     {
         const int n = gridCols(W);
@@ -548,14 +553,6 @@ private:
             while (!isFree(row, col, c, r)) ++row;
             mark(row, col, c, r, 1);
             out.append({it.id, col, row, c, r});
-        }
-        // gravedad: cada una sube hasta apoyarse (la que se está moviendo se queda donde está)
-        std::stable_sort(out.begin(), out.end(), [&](const Placed& a, const Placed& b) { return a.row != b.row ? a.row < b.row : a.col < b.col; });
-        for (Placed& pl : out) {
-            if (pl.id == priority) continue;
-            mark(pl.row, pl.col, pl.cols, pl.rows, 0);
-            while (pl.row > 0 && isFree(pl.row - 1, pl.col, pl.cols, pl.rows)) --pl.row;
-            mark(pl.row, pl.col, pl.cols, pl.rows, 1);
         }
         // automáticas: primer hueco libre, en orden
         for (const auto& it : items) {
@@ -603,14 +600,25 @@ private:
         for (auto it = m_shown.cbegin(); it != m_shown.cend(); ++it) if (it.value().contains(pos)) return it.key();
         return {};
     }
-    int edgeAt(const QString& id, const QPointF& pos) const   // 1 = borde derecho, 2 = inferior, 3 = esquina
+    // Bordes que se agarran: 1 derecho, 2 inferior, 4 izquierdo, 8 superior (se combinan en las esquinas).
+    int edgeAt(const QString& id, const QPointF& pos) const
     {
         const QRectF r = m_shown.value(id);
         const Limits lim = limitsFor(id);
         int g = 0;
         if (pos.x() >= r.right() - kEdgeGrab) g |= 1;
-        if (lim.minR > 0 && pos.y() >= r.bottom() - kEdgeGrab) g |= 2;
+        else if (pos.x() <= r.left() + kEdgeGrab) g |= 4;
+        if (lim.minR > 0) {
+            if (pos.y() >= r.bottom() - kEdgeGrab) g |= 2;
+            else if (pos.y() <= r.top() + kEdgeGrab) g |= 8;
+        }
         return g;
+    }
+    static Qt::CursorShape cursorFor(int g)
+    {
+        const bool h = g & 5, v = g & 10;
+        if (h && v) return ((g & 1) && (g & 2)) || ((g & 4) && (g & 8)) ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor;
+        return h ? Qt::SizeHorCursor : Qt::SizeVerCursor;
     }
     void paintGridDots(QPainter& p, const QVector<Placed>& placed) const
     {
@@ -634,6 +642,7 @@ private:
             if (d.x() * d.x() + d.y() * d.y() < 25) return;
             m_preview = data.grid;
             pinPositions(m_preview, flow(data.grid, m_W, presentSet()));
+            m_resStart = m_preview;
             if (m_grab) m_resId = m_pressId;
             else { m_dragId = m_pressId; m_dragOff = m_pressPos - m_pressRect.topLeft(); setCursor(Qt::ClosedHandCursor); }
         }
@@ -667,19 +676,33 @@ private:
         const int n = gridCols(m_W);
         const double cw = cellW(m_W, n);
         const Limits lim = limitsFor(m_resId);
-        double nw = m_pressRect.width() + ((m_grab & 1) ? d.x() : 0);
-        double nh = m_pressRect.height() + ((m_grab & 2) ? d.y() : 0);
+        const int dxc = int(std::lround(d.x() / (cw + kGridGap))), dyc = int(std::lround(d.y() / (kCellH + kGridGap)));
         for (auto& it : m_preview) {
             if (it.id != m_resId) continue;
-            if (m_grab & 1) {
-                const int effMin = qMax(1, int(std::lround(lim.minC * n / 12.0)));
-                const int c = qBound(effMin, int(std::lround((nw + kGridGap) / (cw + kGridGap))), n);
-                it.cols = qBound(2, int(std::lround(c * 12.0 / n)), 12);
+            // casilleros de partida (los de la tarjeta al agarrarla)
+            const int c0 = itemCols(it0(), n), r0 = it0().rows;
+            const int x0 = qBound(0, int(std::lround(it0().x * n / 12.0)), n - c0), y0 = it0().y;
+            const int effMin = qMax(1, int(std::lround(lim.minC * n / 12.0)));
+            int c = c0, x = x0, r = r0, y = y0;
+            if (m_grab & 1) c = qBound(effMin, c0 + dxc, n - x0);
+            if (m_grab & 4) { c = qBound(effMin, c0 - dxc, x0 + c0); x = x0 + c0 - c; }
+            if (lim.minR > 0) {
+                if (m_grab & 2) r = qBound(lim.minR, r0 + dyc, lim.maxR);
+                if (m_grab & 8) { r = qBound(lim.minR, qMin(r0 - dyc, y0 + r0), lim.maxR); y = y0 + r0 - r; }
             }
-            if ((m_grab & 2) && lim.minR > 0) it.rows = qBound(lim.minR, int(std::lround((nh + kGridGap) / (kCellH + kGridGap))), lim.maxR);
+            it.cols = qBound(2, int(std::lround(c * 12.0 / n)), 12);
+            it.x = qBound(0, int(std::lround(x * 12.0 / n)), 11);
+            it.rows = r;
+            it.y = qMax(0, y);
         }
-        m_shown[m_resId] = QRectF(m_pressRect.topLeft(), QSizeF(qMax(60.0, nw), qMax(40.0, nh)));   // sigue al mouse; el casillero marca dónde va a quedar
+        QRectF raw = m_pressRect;   // lo que se ve sigue al mouse; el casillero punteado marca dónde va a quedar
+        if (m_grab & 1) raw.setRight(qMax(raw.left() + 60, m_pressRect.right() + d.x()));
+        if (m_grab & 4) raw.setLeft(qMin(raw.right() - 60, m_pressRect.left() + d.x()));
+        if (m_grab & 2) raw.setBottom(qMax(raw.top() + 40, m_pressRect.bottom() + d.y()));
+        if (m_grab & 8) raw.setTop(qMin(raw.bottom() - 40, m_pressRect.top() + d.y()));
+        m_shown[m_resId] = raw;
     }
+    const StatsData::Item& it0() const { for (const auto& it : m_resStart) if (it.id == m_resId) return it; static StatsData::Item none; return none; }
     bool stepSpring()
     {
         constexpr double dt = 0.016;
@@ -728,23 +751,15 @@ private:
             p.setPen(QPen(c, 1, Qt::DashLine));
             p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 10, 10);
-            // flechitas para agrandar o achicar: borde derecho, borde inferior y esquina
-            QColor ac = theme::text;
-            ac.setAlpha(190);
-            p.setPen(QPen(ac, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-            auto arrow = [&](QPointF c, QPointF d, double len) {   // flecha de dos puntas, d = dirección unitaria
-                const QPointF a = c - d * (len / 2), b = c + d * (len / 2), nrm(-d.y(), d.x());
-                p.drawLine(a, b);
-                for (const auto& e : {QPair<QPointF, double>(a, 1.0), QPair<QPointF, double>(b, -1.0)}) {
-                    p.drawLine(e.first, e.first + (d * e.second + nrm * 0.7) * 3.6);
-                    p.drawLine(e.first, e.first + (d * e.second - nrm * 0.7) * 3.6);
-                }
-            };
-            const Limits lim = limitsFor(id);
-            arrow(QPointF(r.right() - 8, r.center().y()), QPointF(1, 0), 11);
-            if (lim.minR > 0) {
-                arrow(QPointF(r.center().x(), r.bottom() - 5), QPointF(0, 1), 9);
-                arrow(QPointF(r.right() - 11, r.bottom() - 11), QPointF(0.7071, 0.7071), 11);
+            if (id == m_hoverId && m_hoverMask && m_dragId.isEmpty() && m_resId.isEmpty()) {   // el borde que se agarra se ilumina
+                QColor ac = theme::text;
+                ac.setAlpha(210);
+                p.setPen(QPen(ac, 2.5, Qt::SolidLine, Qt::RoundCap));
+                const QRectF q = r.adjusted(1.5, 1.5, -1.5, -1.5);
+                if (m_hoverMask & 1) p.drawLine(q.topRight() + QPointF(0, 8), q.bottomRight() - QPointF(0, 8));
+                if (m_hoverMask & 4) p.drawLine(q.topLeft() + QPointF(0, 8), q.bottomLeft() - QPointF(0, 8));
+                if (m_hoverMask & 2) p.drawLine(q.bottomLeft() + QPointF(8, 0), q.bottomRight() - QPointF(8, 0));
+                if (m_hoverMask & 8) p.drawLine(q.topLeft() + QPointF(8, 0), q.topRight() - QPointF(8, 0));
             }
             p.restore();
         }
@@ -788,6 +803,9 @@ private:
     QPointF m_dragOff, m_pressPos;
     QRectF m_pressRect;
     int m_grab = 0;
+    QVector<StatsData::Item> m_resStart;   // cómo estaba todo al agarrar el borde
+    QString m_hoverId;
+    int m_hoverMask = 0;
     QTimer m_animTimer;
 
     void sectionTitle(QPainter& p, double x, double y, const QString& t) const
