@@ -2675,15 +2675,17 @@ void MainWindow::preloadFromGoal()
     const auto parsed = goals::parse(r->spec, m_db->setting("work_min", 25).toInt());
     if (!parsed.ok || parsed.timeMode) return;   // por tiempo: queda la duración que uses
     const auto fills = goals::fillByActivity(parsed, studiedByFolder(m_db->pomodorosBetween(m_today, m_today), false), m_tree);
-    // El próximo bloque: primero uno a medias o vacío de la actividad elegida; si no, el primero que falte.
+    // Mejoras 7.0: lo mismo que muestran los fantasmas (el resto se come el final de la cola),
+    // así el próximo pomodoro dura lo que dura el próximo cuadradito punteado.
+    const QVector<int> rem = goals::remainingBlocks(parsed, fills);
+    // El próximo bloque: primero uno de la actividad elegida; si no, el primero que falte.
     int next = -1;
-    for (int i = 0; i < fills.size(); ++i)
-        if (fills[i] < 0.999 && parsed.folders.value(i) > 0 && m_tree.subtree(parsed.folders[i]).contains(m_session->folderId())) { next = i; break; }
+    for (int i = 0; i < rem.size(); ++i)
+        if (rem[i] >= 3 && parsed.folders.value(i) > 0 && m_tree.subtree(parsed.folders[i]).contains(m_session->folderId())) { next = i; break; }
     if (next < 0)
-        for (int i = 0; i < fills.size(); ++i) if (fills[i] < 0.999) { next = i; break; }
+        for (int i = 0; i < rem.size(); ++i) if (rem[i] >= 3) { next = i; break; }
     if (next < 0) return;
-    // Mejoras 5.0: lo que muestra el fantasma, o sea lo que falta de ese bloque (si ya hiciste 9 de 25, arranca de 16).
-    const int left = qMax(1, int(std::ceil(parsed.blocks[next] * (1.0 - qBound(0.0, fills[next], 1.0)) - 1e-6)));
+    const int left = rem[next];
     m_session->setWorkSec(left * 60);
     // B2: si el bloque es de una actividad, también la deja elegida (sin dejar nada en pausa).
     const qint64 f = parsed.folders.value(next);
