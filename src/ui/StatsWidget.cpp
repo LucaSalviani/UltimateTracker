@@ -265,8 +265,9 @@ protected:
     {
         if (data.editing && !m_pressId.isEmpty() && (e->buttons() & Qt::LeftButton)) { dragStep(e->position()); return; }
         const Zone* z = zoneAt(e->position());
+        const bool onButton = z && (z->key.startsWith(QLatin1String("card:")) || z->key.startsWith(QLatin1String("lay:")));
         QString id;
-        if (data.editing && !z) id = itemAt(e->position());
+        if (data.editing && !onButton) id = itemAt(e->position());   // las zonas de cada tarjeta la cubren entera: solo los botones mandan
         if (!id.isEmpty()) {
             const int g = edgeAt(id, e->position());
             setCursor(g ? cursorFor(g) : Qt::OpenHandCursor);
@@ -553,6 +554,14 @@ private:
             while (!isFree(row, col, c, r)) ++row;
             mark(row, col, c, r, 1);
             out.append({it.id, col, row, c, r});
+        }
+        // las secciones (gráfico, actividades) suben hasta apoyarse en lo de arriba: así no queda un margen suelto
+        std::stable_sort(out.begin(), out.end(), [&](const Placed& a, const Placed& b) { return a.row != b.row ? a.row < b.row : a.col < b.col; });
+        for (Placed& pl : out) {
+            if (pl.id == priority || (pl.id != QLatin1String("chart") && pl.id != QLatin1String("folders"))) continue;
+            mark(pl.row, pl.col, pl.cols, pl.rows, 0);
+            while (pl.row > 0 && isFree(pl.row - 1, pl.col, pl.cols, pl.rows)) --pl.row;
+            mark(pl.row, pl.col, pl.cols, pl.rows, 1);
         }
         // automáticas: primer hueco libre, en orden
         for (const auto& it : items) {
@@ -847,9 +856,14 @@ private:
         p.setPen(theme::textDim);
         p.drawText(r.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop,
                    QFontMetrics(p.font()).elidedText(label, Qt::ElideRight, int(r.width() - 22)));
-        p.setFont(theme::uiFont(valuePt, QFont::DemiBold));
         p.setPen(accent);
-        p.drawText(r.adjusted(14, 0, -8, sub.isEmpty() ? -10 : -26), Qt::AlignLeft | Qt::AlignBottom, value);
+        if (key == QLatin1String("study") && r.height() > 70) {   // tarjeta grande: la cifra va al centro y crece con ella
+            p.setFont(theme::uiFont(valuePt * qBound(1.0, qMin(r.height() / 86.0, r.width() / 190.0), 2.4), QFont::DemiBold));
+            p.drawText(r.adjusted(8, 18, -8, 0), Qt::AlignCenter, value);
+        } else {
+            p.setFont(theme::uiFont(valuePt, QFont::DemiBold));
+            p.drawText(r.adjusted(14, 0, -8, sub.isEmpty() ? -10 : -26), Qt::AlignLeft | Qt::AlignBottom, value);
+        }
         if (!sub.isEmpty()) {
             p.setFont(theme::uiFont(8));
             p.setPen(theme::textFaint);
@@ -869,14 +883,17 @@ private:
         p.setFont(theme::uiFont(8.5));
         p.setPen(theme::textDim);
         p.drawText(sr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("RACHA"));
+        // al agrandar la tarjeta el contenido queda centrado (no pegado abajo)
+        const double ew = qMin(sr.width(), 320.0), eh = qMin(sr.height(), 92.0);
+        const QRectF er(sr.left() + (sr.width() - ew) / 2, sr.top() + (sr.height() - eh) / 2 + (sr.height() > eh ? 6 : 0), ew, eh);
         const QString num = QString::number(data.streak.days);
         p.setFont(theme::uiFont(34, QFont::DemiBold));
         p.setPen(data.streak.days > 0 ? theme::text : theme::textDim);
-        p.drawText(sr.adjusted(14, 0, 0, -8), Qt::AlignLeft | Qt::AlignBottom, num);
+        p.drawText(er.adjusted(14, 0, 0, -8), Qt::AlignLeft | Qt::AlignBottom, num);
         const double numW = QFontMetricsF(p.font()).horizontalAdvance(num);
         p.setFont(theme::uiFont(10));
         p.setPen(theme::textDim);
-        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, sr.height() - 14), Qt::AlignLeft | Qt::AlignBottom,
+        p.drawText(QRectF(er.left() + 14 + numW + 6, er.top(), 60, er.height() - 14), Qt::AlignLeft | Qt::AlignBottom,
                    data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
         // columna derecha: comodines, récord y lo que pasa hoy
         QStringList side;
@@ -890,11 +907,11 @@ private:
         if (!data.streak.todayDone) side << QStringLiteral("hoy todavía no arrancaste");
         p.setFont(theme::uiFont(8.5));
         p.setPen(theme::textDim);
-        const double sx = sr.left() + 14 + numW + 62;
-        const double sideW = sr.right() - 10 - sx;
+        const double sx = er.left() + 14 + numW + 62;
+        const double sideW = er.right() - 10 - sx;
         if (sideW > 70) {
             const QFontMetrics fm(p.font());
-            double ty = sr.bottom() - 12 - side.size() * 15;
+            double ty = er.bottom() - 12 - side.size() * 15;
             for (const QString& s : side) {
                 p.drawText(QRectF(sx, ty, sideW, 15), Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(s, Qt::ElideRight, int(sideW)));
                 ty += 15;
