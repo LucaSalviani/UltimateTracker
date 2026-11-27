@@ -87,7 +87,7 @@
 - **Libreta**: la aleta tiene dos solapas, *Diario* y *Libreta* (atajo `L`), con páginas permanentes, buscador, fijar, casillas y exportar.
 
 ### Novedades de la beta 9
-- **Personalizar las estadísticas**: en la vista *Avanzada* tocá *Personalizar* y, para cada panel (Resumen, Hitos, Gráfico, Actividades), elegí ocultarlo, subirlo o bajarlo, y su tamaño S / M / L. *Restablecer* vuelve a como venía; *Listo* termina.
+- **Personalizar las estadísticas** (⋯ → *Personalizar estadísticas*, dentro de Estadísticas): cada tarjeta y cada sección (Gráfico, Actividades) se **arrastra** para cambiarla de lugar y se **estira desde el borde derecho, el inferior o la esquina**, como una ventana, encajando en una grilla con imán (se ven los puntos de la grilla mientras movés). Al soltar, todo se acomoda con un pequeño rebote. La ✕ saca una tarjeta y *＋ Tarjetas* la devuelve; *Restablecer* vuelve a como venía; *Listo* termina. La vista simple y la avanzada guardan cada una su diseño.
 
 ### Novedades de la beta 8
 - **Sesiones**: en Estadísticas (vista avanzada) ves cuántas sesiones tuviste. Una sesión termina con «Me voy» o con una pausa larga (se cambia en Ajustes › General).

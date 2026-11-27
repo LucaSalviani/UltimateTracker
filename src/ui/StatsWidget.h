@@ -31,7 +31,10 @@ public:
     // Mejoras 3.0: el detalle de un dato (hover = resumen, click = mini ventana)
     QString tipFor(const QString& key) const;
     void showDetail(const QString& key);
-    void setEditing(bool on);   // Mejoras 6.0: modo personalizar (desde el menú ⋯)
+    void setEditing(bool on);
+    // Para las pruebas de pantalla: el lienzo y dónde está dibujada una tarjeta (coordenadas del lienzo).
+    QWidget* canvasWidget() const;
+    QRectF   itemRect(const QString& id) const;   // Mejoras 6.0: modo personalizar (desde el menú ⋯)
     bool isEditing() const { return m_editing; }
     QString dayHtml(const QDate& day, bool brief) const;
 
@@ -67,6 +70,7 @@ private:
     QPushButton*   m_viewBtn = nullptr;   // Mejoras 4.1: simple / avanzada
     bool           m_editing = false;
     void           layoutAction(const QString& key);
+    void           migrateGrid();
     QToolButton*   m_prev = nullptr;
     QToolButton*   m_next = nullptr;
 };

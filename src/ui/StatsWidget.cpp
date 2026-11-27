@@ -33,6 +33,9 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QTimer>
+#include <array>
 #include <QToolTip>
 #include <QMouseEvent>
 #include <QToolButton>
@@ -81,12 +84,13 @@ struct StatsData {
     ms::Records records;   // incluye hoy
     int bestStreak = 0;
     // Mejoras 5.2: paneles de la pantalla (orden, visibilidad y tamaño 0/1/2 = S/M/L), editables en la vista avanzada
-    struct Panel { QString id; bool visible = true; int size = 1; };
-    QVector<Panel> layout;
+    struct Panel { QString id; bool visible = true; int size = 1; };   // solo para migrar el formato viejo
+    // Mejoras 7.0: grilla con imán. Cada tarjeta o sección tiene un ancho en columnas (de 12) y un alto en filas.
+    struct Item { QString id; int cols = 4; int rows = 2; };
+    QVector<Item> grid;
     QSet<QString> cards;   // Mejoras 6.0: tarjetas sueltas que se ven (cada vista, simple o avanzada, tiene las suyas)
     bool has(const QString& id) const { return cards.contains(id); }
     bool editing = false;
-    int sizeOf(const QString& id) const { for (const Panel& pn : layout) if (pn.id == id) return pn.size; return 1; }
     QSet<qint64> hiddenRows;   // Mejoras 5.0: actividades que el usuario sacó de la lista
     QHash<qint64, QColor> colors;   // M35: color de cada actividad (vacío si están apagados)
     QColor colorOf(qint64 id) const { return colors.value(id, statsInk()); }
@@ -95,14 +99,14 @@ struct StatsData {
 // Mejoras 6.0: tarjetas sueltas. Cada vista (simple / avanzada) guarda las suyas.
 static const QStringList& allCards()
 {
-    static const QStringList l = {"streak", "study", "focus", "breaks", "undue", "paused", "inactive", "sessions", "goals", "mark", "startgoal", "weekly", "records", "level"};
+    static const QStringList l = {"streak", "study", "focus", "breaks", "undue", "paused", "inactive", "sessions", "goals", "mark", "startgoal", "weekly", "records", "level", "chart", "folders"};
     return l;
 }
 static QString cardName(const QString& id)
 {
     static const QMap<QString, QString> m = {{"streak", "Racha"}, {"study", "Estudio"}, {"focus", "Foco %"}, {"breaks", "Recreos"},
         {"undue", "Tiempo muerto"}, {"paused", "Recreo indebido"}, {"inactive", "Horas inactivas"}, {"sessions", "Sesiones"}, {"goals", "Objetivos"},
-        {"mark", "Marca de hoy"}, {"startgoal", "Arranque"}, {"weekly", "Meta semanal"}, {"records", "Tus récords"}, {"level", "Nivel global"}};
+        {"mark", "Marca de hoy"}, {"startgoal", "Arranque"}, {"weekly", "Meta semanal"}, {"records", "Tus récords"}, {"level", "Nivel global"}, {"chart", "Gráfico"}, {"folders", "Actividades"}};
     return m.value(id, id);
 }
 static QSet<QString> defaultCards(bool simple)
@@ -152,15 +156,62 @@ static QString serializeLayout(const QVector<StatsData::Panel>& v)
     return l.join(',');
 }
 
+// Mejoras 7.0: orden y tamaño de las tarjetas ("id:columnas:filas,…"; las que falten vuelven con su tamaño por defecto, al final).
+static QVector<StatsData::Item> defaultGrid()
+{
+    static const struct { const char* id; int c, r; } d[] = {
+        {"streak", 4, 3}, {"study", 3, 3}, {"records", 5, 3},
+        {"breaks", 3, 2}, {"undue", 3, 2}, {"paused", 3, 2}, {"inactive", 3, 2}, {"sessions", 3, 2},
+        {"goals", 4, 2}, {"mark", 4, 2}, {"startgoal", 4, 2}, {"weekly", 4, 3}, {"focus", 4, 2}, {"level", 4, 2},
+        {"chart", 12, 7}, {"folders", 12, 9}};
+    QVector<StatsData::Item> v;
+    for (const auto& x : d) v.append({QString::fromLatin1(x.id), x.c, x.r});
+    return v;
+}
+static QVector<StatsData::Item> parseGrid(const QString& s)
+{
+    const QVector<StatsData::Item> def = defaultGrid();
+    QVector<StatsData::Item> out;
+    for (const QString& part : s.split(',', Qt::SkipEmptyParts)) {
+        const QStringList f = part.split(':');
+        if (f.size() < 3 || !allCards().contains(f[0])) continue;
+        bool dup = false;
+        for (const auto& o : out) if (o.id == f[0]) dup = true;
+        if (dup) continue;
+        out.append({f[0], qBound(2, f[1].toInt(), 12), qBound(2, f[2].toInt(), 24)});
+    }
+    for (const auto& d : def) {
+        bool has = false;
+        for (const auto& o : out) if (o.id == d.id) has = true;
+        if (!has) out.append(d);
+    }
+    return out;
+}
+static QString serializeGrid(const QVector<StatsData::Item>& v)
+{
+    QStringList l;
+    for (const auto& it : v) l << QStringLiteral("%1:%2:%3").arg(it.id).arg(it.cols).arg(it.rows);
+    return l.join(',');
+}
+static QString gridKey(bool simple) { return simple ? QStringLiteral("stats_grid_simple") : QStringLiteral("stats_grid_adv"); }
+
 class StatsCanvas : public QWidget {
 public:
-    explicit StatsCanvas(QWidget* parent) : QWidget(parent) { setMouseTracking(true); }
+    explicit StatsCanvas(QWidget* parent) : QWidget(parent)
+    {
+        setMouseTracking(true);
+        m_animTimer.setInterval(16);
+        connect(&m_animTimer, &QTimer::timeout, this, [this] { if (!stepSpring()) m_animTimer.stop(); update(); });
+    }
     StatsData data;
     // Mejoras 3.0: cada dato es una zona: al pasar el mouse muestra más detalle
     // y al hacer click abre su mini ventana.
     struct Zone { QRectF rect; QString key; QString tip; };
     QVector<Zone> zones;
     std::function<void(const QString&)> onZone;
+    QRectF shownRect(const QString& id) const { return m_shown.value(id); }
+    std::function<void(const QVector<StatsData::Item>&)> onGrid;
+    QScrollArea* scrollArea = nullptr;
     std::function<QString(const QString&)> tipFor;
     bool hoverTips = false;   // Mejoras 4.1: el botón ⓘ vuelve a activar la info al pasar el mouse
 
@@ -178,21 +229,6 @@ protected:
         for (const Zone& z : zones) if (z.rect.contains(pos)) return &z;
         return nullptr;
     }
-    void mouseMoveEvent(QMouseEvent* e) override
-    {
-        const Zone* z = zoneAt(e->position());
-        setCursor(z ? Qt::PointingHandCursor : Qt::ArrowCursor);
-        const QString key = z ? z->key : QString();
-        if (key != m_hoverKey) { m_hoverKey = key; update(); }
-        if (hoverTips && z && tipFor) QToolTip::showText(e->globalPosition().toPoint(), tipFor(z->key), this, z->rect.toRect());
-        else QToolTip::hideText();   // por defecto el detalle sale solo con click (menos estímulo)
-    }
-    void leaveEvent(QEvent*) override { if (!m_hoverKey.isEmpty()) { m_hoverKey.clear(); update(); } }
-    void mouseReleaseEvent(QMouseEvent* e) override
-    {
-        if (e->button() != Qt::LeftButton) return;
-        if (const Zone* z = zoneAt(e->position()); z && onZone) onZone(z->key);
-    }
     void zone(const QRectF& r, const QString& key, QPainter& p)
     {
         zones.append({r, key, QString()});
@@ -206,40 +242,114 @@ protected:
     }
     QString m_hoverKey;
 
+    // ---- Mejoras 7.0: grilla con imán. Tarjetas y secciones se arrastran y se estiran como ventanas;
+    // al soltar se acomodan con un resorte (rebote corto) en el casillero que les toca.
+    void mousePressEvent(QMouseEvent* e) override
+    {
+        if (!data.editing || e->button() != Qt::LeftButton) { QWidget::mousePressEvent(e); return; }
+        for (const Zone& z : zones)
+            if (z.rect.contains(e->position()) && (z.key.startsWith(QLatin1String("card:")) || z.key.startsWith(QLatin1String("lay:")))) return;   // botones: los atiende el release
+        const QString id = itemAt(e->position());
+        if (id.isEmpty()) return;
+        m_pressId = id;
+        m_pressPos = e->position();
+        m_pressRect = m_shown.value(id);
+        m_grab = edgeAt(id, e->position());
+    }
+    void mouseMoveEvent(QMouseEvent* e) override
+    {
+        if (data.editing && !m_pressId.isEmpty() && (e->buttons() & Qt::LeftButton)) { dragStep(e->position()); return; }
+        const Zone* z = zoneAt(e->position());
+        QString id;
+        if (data.editing && !z) id = itemAt(e->position());
+        if (!id.isEmpty()) {
+            const int g = edgeAt(id, e->position());
+            setCursor(g == 3 ? Qt::SizeFDiagCursor : g == 1 ? Qt::SizeHorCursor : g == 2 ? Qt::SizeVerCursor : Qt::OpenHandCursor);
+        } else setCursor(z ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        const QString key = z ? z->key : QString();
+        if (key != m_hoverKey) { m_hoverKey = key; update(); }
+        if (hoverTips && z && tipFor) QToolTip::showText(e->globalPosition().toPoint(), tipFor(z->key), this, z->rect.toRect());
+        else QToolTip::hideText();   // por defecto el detalle sale solo con click (menos estímulo)
+    }
+    void leaveEvent(QEvent*) override { if (!m_hoverKey.isEmpty()) { m_hoverKey.clear(); update(); } }
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        if (e->button() != Qt::LeftButton) return;
+        if (!m_dragId.isEmpty() || !m_resId.isEmpty()) {
+            if (!m_preview.isEmpty()) data.grid = m_preview;
+            m_preview.clear();
+            m_dragId.clear();
+            m_resId.clear();
+            m_pressId.clear();
+            unsetCursor();
+            setMinimumHeight(contentHeight(width()));
+            if (onGrid) onGrid(data.grid);
+            update();   // el resto lo hace el resorte
+            return;
+        }
+        m_pressId.clear();
+        if (const Zone* z = zoneAt(e->position()); z && onZone) onZone(z->key);
+    }
+
     void paintEvent(QPaintEvent*) override
     {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         p.fillRect(rect(), theme::bg);
         const double L = 16, W = width() - 32;
-        double y = 8;
+        double y0 = 8;
         zones.clear();
         pendingX.clear();
+        if (!data.editing && (!m_preview.isEmpty() || !m_dragId.isEmpty() || !m_resId.isEmpty())) { m_preview.clear(); m_dragId.clear(); m_resId.clear(); m_pressId.clear(); }
 
-        if (data.editing) y = paintEditHeader(p, L, y, W) + 10;
-        for (const StatsData::Panel& pn : data.layout) {
-            const bool present = panelHeight(pn.id, W) > 0;
-            if (!present) continue;
-            if (!pn.visible) {
-                if (data.editing) y = paintEditBar(p, L, y, W, pn, true) + 10;
-                continue;
+        if (data.editing) y0 = paintEditHeader(p, L, y0, W) + 10;
+        m_L = L; m_y0 = y0; m_W = W;
+        const QSet<QString> pres = presentSet();
+        const auto placed = flow(currentItems(), W, pres);
+        QSet<QString> alive;
+        bool needAnim = false;
+        for (const Placed& pl : placed) {
+            const QRectF t = placedRect(pl);
+            alive.insert(pl.id);
+            m_target[pl.id] = t;
+            if (!m_shown.contains(pl.id) || !data.editing) { m_shown[pl.id] = t; m_vel[pl.id] = {0, 0, 0, 0}; }
+            else if (pl.id != m_dragId && pl.id != m_resId) {
+                const QRectF c = m_shown[pl.id];
+                if (qAbs(c.x() - t.x()) > 0.3 || qAbs(c.y() - t.y()) > 0.3 || qAbs(c.width() - t.width()) > 0.3 || qAbs(c.height() - t.height()) > 0.3) needAnim = true;
             }
-            if (data.editing) y = paintEditBar(p, L, y, W, pn, false) + 6;
-            if (pn.id == QLatin1String("hero")) y = paintHero(p, L, y, W) + 18;
-            else if (pn.id == QLatin1String("chips")) y = paintChips(p, L, y, W) + 18;
-            else if (pn.id == QLatin1String("chart")) y = paintChart(p, L, y, W) + 22;
-            else paintFolders(p, L, y, W), y += 24 + foldersBodyH() + 24;
+        }
+        for (auto it = m_target.begin(); it != m_target.end();) {
+            if (!alive.contains(it.key())) { m_shown.remove(it.key()); m_vel.remove(it.key()); it = m_target.erase(it); }
+            else ++it;
+        }
+        const bool interacting = !m_dragId.isEmpty() || !m_resId.isEmpty();
+        if (interacting) paintGridDots(p, placed);
+        for (const Placed& pl : placed)
+            if (pl.id != m_dragId && pl.id != m_resId) paintOne(p, pl.id, m_shown.value(pl.id));
+        auto outline = [&](const QRectF& r, const QColor& c) {
+            p.save();
+            p.setPen(QPen(c, 1.5, Qt::DashLine));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(r.adjusted(0.75, 0.75, -0.75, -0.75), 10, 10);
+            p.restore();
+        };
+        const QString top = !m_dragId.isEmpty() ? m_dragId : m_resId;
+        if (!top.isEmpty() && m_target.contains(top)) {
+            outline(m_target.value(top), theme::textDim);   // el casillero al que va a quedar pegada
+            p.save();
+            p.setOpacity(0.92);
+            paintOne(p, top, m_shown.value(top));
+            p.restore();
         }
         if (!pendingX.isEmpty()) zones = pendingX + zones;   // las ✕ van adelante
+        if (needAnim && !m_animTimer.isActive()) m_animTimer.start();
     }
 
 private:
-    int maxFolderRows() const { static const int v[3] = {3, 6, 12}; return v[qBound(0, data.sizeOf(QStringLiteral("folders")), 2)]; }   // más que eso → scroll adentro del bloque
+    double m_foldAvail = 6 * 26.0;   // Mejoras 7.0: alto disponible para la lista (más que eso → scroll adentro)
     static constexpr double kRowH = 26;
-    double chipH() const { for (const Chip& c : buildChips()) if (!c.sub.isEmpty()) return 68; return 52; }
 
     bool goalChip() const { return data.period != StatsWidget::Period::Day && !data.goals.isEmpty(); }
-    bool hasChips() const { return !buildChips().isEmpty(); }
 
     // M44: tarjetitas con los hitos de corto y largo plazo.
     // Mejoras 3.0: si no entran en una fila (ventana chica) bajan a dos o más, así el
@@ -301,73 +411,49 @@ private:
         for (const Chip& ch : chips) if (data.has(ch.key)) keep << ch;
         return keep;
     }
-    static constexpr double kChipGap = 10;
-    double chipMinW() const { static const double v[3] = {150, 200, 300}; return v[qBound(0, data.sizeOf(QStringLiteral("chips")), 2)]; }
-    int chipsPerRow(double W, int n) const { return qBound(1, int((W + kChipGap) / (chipMinW() + kChipGap)), qMax(1, n)); }
-    double chipsHeight(double W) const
+    void paintChip(QPainter& p, const QRectF& r, const Chip& c)
     {
-        const int n = int(buildChips().size());
-        if (n == 0) return 0;
-        const int rows = (n + chipsPerRow(W, n) - 1) / chipsPerRow(W, n);
-        return rows * chipH() + (rows - 1) * kChipGap;
-    }
-
-    double paintChips(QPainter& p, double L, double y, double W)
-    {
-        const QVector<Chip> chips = buildChips();
         static const QColor medal[3] = {QColor(0xc0, 0x8a, 0x5a), QColor(0xb8, 0xbc, 0xc4), QColor(0xe0, 0xb8, 0x4a)};
-        const int n = int(chips.size());
-        if (n == 0) return y;
-        const int per = chipsPerRow(W, n);
-        const int rows = (n + per - 1) / per;
-        for (int i = 0; i < n; ++i) {
-            const Chip& c = chips[i];
-            const int row = i / per;
-            const int inRow = row == rows - 1 ? n - row * per : per;   // la última fila reparte el ancho entre las que tiene
-            const double cw = (W - (inRow - 1) * kChipGap) / inRow;
-            const QRectF r(L + (i % per) * (cw + kChipGap), y + row * (chipH() + kChipGap), cw, chipH());
-            p.setPen(QPen(theme::line, 1));
-            p.setBrush(Qt::NoBrush);
-            p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
+        p.setPen(QPen(theme::line, 1));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
+        p.setFont(theme::uiFont(8));
+        p.setPen(theme::textDim);
+        p.drawText(r.adjusted(12, 8, -8, 0), Qt::AlignLeft | Qt::AlignTop, c.label);
+        if (c.dots >= 0) {   // las medallas van arriba a la derecha: el texto tiene todo el ancho
+            for (int k = 0; k < 3; ++k) {
+                const QRectF dot(r.right() - 12 - (3 - k) * 10, r.top() + 10, 7, 7);
+                if (k < c.dots) { p.setPen(Qt::NoPen); p.setBrush(medal[k]); }
+                else { p.setPen(QPen(theme::textFaint, 1)); p.setBrush(Qt::NoBrush); }
+                p.drawEllipse(dot);
+            }
+        }
+        const QRectF vr(r.left() + 12, r.top() + 22, r.width() - 22, 22);
+        // Si no entra, primero se achica la letra; recién después se corta.
+        double pt = 9.5;
+        p.setFont(theme::uiFont(pt, QFont::DemiBold));
+        while (pt > 7.6 && QFontMetricsF(p.font()).horizontalAdvance(c.value) > vr.width()) {
+            pt -= 0.5;
+            p.setFont(theme::uiFont(pt, QFont::DemiBold));
+        }
+        p.setPen(theme::text);
+        p.drawText(vr, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(c.value, Qt::ElideRight, int(vr.width())));
+        if (!c.sub.isEmpty()) {
             p.setFont(theme::uiFont(8));
             p.setPen(theme::textDim);
-            p.drawText(r.adjusted(12, 8, -8, 0), Qt::AlignLeft | Qt::AlignTop, c.label);
-            if (c.dots >= 0) {   // las medallas van arriba a la derecha: el texto tiene todo el ancho
-                for (int k = 0; k < 3; ++k) {
-                    const QRectF dot(r.right() - 12 - (3 - k) * 10, r.top() + 10, 7, 7);
-                    if (k < c.dots) { p.setPen(Qt::NoPen); p.setBrush(medal[k]); }
-                    else { p.setPen(QPen(theme::textFaint, 1)); p.setBrush(Qt::NoBrush); }
-                    p.drawEllipse(dot);
-                }
-            }
-            const QRectF vr(r.left() + 12, r.top() + 22, r.width() - 22, 22);
-            // Si no entra, primero se achica la letra; recién después se corta.
-            double pt = 9.5;
-            p.setFont(theme::uiFont(pt, QFont::DemiBold));
-            while (pt > 7.6 && QFontMetricsF(p.font()).horizontalAdvance(c.value) > vr.width()) {
-                pt -= 0.5;
-                p.setFont(theme::uiFont(pt, QFont::DemiBold));
-            }
-            p.setPen(theme::text);
-            p.drawText(vr, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(c.value, Qt::ElideRight, int(vr.width())));
-            if (!c.sub.isEmpty()) {
-                p.setFont(theme::uiFont(8));
-                p.setPen(theme::textDim);
-                p.drawText(QRectF(r.left() + 12, r.top() + 42, r.width() - 22, 14), Qt::AlignLeft | Qt::AlignVCenter,
-                           QFontMetrics(p.font()).elidedText(c.sub, Qt::ElideRight, int(r.width() - 22)));
-            }
-            if (c.frac >= 0) {
-                const QRectF track(r.left() + 12, r.bottom() - 9, r.width() - 24, 3);
-                p.setPen(Qt::NoPen);
-                p.setBrush(theme::surface);
-                p.drawRoundedRect(track, 1.5, 1.5);
-                p.setBrush(c.frac >= 1 ? theme::breakAccent : statsInk());
-                p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * qMin(1.0, c.frac), 3), 1.5, 1.5);
-            }
-            zone(r, c.key, p);
-            xButton(p, r, c.key);
+            p.drawText(QRectF(r.left() + 12, r.top() + 42, r.width() - 22, 14), Qt::AlignLeft | Qt::AlignVCenter,
+                       QFontMetrics(p.font()).elidedText(c.sub, Qt::ElideRight, int(r.width() - 22)));
         }
-        return y + chipsHeight(W);
+        if (c.frac >= 0 && (c.sub.isEmpty() || r.height() >= 66)) {
+            const QRectF track(r.left() + 12, r.bottom() - 9, r.width() - 24, 3);
+            p.setPen(Qt::NoPen);
+            p.setBrush(theme::surface);
+            p.drawRoundedRect(track, 1.5, 1.5);
+            p.setBrush(c.frac >= 1 ? theme::breakAccent : statsInk());
+            p.drawRoundedRect(QRectF(track.left(), track.top(), track.width() * qMin(1.0, c.frac), 3), 1.5, 1.5);
+        }
+        zone(r, c.key, p);
+        xButton(p, r, c.key);
     }
 
     double chartHeight(double W) const
@@ -378,30 +464,242 @@ private:
         default:                        return 24 + plotH() + 40;
         }
     }
-    double plotH() const { static const double v[3] = {92, 128, 190}; return v[qBound(0, data.sizeOf(QStringLiteral("chart")), 2)]; }
+    double m_plotH = 128;   // Mejoras 7.0: sale del alto de la tarjeta
+    double plotH() const { return m_plotH; }
     static double heatCell(double W) { return qBound(6.0, (W - 30) / 53.0 - 3, 14.0); }
 
-    // Mejoras 5.2: alto de cada panel (0 = no hay nada que mostrar), con su separación de abajo.
-    double panelHeight(const QString& id, double W) const
+    // ---- Mejoras 7.0: motor de la grilla ----------------------------------------------------
+    static constexpr double kCellH = 22, kGridGap = 10, kEdgeGrab = 8, kSpringK = 420, kSpringC = 28;
+    int gridCols(double W) const { return W < 520 ? 6 : 12; }
+    struct Placed { QString id; int col = 0, row = 0, cols = 1, rows = 1; };
+    struct Limits { int minC, maxC, minR, maxR; };   // en columnas de 12; minR = 0: el alto no se toca
+
+    const QVector<StatsData::Item>& currentItems() const { return m_preview.isEmpty() ? data.grid : m_preview; }
+    bool isBarsChart() const { return data.period != StatsWidget::Period::Day && data.period != StatsWidget::Period::Year; }
+    Limits limitsFor(const QString& id) const
     {
-        if (id == QLatin1String("hero")) return heroHeight() > 0 ? heroHeight() + 18 : 0;
-        if (id == QLatin1String("chips")) return hasChips() ? chipsHeight(W) + 18 : 0;
-        if (id == QLatin1String("chart")) return chartHeight(W) + 22;
-        return 24 + foldersBodyH() + 24;
+        if (id == QLatin1String("chart")) return {6, 12, isBarsChart() ? 5 : 0, isBarsChart() ? 16 : 0};
+        if (id == QLatin1String("folders")) return {6, 12, 4, 24};
+        return {2, 12, 2, 6};
     }
-    static constexpr double kEditBarH = 28;
+    // Qué tarjetas tienen algo para mostrar hoy (las prendidas que tienen datos).
+    QSet<QString> presentSet() const
+    {
+        QSet<QString> s;
+        if (data.has("streak")) s.insert("streak");
+        if (data.has("study")) s.insert("study");
+        if (recordsCard()) s.insert("records");
+        if (data.has("chart")) s.insert("chart");
+        if (data.has("folders")) s.insert("folders");
+        for (const Small& sm : smallCards()) if (data.has(sm.id)) s.insert(sm.id);
+        for (const Chip& c : buildChips()) s.insert(c.key);
+        return s;
+    }
+    static double cellW(double W, int n) { return (W - (n - 1) * kGridGap) / n; }
+    static double rowsPx(int r) { return r * kCellH + (r - 1) * kGridGap; }
+    static int rowsFor(double h) { return qMax(2, int(std::ceil((h + kGridGap) / (kCellH + kGridGap) - 1e-9))); }
+    static int itemCols(const StatsData::Item& it, int n) { return qBound(1, int(std::lround(it.cols * n / 12.0)), n); }
+    int itemRows(const StatsData::Item& it, double W, int cols, int n) const
+    {
+        if (it.id == QLatin1String("chart") && !isBarsChart())   // día y año tienen alto propio
+            return rowsFor(chartHeight(cols * cellW(W, n) + (cols - 1) * kGridGap));
+        return it.rows;
+    }
+    // Reparte las tarjetas en orden: cada una va al primer hueco libre, sin pasar para atrás del lugar de la anterior.
+    QVector<Placed> flow(const QVector<StatsData::Item>& items, double W, const QSet<QString>& pres) const
+    {
+        const int n = gridCols(W);
+        QVector<QVector<char>> occ;
+        auto isFree = [&](int r, int c, int w, int h) {
+            for (int y = r; y < r + h && y < occ.size(); ++y)
+                for (int x = c; x < c + w; ++x) if (occ[y][x]) return false;
+            return true;
+        };
+        auto take = [&](int r, int c, int w, int h) {
+            while (occ.size() < r + h) occ.append(QVector<char>(n, 0));
+            for (int y = r; y < r + h; ++y) for (int x = c; x < c + w; ++x) occ[y][x] = 1;
+        };
+        QVector<Placed> out;
+        int pr = 0, pc = 0;
+        for (const auto& it : items) {
+            if (!pres.contains(it.id)) continue;
+            const int c = itemCols(it, n), r = itemRows(it, W, c, n);
+            for (int row = pr;; ++row) {
+                bool done = false;
+                for (int col = row == pr ? pc : 0; col + c <= n; ++col) {
+                    if (!isFree(row, col, c, r)) continue;
+                    take(row, col, c, r);
+                    out.append({it.id, col, row, c, r});
+                    pr = row; pc = col; done = true;
+                    break;
+                }
+                if (done) break;
+            }
+        }
+        return out;
+    }
+    QRectF placedRect(const Placed& pl) const
+    {
+        const int n = gridCols(m_W);
+        const double cw = cellW(m_W, n);
+        return QRectF(m_L + pl.col * (cw + kGridGap), m_y0 + pl.row * (kCellH + kGridGap), pl.cols * cw + (pl.cols - 1) * kGridGap, rowsPx(pl.rows));
+    }
     int contentHeight(int w) const
     {
         const double W = w - 32;
-        double h = 8;
-        if (data.editing) h += 34 + 10;
-        for (const StatsData::Panel& pn : data.layout) {
-            const double ph = panelHeight(pn.id, W);
-            if (ph <= 0) continue;
-            if (!pn.visible) { if (data.editing) h += kEditBarH + 10; continue; }
-            h += ph + (data.editing ? kEditBarH + 6 : 0);
+        double y0 = 8 + (data.editing ? 34 + 10 : 0);
+        int maxRow = 0;
+        for (const Placed& pl : flow(currentItems(), W, presentSet())) maxRow = qMax(maxRow, pl.row + pl.rows);
+        return int(y0 + (maxRow > 0 ? maxRow * (kCellH + kGridGap) - kGridGap : 0) + 24);
+    }
+
+    QString itemAt(const QPointF& pos) const
+    {
+        for (auto it = m_shown.cbegin(); it != m_shown.cend(); ++it) if (it.value().contains(pos)) return it.key();
+        return {};
+    }
+    int edgeAt(const QString& id, const QPointF& pos) const   // 1 = borde derecho, 2 = inferior, 3 = esquina
+    {
+        const QRectF r = m_shown.value(id);
+        const Limits lim = limitsFor(id);
+        int g = 0;
+        if (pos.x() >= r.right() - kEdgeGrab) g |= 1;
+        if (lim.minR > 0 && pos.y() >= r.bottom() - kEdgeGrab) g |= 2;
+        return g;
+    }
+    void paintGridDots(QPainter& p, const QVector<Placed>& placed) const
+    {
+        const int n = gridCols(m_W);
+        const double cw = cellW(m_W, n);
+        int rows = 4;
+        for (const Placed& pl : placed) rows = qMax(rows, pl.row + pl.rows + 3);
+        p.setPen(Qt::NoPen);
+        QColor c = theme::textFaint;
+        c.setAlpha(110);
+        p.setBrush(c);
+        for (int r = 0; r < rows; ++r)
+            for (int k = 0; k <= n; ++k)
+                p.drawEllipse(QPointF(m_L + k * (cw + kGridGap) - kGridGap / 2, m_y0 + r * (kCellH + kGridGap) - kGridGap / 2), 1.2, 1.2);
+    }
+
+    void dragStep(const QPointF& pos)
+    {
+        const QPointF d = pos - m_pressPos;
+        if (m_dragId.isEmpty() && m_resId.isEmpty()) {
+            if (d.x() * d.x() + d.y() * d.y() < 25) return;
+            m_preview = data.grid;
+            if (m_grab) m_resId = m_pressId;
+            else { m_dragId = m_pressId; m_dragOff = m_pressPos - m_pressRect.topLeft(); setCursor(Qt::ClosedHandCursor); }
         }
-        return int(h);
+        if (!m_resId.isEmpty()) resizeStep(d); else dragTo(pos);
+        if (scrollArea) {   // arrastrando cerca del borde, la página sigue
+            QScrollBar* sb = scrollArea->verticalScrollBar();
+            const int vy = mapTo(scrollArea->viewport(), pos.toPoint()).y();
+            if (vy < 36) sb->setValue(sb->value() - 14);
+            else if (vy > scrollArea->viewport()->height() - 36) sb->setValue(sb->value() + 14);
+        }
+        setMinimumHeight(contentHeight(width()));
+        update();
+    }
+    void dragTo(const QPointF& pos)
+    {
+        const QRectF cur = m_shown.value(m_dragId);
+        m_shown[m_dragId] = QRectF(pos - m_dragOff, cur.size());
+        QVector<StatsData::Item> others;
+        StatsData::Item dragged;
+        for (const auto& it : data.grid) { if (it.id == m_dragId) dragged = it; else others.append(it); }
+        const auto placed = flow(others, m_W, presentSet());
+        int at = others.size();
+        if (!placed.isEmpty()) {
+            double best = 1e18;
+            int bi = 0;
+            bool before = false;
+            for (int i = 0; i < placed.size(); ++i) {
+                const QRectF r = placedRect(placed[i]);
+                const double dx = qMax(qMax(r.left() - pos.x(), 0.0), pos.x() - r.right());
+                const double dy = qMax(qMax(r.top() - pos.y(), 0.0), pos.y() - r.bottom());
+                const double dist = dx * dx + dy * dy;
+                if (dist < best) {
+                    best = dist; bi = i;
+                    before = pos.y() < r.top() + r.height() * 0.3 || (pos.y() <= r.bottom() && pos.x() < r.center().x());
+                }
+            }
+            for (int i = 0; i < others.size(); ++i) if (others[i].id == placed[bi].id) { at = before ? i : i + 1; break; }
+        }
+        others.insert(at, dragged);
+        m_preview = others;
+    }
+    void resizeStep(const QPointF& d)
+    {
+        const int n = gridCols(m_W);
+        const double cw = cellW(m_W, n);
+        const Limits lim = limitsFor(m_resId);
+        double nw = m_pressRect.width() + ((m_grab & 1) ? d.x() : 0);
+        double nh = m_pressRect.height() + ((m_grab & 2) ? d.y() : 0);
+        for (auto& it : m_preview) {
+            if (it.id != m_resId) continue;
+            if (m_grab & 1) {
+                const int effMin = qMax(1, int(std::lround(lim.minC * n / 12.0)));
+                const int c = qBound(effMin, int(std::lround((nw + kGridGap) / (cw + kGridGap))), n);
+                it.cols = qBound(2, int(std::lround(c * 12.0 / n)), 12);
+            }
+            if ((m_grab & 2) && lim.minR > 0) it.rows = qBound(lim.minR, int(std::lround((nh + kGridGap) / (kCellH + kGridGap))), lim.maxR);
+        }
+        m_shown[m_resId] = QRectF(m_pressRect.topLeft(), QSizeF(qMax(60.0, nw), qMax(40.0, nh)));   // sigue al mouse; el casillero marca dónde va a quedar
+    }
+    bool stepSpring()
+    {
+        constexpr double dt = 0.016;
+        bool moving = false;
+        for (auto it = m_target.cbegin(); it != m_target.cend(); ++it) {
+            if (it.key() == m_dragId || it.key() == m_resId) continue;
+            QRectF& cur = m_shown[it.key()];
+            auto& v = m_vel[it.key()];
+            double c[4] = {cur.x(), cur.y(), cur.width(), cur.height()};
+            const QRectF t = it.value();
+            const double tv[4] = {t.x(), t.y(), t.width(), t.height()};
+            for (int i = 0; i < 4; ++i) {
+                v[i] += (kSpringK * (tv[i] - c[i]) - kSpringC * v[i]) * dt;
+                c[i] += v[i] * dt;
+                if (qAbs(tv[i] - c[i]) > 0.3 || qAbs(v[i]) > 6) moving = true;
+                else { c[i] = tv[i]; v[i] = 0; }
+            }
+            cur = QRectF(c[0], c[1], qMax(1.0, c[2]), qMax(1.0, c[3]));
+        }
+        return moving;
+    }
+
+    void paintOne(QPainter& p, const QString& id, const QRectF& r)
+    {
+        if (id == QLatin1String("streak")) paintStreak(p, r);
+        else if (id == QLatin1String("study")) card(p, r, data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, id);
+        else if (id == QLatin1String("records")) paintRecords(p, r);
+        else if (id == QLatin1String("chart")) {
+            m_plotH = qMax(50.0, r.height() - 24 - 40);
+            paintChart(p, r.left(), r.top(), r.width());
+            xButton(p, r, id);
+        } else if (id == QLatin1String("folders")) {
+            m_foldAvail = qMax(kRowH, r.height() - 24 - 12);
+            paintFolders(p, r.left(), r.top(), r.width());
+            xButton(p, r, id);
+        } else {
+            bool done = false;
+            for (const Small& s : smallCards())
+                if (s.id == id) { card(p, r, s.label, s.value, s.sub, 13, s.col, s.id); done = true; break; }
+            if (!done) for (const Chip& c : buildChips()) if (c.key == id) { paintChip(p, r, c); break; }
+        }
+        if (data.editing) {   // borde punteado y la manijita para estirar
+            p.save();
+            QColor c = theme::textFaint;
+            c.setAlpha(150);
+            p.setPen(QPen(c, 1, Qt::DashLine));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 10, 10);
+            p.setPen(QPen(theme::textDim, 1.2, Qt::SolidLine, Qt::RoundCap));
+            const QPointF g(r.right() - 5, r.bottom() - 5);
+            for (int k = 1; k <= 3; ++k) p.drawLine(g + QPointF(-k * 3.2, 0), g + QPointF(0, -k * 3.2));
+            p.restore();
+        }
     }
 
     // Botoncito de la barra de edición (con su zona de click).
@@ -425,30 +723,24 @@ private:
         p.drawRoundedRect(QRectF(L, y, W, 34), 10, 10);
         p.setFont(theme::uiFont(9));
         p.setPen(theme::textDim);
-        p.drawText(QRectF(L + 14, y, W - 330, 34), Qt::AlignLeft | Qt::AlignVCenter,
-                   QStringLiteral("Personalizar · ✕ saca una tarjeta"));
+        p.drawText(QRectF(L + 14, y, W - 300, 34), Qt::AlignLeft | Qt::AlignVCenter,
+                   QFontMetrics(p.font()).elidedText(QStringLiteral("Arrastrá para mover · estirá de los bordes · ✕ la saca"), Qt::ElideRight, int(W - 310)));
         QRectF r = editPill(p, L + W - 8, y + 3, QStringLiteral("Listo"), QStringLiteral("lay:done"), true);
         r = editPill(p, r.left() - 6, y + 3, QStringLiteral("Restablecer"), QStringLiteral("lay:reset"));
         editPill(p, r.left() - 6, y + 3, QStringLiteral("＋ Tarjetas"), QStringLiteral("lay:add"));
         return y + 34;
     }
-    double paintEditBar(QPainter& p, double L, double y, double W, const StatsData::Panel& pn, bool hidden)
-    {
-        static const QMap<QString, QString> names = {{"hero", "Resumen"}, {"chips", "Hitos y objetivos"}, {"chart", "Gráfico"}, {"folders", "Actividades"}};
-        p.setFont(theme::uiFont(9, QFont::DemiBold));
-        p.setPen(hidden ? theme::textFaint : theme::textDim);
-        p.drawText(QRectF(L, y, 240, kEditBarH), Qt::AlignLeft | Qt::AlignVCenter, names.value(pn.id).toUpper() + (hidden ? QStringLiteral("  (oculto)") : QString()));
-        double x = L + W;
-        x = editPill(p, x, y, hidden ? QStringLiteral("Mostrar") : QStringLiteral("Ocultar"), QStringLiteral("lay:vis:") + pn.id).left() - 6;
-        x = editPill(p, x, y, QStringLiteral("▼"), QStringLiteral("lay:down:") + pn.id).left() - 2;
-        x = editPill(p, x, y, QStringLiteral("▲"), QStringLiteral("lay:up:") + pn.id).left() - 10;
-        if (!hidden) {
-            static const char* sz[] = {"S", "M", "L"};
-            for (int i = 2; i >= 0; --i)
-                x = editPill(p, x, y, QString::fromUtf8(sz[i]), QStringLiteral("lay:size:%1:%2").arg(pn.id).arg(i), pn.size == i).left() - 2;
-        }
-        return y + kEditBarH;
-    }
+
+    // estado de la grilla
+    double m_L = 16, m_y0 = 8, m_W = 600;
+    QHash<QString, QRectF> m_shown, m_target;
+    QHash<QString, std::array<double, 4>> m_vel;
+    QVector<StatsData::Item> m_preview;
+    QString m_dragId, m_resId, m_pressId;
+    QPointF m_dragOff, m_pressPos;
+    QRectF m_pressRect;
+    int m_grab = 0;
+    QTimer m_animTimer;
 
     void sectionTitle(QPainter& p, double x, double y, const QString& t) const
     {
@@ -459,12 +751,7 @@ private:
 
     // Mejoras 5.0: arriba de todo, tres datos con jerarquía: la racha (protagonista), lo estudiado y el foco.
     // En la vista avanzada, abajo van los datos finos (recreos, indebidos, inactivas).
-    static constexpr double kSmallH = 58;
-    double heroH() const { static const double v[3] = {76, 96, 120}; return v[qBound(0, data.sizeOf(QStringLiteral("hero")), 2)]; }
-    bool heroRow() const { return data.has("streak") || data.has("study") || recordsCard(); }
     bool recordsCard() const { return data.has("records") && data.ms.streaks; }
-    bool smallRow() const { return data.has("breaks") || data.has("undue") || data.has("paused") || data.has("inactive") || data.has("sessions"); }
-    double heroHeight() const { return (heroRow() ? heroH() : 0) + (heroRow() && smallRow() ? 10 : 0) + (smallRow() ? kSmallH : 0); }
     // En edición, cada tarjeta lleva una ✕ (zona delante de las demás: se agrega al final de paintEvent).
     QVector<Zone> pendingX;
     void xButton(QPainter& p, const QRectF& r, const QString& id)
@@ -507,21 +794,9 @@ private:
         xButton(p, r, key);
     }
 
-    double paintHero(QPainter& p, double L, double y, double W)
+    void paintStreak(QPainter& p, const QRectF& sr)
     {
-        const double gap = 10;
-        const bool hs = data.has("streak"), hst = data.has("study"), hf = recordsCard();
-        const int others = (hst ? 1 : 0) + (hf ? 1 : 0);
-        double sw = 0, cw = 0, recW = 0;
-        if (hs) { sw = others ? qMax(200.0, W * 0.34) : W; }
-        if (others) cw = (W - (hs ? sw + gap : 0) - (others - 1) * gap) / others;
-        if (hf && hst) { cw = (W - (hs ? sw + gap : 0) - gap) * 0.38; recW = (W - (hs ? sw + gap : 0) - gap) * 0.62; }   // Mejoras 7.0: récords más grande
-        else if (hf) recW = cw;
-        const bool row1 = heroRow();
-        const double h1 = heroH();
-        if (hs) {
         // ---- racha: el número grande
-        const QRectF sr(L, y, sw, h1);
         p.setPen(Qt::NoPen);
         p.setBrush(theme::surface);
         p.drawRoundedRect(sr, 10, 10);
@@ -535,7 +810,7 @@ private:
         const double numW = QFontMetricsF(p.font()).horizontalAdvance(num);
         p.setFont(theme::uiFont(10));
         p.setPen(theme::textDim);
-        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, h1 - 14), Qt::AlignLeft | Qt::AlignBottom,
+        p.drawText(QRectF(sr.left() + 14 + numW + 6, sr.top(), 60, sr.height() - 14), Qt::AlignLeft | Qt::AlignBottom,
                    data.streak.days == 1 ? QStringLiteral("día") : QStringLiteral("días"));
         // columna derecha: comodines, récord y lo que pasa hoy
         QStringList side;
@@ -561,48 +836,38 @@ private:
         }
         zone(sr, QStringLiteral("streak"), p);
         xButton(p, sr, QStringLiteral("streak"));
-        }
-
-        // ---- estudio y foco
-        double cx = L + (hs ? sw + gap : 0);
-        if (hst) {
-            card(p, QRectF(cx, y, cw, h1), data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, QStringLiteral("study"));
-            cx += cw + gap;
-        }
-        if (hf) {   // récords: tres renglones legibles, en el lugar que antes tenía el foco
-            const QRectF rr(cx, y, recW, h1);
-            p.setPen(Qt::NoPen);
-            p.setBrush(theme::surface);
-            p.drawRoundedRect(rr, 10, 10);
-            p.setFont(theme::uiFont(8.5));
+    }
+    void paintRecords(QPainter& p, const QRectF& rr)
+    {
+        p.setPen(Qt::NoPen);
+        p.setBrush(theme::surface);
+        p.drawRoundedRect(rr, 10, 10);
+        p.setFont(theme::uiFont(8.5));
+        p.setPen(theme::textDim);
+        p.drawText(rr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("TUS RÉCORDS"));
+        const QString dayV = data.records.bestDay > 0
+            ? fmt::hours(data.records.bestDay) + (data.records.bestDayDate.isValid() ? QStringLiteral(" · ") + fmt::shortDate(data.records.bestDayDate) : QString())
+            : QStringLiteral("—");
+        const QString weekV = data.records.bestWeek > 0 ? fmt::hours(data.records.bestWeek) : QStringLiteral("—");
+        const QString streakV = data.bestStreak > 0 ? QStringLiteral("%1 %2").arg(data.bestStreak).arg(data.bestStreak == 1 ? "día" : "días") : QStringLiteral("—");
+        const QString labs[3] = {QStringLiteral("Más horas en un día"), QStringLiteral("Semana con más horas"), QStringLiteral("Racha más larga")};
+        const QString vals[3] = {dayV, weekV, streakV};
+        const double top = rr.top() + 30, lh = qMax(16.0, (rr.height() - 38) / 3.0);
+        for (int i = 0; i < 3; ++i) {
+            const QRectF row(rr.left() + 14, top + i * lh, rr.width() - 24, lh);
+            p.setFont(theme::uiFont(9));
             p.setPen(theme::textDim);
-            p.drawText(rr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("TUS RÉCORDS"));
-            const QString dayV = data.records.bestDay > 0
-                ? fmt::hours(data.records.bestDay) + (data.records.bestDayDate.isValid() ? QStringLiteral(" · ") + fmt::shortDate(data.records.bestDayDate) : QString())
-                : QStringLiteral("—");
-            const QString weekV = data.records.bestWeek > 0 ? fmt::hours(data.records.bestWeek) : QStringLiteral("—");
-            const QString streakV = data.bestStreak > 0 ? QStringLiteral("%1 %2").arg(data.bestStreak).arg(data.bestStreak == 1 ? "día" : "días") : QStringLiteral("—");
-            const QString labs[3] = {QStringLiteral("Más horas en un día"), QStringLiteral("Semana con más horas"), QStringLiteral("Racha más larga")};
-            const QString vals[3] = {dayV, weekV, streakV};
-            const double top = rr.top() + 30, lh = qMax(16.0, (rr.height() - 38) / 3.0);
-            for (int i = 0; i < 3; ++i) {
-                const QRectF row(rr.left() + 14, top + i * lh, rr.width() - 24, lh);
-                p.setFont(theme::uiFont(9));
-                p.setPen(theme::textDim);
-                p.drawText(row, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(labs[i], Qt::ElideRight, int(row.width() * 0.62)));
-                p.setFont(theme::uiFont(10.5, QFont::DemiBold));
-                p.setPen(theme::text);
-                p.drawText(row, Qt::AlignRight | Qt::AlignVCenter, vals[i]);
-            }
-            zone(rr, QStringLiteral("records"), p);
-            xButton(p, rr, QStringLiteral("records"));
+            p.drawText(row, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(labs[i], Qt::ElideRight, int(row.width() * 0.62)));
+            p.setFont(theme::uiFont(10.5, QFont::DemiBold));
+            p.setPen(theme::text);
+            p.drawText(row, Qt::AlignRight | Qt::AlignVCenter, vals[i]);
         }
-        if (row1) y += h1;
-        if (!smallRow()) return y;
-
-        // ---- datos finos (los que tengas activados)
-        if (row1) y += 10;
-        struct Small { QString id, label, value, sub; QColor col; };
+        zone(rr, QStringLiteral("records"), p);
+        xButton(p, rr, QStringLiteral("records"));
+    }
+    struct Small { QString id, label, value, sub; QColor col; };
+    QVector<Small> smallCards() const
+    {
         qint64 sesSec = 0;
         for (const auto& s : data.sessions) sesSec += s.length();
         const QVector<Small> smalls = {
@@ -612,16 +877,7 @@ private:
             {"inactive", QStringLiteral("Horas inactivas"), fmt::hours(data.totals.inactive), QString(), theme::textDim},
             {"sessions", QStringLiteral("Sesiones"),
              data.sessions.isEmpty() ? QStringLiteral("0") : QStringLiteral("%1 · prom. %2").arg(data.sessions.size()).arg(fmt::duration(int(sesSec / data.sessions.size()))), QString(), theme::text}};
-        int cnt = 0;
-        for (const Small& s : smalls) if (data.has(s.id)) ++cnt;
-        const double fw = (W - (cnt - 1) * gap) / cnt;
-        double sx2 = L;
-        for (const Small& s : smalls) {
-            if (!data.has(s.id)) continue;
-            card(p, QRectF(sx2, y, fw, kSmallH), s.label, s.value, s.sub, 13, s.col, s.id);
-            sx2 += fw + gap;
-        }
-        return y + kSmallH;
+        return smalls;
     }
 
     double paintChart(QPainter& p, double L, double y, double W)
@@ -959,7 +1215,7 @@ private:
     double foldersBodyH() const
     {
         const int n = visibleRows().size();
-        return qMax(1, qMin(n, maxFolderRows())) * kRowH;
+        return qMax(kRowH, qMin(n * kRowH, m_foldAvail));
     }
     double m_foldScroll = 0, m_foldMax = 0;
     QRectF m_foldRect;
@@ -1178,9 +1434,13 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     m_canvas = new StatsCanvas(this);
     m_canvas->tipFor = [this](const QString& key) { return tipFor(key); };
     m_canvas->onZone = [this](const QString& key) { showDetail(key); };
+    m_canvas->onGrid = [this](const QVector<StatsData::Item>& g) {
+        m_db->setSetting(gridKey(!m_db->setting("stats_advanced", 0).toBool()), serializeGrid(g));
+    };
     m_detail = new DetailCard(this);
     auto* scroll = m_scroll = new QScrollArea(this);
     scroll->setWidget(m_canvas);
+    m_canvas->scrollArea = scroll;
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -1382,7 +1642,8 @@ void StatsWidget::refresh()
     d.byDay = stats::studyByDay(*m_db, d.from, d.to, d.filter);
     d.sessions = insights::sessions(*m_db, d.from, qMin(d.to, now.date().addDays(1)), d.filter);
     d.simple = !m_db->setting("stats_advanced", 0).toBool();
-    d.layout = parseLayout(m_db->setting(layoutKey(d.simple), m_db->setting("stats_layout", "").toString()).toString());
+    migrateGrid();
+    d.grid = parseGrid(m_db->setting(gridKey(d.simple)).toString());
     if (!m_db->setting("stats_paused_migrated", 0).toBool()) {   // beta 19: la tarjeta nueva aparece junto a «Tiempo muerto»
         for (bool sm : {true, false}) {
             const QString v = m_db->setting(cardsKey(sm), "").toString();
@@ -1662,6 +1923,9 @@ void StatsWidget::pickFolders()
     pickFolders();   // el menú se vuelve a abrir para marcar varias de una
 }
 
+QWidget* StatsWidget::canvasWidget() const { return m_canvas; }
+QRectF StatsWidget::itemRect(const QString& id) const { return m_canvas->shownRect(id); }
+
 void StatsWidget::setEditing(bool on)
 {
     if (m_editing == on) return;
@@ -1687,12 +1951,9 @@ void StatsWidget::layoutAction(const QString& key)
         refresh();
         return;
     }
-    auto lay = parseLayout(m_db->setting(layoutKey(simple), m_db->setting("stats_layout", "").toString()).toString());
-    auto find = [&](const QString& id) { for (int i = 0; i < lay.size(); ++i) if (lay[i].id == id) return i; return -1; };
     const QString act = f.value(1);
-    const int i = find(f.value(2));
     if (act == QLatin1String("done")) { setEditing(false); return; }
-    else if (act == QLatin1String("add")) {   // ＋ Tarjetas: lista con tildes
+    if (act == QLatin1String("add")) {   // ＋ Tarjetas: lista con tildes
         const QSet<QString> cs = parseCards(m_db->setting(cardsKey(simple), "").toString(), simple);
         QMenu menu(this);
         for (const QString& id : allCards()) {
@@ -1704,16 +1965,42 @@ void StatsWidget::layoutAction(const QString& key)
         menu.exec(QCursor::pos());
         return;
     }
-    else if (act == QLatin1String("reset")) {
-        lay = parseLayout(QString());
+    if (act == QLatin1String("reset")) {   // vuelve a los lugares y tamaños de fábrica (con el resorte)
+        m_db->setSetting(gridKey(simple), "");
         m_db->setSetting(cardsKey(simple), "");
+        refresh();
     }
-    else if (i >= 0 && act == QLatin1String("vis")) lay[i].visible = !lay[i].visible;
-    else if (i >= 0 && act == QLatin1String("size")) lay[i].size = qBound(0, f.value(3).toInt(), 2);
-    else if (i > 0 && act == QLatin1String("up")) lay.swapItemsAt(i, i - 1);
-    else if (i >= 0 && i + 1 < lay.size() && act == QLatin1String("down")) lay.swapItemsAt(i, i + 1);
-    m_db->setSetting(layoutKey(simple), serializeLayout(lay));
-    refresh();
+}
+
+// Mejoras 7.0: el formato viejo (paneles hero / chips / chart / folders con S-M-L) pasa a la grilla:
+// se conserva el orden de los paneles y lo que estaba oculto.
+void StatsWidget::migrateGrid()
+{
+    if (m_db->setting("stats_grid_migrated", 0).toBool()) return;
+    static const QStringList heroIds = {"streak", "study", "records", "breaks", "undue", "paused", "inactive", "sessions"};
+    static const QStringList chipIds = {"goals", "mark", "startgoal", "weekly", "focus", "level"};
+    for (bool simple : {true, false}) {
+        const auto old = parseLayout(m_db->setting(layoutKey(simple), m_db->setting("stats_layout", "").toString()).toString());
+        QSet<QString> cs = parseCards(m_db->setting(cardsKey(simple), "").toString(), simple);
+        cs.insert("chart");
+        cs.insert("folders");
+        QStringList order;
+        for (const auto& pn : old) {
+            const QStringList ids = pn.id == QLatin1String("hero") ? heroIds : pn.id == QLatin1String("chips") ? chipIds : QStringList{pn.id};
+            for (const QString& id : ids) {
+                order << QStringLiteral("%1").arg(id);
+                if (!pn.visible) cs.remove(id);
+            }
+        }
+        QVector<StatsData::Item> grid;
+        const auto def = defaultGrid();
+        for (const QString& id : order) for (const auto& d : def) if (d.id == id) grid.append(d);
+        m_db->setSetting(gridKey(simple), serializeGrid(grid));
+        QStringList l;
+        for (const QString& id : allCards()) if (cs.contains(id)) l << id;
+        m_db->setSetting(cardsKey(simple), l.isEmpty() ? QStringLiteral("none") : l.join(','));
+    }
+    m_db->setSetting("stats_grid_migrated", 1);
 }
 
 void StatsWidget::showDetail(const QString& key)
