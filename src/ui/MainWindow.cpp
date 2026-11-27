@@ -693,42 +693,7 @@ QWidget* MainWindow::buildTitleBar()
     auto* menuBtn = iconButton(bar, icons::Id::Menu, QStringLiteral("Más: ajustes, fijar, borde, pantalla completa, salir"));
     menuBtn->setObjectName("TbMenu");
     auto* menu = new QMenu(menuBtn);
-    // Mejoras 6.0: en Estadísticas, el menú ofrece personalizar (cada vista, simple o avanzada, tiene su diseño).
-    auto* editAct = menu->addAction(QStringLiteral("Personalizar estadísticas"), this, [this] { m_stats->setEditing(!m_stats->isEditing()); });
-    editAct->setCheckable(true);
-    connect(menu, &QMenu::aboutToShow, this, [this, editAct] {
-        editAct->setVisible(m_overlay == Overlay::Stats);
-        editAct->setChecked(m_stats->isEditing());
-    });
-    // Mejoras 5.0: el tamaño de los cuadraditos sale de la barra y se elige acá.
-    auto* sizeMenu = menu->addMenu(QStringLiteral("Tamaño de los cuadraditos"));
-    connect(sizeMenu, &QMenu::aboutToShow, this, [this, sizeMenu] {
-        sizeMenu->clear();
-        static const char* nm[] = {"Todos iguales", "Proporcional a lo ancho", "Proporcional completo"};
-        const int mask = m_db->setting("size_modes", 7).toInt();
-        auto* grp = new QActionGroup(sizeMenu);
-        for (int i = 0; i < 3; ++i) {
-            if (!(mask & (1 << i))) continue;
-            QAction* a = sizeMenu->addAction(QString::fromUtf8(nm[i]));
-            a->setCheckable(true);
-            a->setActionGroup(grp);
-            a->setChecked(int(m_grid->sizeMode()) == i);
-            connect(a, &QAction::triggered, this, [this, i] { applySizeMode(GridWidget::SizeMode(i), true); });
-        }
-    });
-    menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
-    menu->addAction(QStringLiteral("Sincronizar con el celu…"), this, [this] {
-        if (!m_sync) { toast(QStringLiteral("En el modo de pruebas no se sincroniza")); return; }
-        SyncDialog dlg(m_sync, this);
-        win::applyChrome(&dlg);
-        dlg.exec();
-    });
-    menu->addAction(QStringLiteral("Libreta  (L)"), this, [this] { toggleLibreta(); });   // Mejoras 6.0
-    menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);
-    menu->addAction(QStringLiteral("Ver tutorial"), this, [this] { startTour(); });   // Mejoras 2.0
-    menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });   // Mejoras 5.0: al final, antes de Salir
-    menu->addSeparator();
-    menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
+    // Mejoras 7.0: el contenido del menú se arma más abajo (necesita los botones de fijar / borde / pantalla completa).
     connect(menuBtn, &QToolButton::clicked, this, [menuBtn, menu] {
         menu->popup(menuBtn->mapToGlobal(QPoint(0, menuBtn->height())));
     });
@@ -750,8 +715,7 @@ QWidget* MainWindow::buildTitleBar()
     m_btnPin->hide();
     dock->hide();
     m_btnFull->hide();
-    {
-        QAction* first = menu->actions().value(0);
+    {   // Mejoras 7.0: menú ⋯ por secciones: ventana · vista · datos · ayuda · ajustes y salir
         auto* pinAct = new QAction(icons::get(icons::Id::Pin), QStringLiteral("Siempre visible"), menu);
         pinAct->setCheckable(true);
         connect(pinAct, &QAction::toggled, m_btnPin, &QToolButton::setChecked);
@@ -760,8 +724,54 @@ QWidget* MainWindow::buildTitleBar()
         connect(dockAct, &QAction::triggered, this, &MainWindow::dockToNearestEdge);
         auto* fullAct = new QAction(icons::get(icons::Id::FullScreen), QStringLiteral("Pantalla completa (F11)"), menu);
         connect(fullAct, &QAction::triggered, this, &MainWindow::toggleFullScreen);
-        menu->insertActions(first, {pinAct, dockAct, fullAct});
-        menu->insertSeparator(first);
+        menu->addAction(pinAct);
+        menu->addAction(dockAct);
+        menu->addAction(fullAct);
+        menu->addAction(QStringLiteral("Mini reproductor (M)"), this, &MainWindow::toggleMini);
+        menu->addSeparator();
+
+        auto* sizeMenu = menu->addMenu(QStringLiteral("Tamaño de los cuadraditos"));
+        connect(sizeMenu, &QMenu::aboutToShow, this, [this, sizeMenu] {
+            sizeMenu->clear();
+            static const char* nm[] = {"Todos iguales", "Proporcional a lo ancho", "Proporcional completo"};
+            const int mask = m_db->setting("size_modes", 7).toInt();
+            auto* grp = new QActionGroup(sizeMenu);
+            for (int i = 0; i < 3; ++i) {
+                if (!(mask & (1 << i))) continue;
+                QAction* a = sizeMenu->addAction(QString::fromUtf8(nm[i]));
+                a->setCheckable(true);
+                a->setActionGroup(grp);
+                a->setChecked(int(m_grid->sizeMode()) == i);
+                connect(a, &QAction::triggered, this, [this, i] { applySizeMode(GridWidget::SizeMode(i), true); });
+            }
+        });
+        auto* editAct = menu->addAction(QStringLiteral("Personalizar estadísticas"), this, [this] { m_stats->setEditing(!m_stats->isEditing()); });
+        editAct->setCheckable(true);
+        connect(menu, &QMenu::aboutToShow, this, [this, editAct] {
+            editAct->setVisible(m_overlay == Overlay::Stats);
+            editAct->setChecked(m_stats->isEditing());
+        });
+        menu->addSeparator();
+
+        menu->addAction(QStringLiteral("Libreta  (L)"), this, [this] { toggleLibreta(); });
+        auto* exportMenu = menu->addMenu(QStringLiteral("Exportar"));
+        exportMenu->addAction(QStringLiteral("Informe completo (gráficos, diario, notas y CSVs)…"), this, [this] { m_stats->exportReport(); });
+        exportMenu->addSeparator();
+        exportMenu->addAction(QStringLiteral("CSV de lo que estoy viendo en Estadísticas…"), this, [this] { m_stats->exportCsv(false); });
+        exportMenu->addAction(QStringLiteral("CSV de todo el historial…"), this, [this] { m_stats->exportCsv(true); });
+        menu->addAction(QStringLiteral("Sincronizar con el celu…"), this, [this] {
+            if (!m_sync) { toast(QStringLiteral("En el modo de pruebas no se sincroniza")); return; }
+            SyncDialog dlg(m_sync, this);
+            win::applyChrome(&dlg);
+            dlg.exec();
+        });
+        menu->addSeparator();
+
+        menu->addAction(QStringLiteral("Atajos de teclado  (?)"), this, &MainWindow::showShortcuts);
+        menu->addAction(QStringLiteral("Ver tutorial"), this, [this] { startTour(); });
+        menu->addSeparator();
+        menu->addAction(QStringLiteral("Ajustes…  (Ctrl+,)"), this, [this] { openSettings(); });
+        menu->addAction(QStringLiteral("Salir"), this, &MainWindow::quitApp);
     }
 
     auto* minimize = iconButton(bar, icons::Id::Minimize, QStringLiteral("Minimizar"));
@@ -2380,6 +2390,11 @@ void MainWindow::openNotePad(const QDate& day)
         m_notePad = new NotePad(m_db, this);   // ventanita propia (aleta), con la principal de dueña
         m_notePad->hide();
         connect(m_notePad, &NotePad::closeRequested, this, [this] { closeNotePad(); });
+        m_notePad->setExpanded(m_db->setting("notepad_expanded", 0).toBool());   // Mejoras 7.0
+        connect(m_notePad, &NotePad::expandedChanged, this, [this](bool on) {
+            m_db->setSetting("notepad_expanded", on ? 1 : 0);
+            if (m_notePadOpen) placeNotePad(true, true);
+        });
         connect(m_notePad, &NotePad::noteEdited, this, [this](const QDate& d, const QString& t) { m_db->setDayNote(d, t); });
         connect(m_notePad, &NotePad::moodChanged, this, [this](const QDate& d, int v) { m_db->setDayMood(d, v); });
     }
@@ -2414,12 +2429,21 @@ void MainWindow::closeNotePad(bool animate)
 QRect MainWindow::notePadRect(int w) const
 {
     const QRect g = geometry();
-    return QRect(g.right() + 1, g.top(), w, g.height());
+    // Mejoras 7.0: ampliada, la aleta también crece hacia abajo (como un bloc de notas)
+    const QScreen* scr = screen();
+    const QRect avail = scr ? scr->availableGeometry() : QRect(0, 0, 1920, 1080);
+    int h = g.height();
+    int top = g.top();
+    if (m_notePad && m_notePad->expanded()) {
+        h = qMin(avail.height(), qMax(h, 640));
+        top = qBound(avail.top(), top, avail.bottom() + 1 - h);
+    }
+    return QRect(g.right() + 1, top, w, h);
 }
 
 void MainWindow::placeNotePad(bool open, bool animate)
 {
-    const int want = 300;
+    const int want = m_notePad && m_notePad->expanded() ? 680 : 300;
     const QScreen* scr = screen();
     const QRect avail = scr ? scr->availableGeometry() : QRect(0, 0, 1920, 1080);
     if (open && !m_notePad->isVisible() && !isFullScreen() && !isMaximized()) {

@@ -273,12 +273,10 @@ private:
                           QStringLiteral("%1 de %2").arg(fmt::hours(data.weekSec), fmt::hours(goal)),
                           double(data.weekSec) / goal});
         }
-        if (data.ms.streaks) {
-            QStringList parts;
-            if (data.records.bestDay > 0) parts << QStringLiteral("Día %1").arg(fmt::hours(data.records.bestDay));
-            if (data.records.bestWeek > 0) parts << QStringLiteral("Semana %1").arg(fmt::hours(data.records.bestWeek));
-            parts << QStringLiteral("Racha %1 %2").arg(data.bestStreak).arg(data.bestStreak == 1 ? "día" : "días");
-            chips.append({QStringLiteral("records"), QStringLiteral("Tus récords"), parts.join(QStringLiteral("  ·  "))});
+        {   // Mejoras 7.0: el Foco pasó acá (los récords ocupan su lugar arriba)
+            const int fp = focusPct();
+            chips.append({QStringLiteral("focus"), QStringLiteral("Foco"), fp >= 0 ? QStringLiteral("%1 % del tiempo de sesión").arg(fp) : QStringLiteral("—"),
+                          fp >= 0 ? fp / 100.0 : -1});
         }
         if (data.ms.stages) {
             const ms::Stage st = ms::stageFor(data.allSec);
@@ -444,7 +442,8 @@ private:
     // En la vista avanzada, abajo van los datos finos (recreos, indebidos, inactivas).
     static constexpr double kSmallH = 58;
     double heroH() const { static const double v[3] = {76, 96, 120}; return v[qBound(0, data.sizeOf(QStringLiteral("hero")), 2)]; }
-    bool heroRow() const { return data.has("streak") || data.has("study") || data.has("focus"); }
+    bool heroRow() const { return data.has("streak") || data.has("study") || recordsCard(); }
+    bool recordsCard() const { return data.has("records") && data.ms.streaks; }
     bool smallRow() const { return data.has("breaks") || data.has("undue") || data.has("inactive") || data.has("sessions"); }
     double heroHeight() const { return (heroRow() ? heroH() : 0) + (heroRow() && smallRow() ? 10 : 0) + (smallRow() ? kSmallH : 0); }
     // En edición, cada tarjeta lleva una ✕ (zona delante de las demás: se agrega al final de paintEvent).
@@ -492,11 +491,13 @@ private:
     double paintHero(QPainter& p, double L, double y, double W)
     {
         const double gap = 10;
-        const bool hs = data.has("streak"), hst = data.has("study"), hf = data.has("focus");
+        const bool hs = data.has("streak"), hst = data.has("study"), hf = recordsCard();
         const int others = (hst ? 1 : 0) + (hf ? 1 : 0);
-        double sw = 0, cw = 0;
-        if (hs) { sw = others ? qMax(230.0, W * 0.44) : W; }
+        double sw = 0, cw = 0, recW = 0;
+        if (hs) { sw = others ? qMax(200.0, W * 0.34) : W; }
         if (others) cw = (W - (hs ? sw + gap : 0) - (others - 1) * gap) / others;
+        if (hf && hst) { cw = (W - (hs ? sw + gap : 0) - gap) * 0.38; recW = (W - (hs ? sw + gap : 0) - gap) * 0.62; }   // Mejoras 7.0: récords más grande
+        else if (hf) recW = cw;
         const bool row1 = heroRow();
         const double h1 = heroH();
         if (hs) {
@@ -549,11 +550,33 @@ private:
             card(p, QRectF(cx, y, cw, h1), data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, QStringLiteral("study"));
             cx += cw + gap;
         }
-        if (hf) {
-            const int fp = focusPct();
-            card(p, QRectF(cx, y, cw, h1), QStringLiteral("Foco"),
-                 fp >= 0 ? QStringLiteral("%1 %").arg(fp) : QStringLiteral("—"),
-                 QStringLiteral("del tiempo de sesión"), 20, theme::text, QStringLiteral("focus"));
+        if (hf) {   // récords: tres renglones legibles, en el lugar que antes tenía el foco
+            const QRectF rr(cx, y, recW, h1);
+            p.setPen(Qt::NoPen);
+            p.setBrush(theme::surface);
+            p.drawRoundedRect(rr, 10, 10);
+            p.setFont(theme::uiFont(8.5));
+            p.setPen(theme::textDim);
+            p.drawText(rr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("TUS RÉCORDS"));
+            const QString dayV = data.records.bestDay > 0
+                ? fmt::hours(data.records.bestDay) + (data.records.bestDayDate.isValid() ? QStringLiteral(" · ") + fmt::shortDate(data.records.bestDayDate) : QString())
+                : QStringLiteral("—");
+            const QString weekV = data.records.bestWeek > 0 ? fmt::hours(data.records.bestWeek) : QStringLiteral("—");
+            const QString streakV = data.bestStreak > 0 ? QStringLiteral("%1 %2").arg(data.bestStreak).arg(data.bestStreak == 1 ? "día" : "días") : QStringLiteral("—");
+            const QString labs[3] = {QStringLiteral("Más horas en un día"), QStringLiteral("Semana con más horas"), QStringLiteral("Racha más larga")};
+            const QString vals[3] = {dayV, weekV, streakV};
+            const double top = rr.top() + 30, lh = qMax(16.0, (rr.height() - 38) / 3.0);
+            for (int i = 0; i < 3; ++i) {
+                const QRectF row(rr.left() + 14, top + i * lh, rr.width() - 24, lh);
+                p.setFont(theme::uiFont(9));
+                p.setPen(theme::textDim);
+                p.drawText(row, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(labs[i], Qt::ElideRight, int(row.width() * 0.62)));
+                p.setFont(theme::uiFont(10.5, QFont::DemiBold));
+                p.setPen(theme::text);
+                p.drawText(row, Qt::AlignRight | Qt::AlignVCenter, vals[i]);
+            }
+            zone(rr, QStringLiteral("records"), p);
+            xButton(p, rr, QStringLiteral("records"));
         }
         if (row1) y += h1;
         if (!smallRow()) return y;
@@ -1093,19 +1116,7 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     top->addSpacing(10);
     top->addWidget(m_folder);
 
-    // M39: exportar a CSV (lo que estás viendo, o todo)
-    auto* exp = new QToolButton(this);
-    exp->setIcon(icons::get(icons::Id::Export));
-    exp->setToolTip(QStringLiteral("Exportar: informe completo o CSV"));
-    exp->setPopupMode(QToolButton::InstantPopup);
-    auto* expMenu = new QMenu(exp);
-    expMenu->addAction(QStringLiteral("Informe completo (gráficos, diario, notas y CSVs)…"), this, [this] { exportReport(); });
-    expMenu->addSeparator();
-    expMenu->addAction(QStringLiteral("Lo que estoy viendo (período y actividad) en CSV…"), this, [this] { exportCsv(false); });
-    expMenu->addAction(QStringLiteral("Todo el historial en CSV…"), this, [this] { exportCsv(true); });
-    exp->setMenu(expMenu);
-    top->addSpacing(4);
-    top->addWidget(exp);
+    // Mejoras 7.0: exportar vive en el menú ⋯ de la barra principal.
 
     // Mejoras 4.1: vista simple / avanzada + ayuda de cómo ver el detalle (click, no hover)
     m_viewBtn = new QPushButton(this);

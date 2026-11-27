@@ -26,11 +26,14 @@ public:
     void flush();   // manda lo escrito que todavía no se guardó
     void focusNote();
     void focusCurrent();
+    bool expanded() const { return m_expanded; }   // Mejoras 7.0: modo bloc de notas (más grande)
+    void setExpanded(bool on);
 
 signals:
     void noteEdited(const QDate& day, const QString& note);
     void moodChanged(const QDate& day, int mood);
     void closeRequested();
+    void expandedChanged(bool expanded);
 
 private:
     int             m_tab = 0;
@@ -45,4 +48,6 @@ private:
     MoodBar*        m_mood;
     QTimer*         m_timer;
     bool            m_dirty = false;
+    bool            m_expanded = false;
+    QPushButton*    m_btnExpand = nullptr;
 };

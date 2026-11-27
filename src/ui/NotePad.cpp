@@ -37,11 +37,18 @@ NotePad::NotePad(Database* db, QWidget* parent) : QFrame(parent)
     close->setCursor(Qt::PointingHandCursor);
     close->setToolTip(QStringLiteral("Cerrar"));
     connect(close, &QPushButton::clicked, this, &NotePad::closeRequested);
+    m_btnExpand = new QPushButton(QStringLiteral("⤢"), this);
+    m_btnExpand->setObjectName("NotePadClose");
+    m_btnExpand->setCursor(Qt::PointingHandCursor);
+    m_btnExpand->setFocusPolicy(Qt::NoFocus);
+    m_btnExpand->setToolTip(QStringLiteral("Agrandar como un bloc de notas"));
+    connect(m_btnExpand, &QPushButton::clicked, this, [this] { setExpanded(!m_expanded); emit expandedChanged(m_expanded); });
     auto* head = new QHBoxLayout;
     head->setSpacing(4);
     head->addWidget(m_tabDiary);
     head->addWidget(m_tabBook);
     head->addStretch(1);
+    head->addWidget(m_btnExpand, 0, Qt::AlignTop);
     head->addWidget(close, 0, Qt::AlignTop);
 
     // Página 0: el diario del día
@@ -119,3 +126,10 @@ void NotePad::showTab(int tab)
 }
 
 void NotePad::focusCurrent() { if (m_tab == 1) m_libreta->focusPage(); else focusNote(); }
+
+void NotePad::setExpanded(bool on)
+{
+    m_expanded = on;
+    m_btnExpand->setText(on ? QStringLiteral("⤡") : QStringLiteral("⤢"));
+    m_btnExpand->setToolTip(on ? QStringLiteral("Volver al tamaño chico") : QStringLiteral("Agrandar como un bloc de notas"));
+}

@@ -50,6 +50,11 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 17
+- **Tus récords** ahora está arriba, junto a Estudio, y se lee completo («Más horas en un día», «Semana con más horas», «Racha más larga»). El **Foco** pasó a la franja de abajo.
+- **Exportar** se movió al menú ⋯ (Exportar ▸), y el menú quedó ordenado por secciones.
+- **Libreta**: botón ⤢ para agrandarla como un bloc de notas.
+
 ### Novedades de la beta 16
 - **Informe completo**: Estadísticas › botón ⤓ › *Informe completo*. Elegís dónde guardarlo y se crea una carpeta con `informe.html` (se abre solo: resumen, gráficos semana/mes/año, día a día, mapa de calor, actividades, ánimo, diario, notas de pomodoros, libreta y rutina; para PDF: imprimir › Guardar como PDF) más `pomodoros.csv`, `dias.csv`, `actividades.csv` y `libreta.txt` para Excel. Siempre incluye todo el historial.
 
