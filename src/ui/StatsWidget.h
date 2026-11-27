@@ -26,7 +26,8 @@ public:
     void refresh();            // recarga datos (carpetas incluidas)
     void resetToToday();
     void step(int dir);
-    void exportCsv(bool everything);   // M39
+    void exportCsv(bool everything);
+    void exportReport();   // M39
     // Mejoras 3.0: el detalle de un dato (hover = resumen, click = mini ventana)
     QString tipFor(const QString& key) const;
     void showDetail(const QString& key);

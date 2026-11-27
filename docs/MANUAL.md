@@ -50,6 +50,9 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 16
+- **Informe completo**: Estadísticas › botón ⤓ › *Informe completo*. Elegís dónde guardarlo y se crea una carpeta con `informe.html` (se abre solo: resumen, gráficos semana/mes/año, día a día, mapa de calor, actividades, ánimo, diario, notas de pomodoros, libreta y rutina; para PDF: imprimir › Guardar como PDF) más `pomodoros.csv`, `dias.csv`, `actividades.csv` y `libreta.txt` para Excel. Siempre incluye todo el historial.
+
 ### Novedades de la beta 13
 - **Evolución › Cuándo estudiás**: mapa de calor con los **días de la semana** (columnas) y la **hora del reloj** (filas; solo las horas en las que estudiás). Cuanto más rojo y más claro, más estudiaste en esa franja; los picos se destacan fuerte y el más alto lleva un contorno. Arriba de cada columna, el promedio por día de ese día de la semana (el mejor, en negrita); abajo, los días, y las horas van creciendo de abajo hacia arriba. La frase de arriba dice tu mejor franja de 2 horas y tu mejor día. Mira los últimos 90 días como mínimo (más si elegís 12 meses o Todo) y respeta el filtro de actividad. Pasá el mouse o hacé click en una celda para ver las horas exactas.
 

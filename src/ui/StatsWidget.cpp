@@ -7,6 +7,7 @@
 #include "core/DayClock.h"
 #include "core/Format.h"
 #include "core/Export.h"
+#include "core/Report.h"
 #include "core/Milestones.h"
 #include "core/Goals.h"
 #include "core/Insights.h"
@@ -20,6 +21,9 @@
 #include <QDateTime>
 #include <QFile>
 #include <QFileDialog>
+#include <QUrl>
+#include <QDir>
+#include <QDesktopServices>
 #include <QFileInfo>
 #include <QMenu>
 #include <QStandardPaths>
@@ -1092,11 +1096,13 @@ StatsWidget::StatsWidget(Database* db, QWidget* parent)
     // M39: exportar a CSV (lo que estás viendo, o todo)
     auto* exp = new QToolButton(this);
     exp->setIcon(icons::get(icons::Id::Export));
-    exp->setToolTip(QStringLiteral("Exportar a CSV (Excel, Sheets)"));
+    exp->setToolTip(QStringLiteral("Exportar: informe completo o CSV"));
     exp->setPopupMode(QToolButton::InstantPopup);
     auto* expMenu = new QMenu(exp);
-    expMenu->addAction(QStringLiteral("Lo que estoy viendo (período y actividad)…"), this, [this] { exportCsv(false); });
-    expMenu->addAction(QStringLiteral("Todo el historial…"), this, [this] { exportCsv(true); });
+    expMenu->addAction(QStringLiteral("Informe completo (gráficos, diario, notas y CSVs)…"), this, [this] { exportReport(); });
+    expMenu->addSeparator();
+    expMenu->addAction(QStringLiteral("Lo que estoy viendo (período y actividad) en CSV…"), this, [this] { exportCsv(false); });
+    expMenu->addAction(QStringLiteral("Todo el historial en CSV…"), this, [this] { exportCsv(true); });
     exp->setMenu(expMenu);
     top->addSpacing(4);
     top->addWidget(exp);
@@ -1225,6 +1231,19 @@ void StatsWidget::step(int dir)
 {
     fade::cross(m_canvas, 150);
     shift(dir);
+}
+
+void StatsWidget::exportReport()
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    const QString parent = QFileDialog::getExistingDirectory(this, QStringLiteral("¿Dónde guardo el informe? (se crea una carpeta)"), base);
+    if (parent.isEmpty()) return;
+    const QDateTime now = QDateTime::currentDateTime();
+    const QString dir = QDir(parent).filePath(QStringLiteral("UltimateTracker informe %1").arg(now.toString(QStringLiteral("yyyy-MM-dd"))));
+    const QString err = report::writeAll(*m_db, dir, now);
+    if (!err.isEmpty()) { emit message(err); return; }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(QDir(dir).filePath(QStringLiteral("informe.html"))));
+    emit message(QStringLiteral("Informe guardado en la carpeta «%1»").arg(QFileInfo(dir).fileName()));
 }
 
 void StatsWidget::exportCsv(bool everything)

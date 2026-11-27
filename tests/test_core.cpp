@@ -7,6 +7,7 @@
 #include "core/Live.h"
 #include "core/Kinds.h"
 #include "core/Insights.h"
+#include "core/Report.h"
 #include "core/Routine.h"
 #include "core/Notebook.h"
 #include <QSqlQuery>
@@ -672,6 +673,11 @@ private slots:
         for (int d = 0; d < 7; ++d) for (int h = 0; h < 24; ++h) cells += rh.sec[d][h];
         QCOMPARE(cells, rh.total);
         QVERIFY(rh.dayCount[0] + rh.dayCount[1] + rh.dayCount[2] + rh.dayCount[3] + rh.dayCount[4] + rh.dayCount[5] + rh.dayCount[6] > 0);
+        db.setDayNote(today, "nota <b>de prueba</b>"); db.setDayMood(today, 4);
+        const QString html = report::html(db, QDateTime(today, QTime(12, 0)));
+        QVERIFY(html.contains("Semana a semana") && html.contains("Cuándo estudiás"));
+        QVERIFY(html.contains("nota &lt;b&gt;de prueba&lt;/b&gt;"));   // el diario va escapado
+        QVERIFY(report::daysCsv(db, QDateTime(today, QTime(12, 0))).contains("nota <b>de prueba</b>"));
         const auto avg = insights::movingAverage({1, 2, 3, 4}, 2);
         QCOMPARE(avg.value(3), 3.5);
         // Historial de meta semanal: el pasado no se reescribe
