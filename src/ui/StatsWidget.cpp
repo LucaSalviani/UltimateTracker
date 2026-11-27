@@ -234,17 +234,21 @@ protected:
         for (const Zone& z : zones) if (z.rect.contains(pos)) return &z;
         return nullptr;
     }
-    void zone(const QRectF& r, const QString& key, QPainter& p)
+    void zone(const QRectF& vr, const QString& key, QPainter& p)
     {
+        const QRectF r = m_inScale ? m_zoneRect : vr;   // dentro de una tarjeta escalada, la zona es la real
         zones.append({r, key, QString()});
         if (key == m_hoverKey) {   // se nota que se puede tocar
             p.save();
+            if (m_inScale) p.resetTransform();
             p.setPen(QPen(theme::textFaint, 1));
             p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
             p.restore();
         }
     }
+    bool m_inScale = false, m_skipBg = false;
+    QRectF m_zoneRect;
     QString m_hoverKey;
 
     // ---- Mejoras 7.0: grilla con imán. Tarjetas y secciones se arrastran y se estiran como ventanas;
@@ -430,9 +434,7 @@ private:
     void paintChip(QPainter& p, const QRectF& r, const Chip& c)
     {
         static const QColor medal[3] = {QColor(0xc0, 0x8a, 0x5a), QColor(0xb8, 0xbc, 0xc4), QColor(0xe0, 0xb8, 0x4a)};
-        p.setPen(QPen(theme::line, 1));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
+        if (!m_skipBg) { p.setPen(QPen(theme::line, 1)); p.setBrush(Qt::NoBrush); p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8); }
         p.setFont(theme::uiFont(8));
         p.setPen(theme::textDim);
         p.drawText(r.adjusted(12, 8, -8, 0), Qt::AlignLeft | Qt::AlignTop, c.label);
@@ -736,9 +738,25 @@ private:
 
     void paintOne(QPainter& p, const QString& id, const QRectF& r)
     {
-        if (id == QLatin1String("streak")) paintStreak(p, r);
-        else if (id == QLatin1String("study")) card(p, r, data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, id);
-        else if (id == QLatin1String("records")) paintRecords(p, r);
+        // Mejoras 7.0: al agrandar una tarjeta, su contenido crece con ella y queda centrado (se dibuja a escala).
+        auto scaled = [&](double bw, double bh, bool outline, const std::function<void(const QRectF&)>& fn) {
+            const double sc = qBound(1.0, qMin(r.width() / bw, r.height() / bh), 3.0);
+            p.save();
+            p.setBrush(outline ? Qt::NoBrush : QBrush(theme::surface));
+            p.setPen(outline ? QPen(theme::line, 1) : QPen(Qt::NoPen));
+            p.drawRoundedRect(outline ? r.adjusted(0.5, 0.5, -0.5, -0.5) : r, outline ? 8 : 10, outline ? 8 : 10);
+            const double vw = r.width() / sc, vh = r.height() / sc;
+            const double iw = qMin(vw, bw * 1.6), ih = qMin(vh, bh);
+            m_inScale = true; m_skipBg = true; m_zoneRect = r;
+            p.translate(r.topLeft());
+            p.scale(sc, sc);
+            fn(QRectF((vw - iw) / 2, (vh - ih) / 2, iw, ih));
+            m_inScale = false; m_skipBg = false;
+            p.restore();
+        };
+        if (id == QLatin1String("streak")) scaled(240, 92, false, [&](const QRectF& ir) { paintStreak(p, ir); });
+        else if (id == QLatin1String("study")) scaled(180, 92, false, [&](const QRectF& ir) { card(p, ir, data.studyLabel, fmt::hours(data.totals.study), QString(), 20, theme::text, id); });
+        else if (id == QLatin1String("records")) scaled(310, 92, false, [&](const QRectF& ir) { paintRecords(p, ir); });
         else if (id == QLatin1String("chart")) {
             m_plotH = qMax(50.0, r.height() - 24 - 40);
             paintChart(p, r.left(), r.top(), r.width());
@@ -750,8 +768,8 @@ private:
         } else {
             bool done = false;
             for (const Small& s : smallCards())
-                if (s.id == id) { card(p, r, s.label, s.value, s.sub, 13, s.col, s.id); done = true; break; }
-            if (!done) for (const Chip& c : buildChips()) if (c.key == id) { paintChip(p, r, c); break; }
+                if (s.id == id) { scaled(180, 60, false, [&](const QRectF& ir) { card(p, ir, s.label, s.value, s.sub, 13, s.col, s.id); }); done = true; break; }
+            if (!done) for (const Chip& c : buildChips()) if (c.key == id) { scaled(240, c.sub.isEmpty() ? 60 : 92, true, [&](const QRectF& ir) { paintChip(p, ir, c); }); break; }
         }
         if (data.editing) {   // borde punteado y la manijita para estirar
             p.save();
@@ -829,9 +847,12 @@ private:
     bool recordsCard() const { return data.has("records") && data.ms.streaks; }
     // En edición, cada tarjeta lleva una ✕ (zona delante de las demás: se agrega al final de paintEvent).
     QVector<Zone> pendingX;
-    void xButton(QPainter& p, const QRectF& r, const QString& id)
+    void xButton(QPainter& p, const QRectF& vr, const QString& id)
     {
         if (!data.editing) return;
+        const QRectF r = m_inScale ? m_zoneRect : vr;
+        p.save();
+        if (m_inScale) p.resetTransform();
         const QRectF b(r.right() - 24, r.top() + 6, 18, 18);
         p.setPen(Qt::NoPen);
         p.setBrush(theme::mix(theme::surface, theme::text, 0.18));
@@ -839,6 +860,7 @@ private:
         p.setPen(theme::text);
         p.setFont(theme::uiFont(8, QFont::DemiBold));
         p.drawText(b, Qt::AlignCenter, QStringLiteral("✕"));
+        p.restore();
         pendingX.append({b, QStringLiteral("card:hide:") + id, QString()});
     }
     int focusPct() const
@@ -849,21 +871,14 @@ private:
     void card(QPainter& p, const QRectF& r, const QString& label, const QString& value, const QString& sub,
               double valuePt, const QColor& accent, const QString& key)
     {
-        p.setPen(Qt::NoPen);
-        p.setBrush(theme::surface);
-        p.drawRoundedRect(r, 10, 10);
+        if (!m_skipBg) { p.setPen(Qt::NoPen); p.setBrush(theme::surface); p.drawRoundedRect(r, 10, 10); }
         p.setFont(theme::uiFont(8.5));
         p.setPen(theme::textDim);
         p.drawText(r.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop,
                    QFontMetrics(p.font()).elidedText(label, Qt::ElideRight, int(r.width() - 22)));
         p.setPen(accent);
-        if (key == QLatin1String("study") && r.height() > 70) {   // tarjeta grande: la cifra va al centro y crece con ella
-            p.setFont(theme::uiFont(valuePt * qBound(1.0, qMin(r.height() / 86.0, r.width() / 190.0), 2.4), QFont::DemiBold));
-            p.drawText(r.adjusted(8, 18, -8, 0), Qt::AlignCenter, value);
-        } else {
-            p.setFont(theme::uiFont(valuePt, QFont::DemiBold));
-            p.drawText(r.adjusted(14, 0, -8, sub.isEmpty() ? -10 : -26), Qt::AlignLeft | Qt::AlignBottom, value);
-        }
+        p.setFont(theme::uiFont(valuePt, QFont::DemiBold));
+        p.drawText(r.adjusted(14, 0, -8, sub.isEmpty() ? -10 : -26), Qt::AlignLeft | Qt::AlignBottom, value);
         if (!sub.isEmpty()) {
             p.setFont(theme::uiFont(8));
             p.setPen(theme::textFaint);
@@ -877,15 +892,11 @@ private:
     void paintStreak(QPainter& p, const QRectF& sr)
     {
         // ---- racha: el número grande
-        p.setPen(Qt::NoPen);
-        p.setBrush(theme::surface);
-        p.drawRoundedRect(sr, 10, 10);
+        if (!m_skipBg) { p.setPen(Qt::NoPen); p.setBrush(theme::surface); p.drawRoundedRect(sr, 10, 10); }
         p.setFont(theme::uiFont(8.5));
         p.setPen(theme::textDim);
         p.drawText(sr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("RACHA"));
-        // al agrandar la tarjeta el contenido queda centrado (no pegado abajo)
-        const double ew = qMin(sr.width(), 320.0), eh = qMin(sr.height(), 92.0);
-        const QRectF er(sr.left() + (sr.width() - ew) / 2, sr.top() + (sr.height() - eh) / 2 + (sr.height() > eh ? 6 : 0), ew, eh);
+        const QRectF er = sr;
         const QString num = QString::number(data.streak.days);
         p.setFont(theme::uiFont(34, QFont::DemiBold));
         p.setPen(data.streak.days > 0 ? theme::text : theme::textDim);
@@ -922,9 +933,7 @@ private:
     }
     void paintRecords(QPainter& p, const QRectF& rr)
     {
-        p.setPen(Qt::NoPen);
-        p.setBrush(theme::surface);
-        p.drawRoundedRect(rr, 10, 10);
+        if (!m_skipBg) { p.setPen(Qt::NoPen); p.setBrush(theme::surface); p.drawRoundedRect(rr, 10, 10); }
         p.setFont(theme::uiFont(8.5));
         p.setPen(theme::textDim);
         p.drawText(rr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("TUS RÉCORDS"));
