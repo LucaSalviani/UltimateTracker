@@ -86,7 +86,7 @@ struct StatsData {
     // Mejoras 5.2: paneles de la pantalla (orden, visibilidad y tamaño 0/1/2 = S/M/L), editables en la vista avanzada
     struct Panel { QString id; bool visible = true; int size = 1; };   // solo para migrar el formato viejo
     // Mejoras 7.0: grilla con imán. Cada tarjeta o sección tiene un ancho en columnas (de 12) y un alto en filas.
-    struct Item { QString id; int cols = 4; int rows = 2; };
+    struct Item { QString id; int cols = 4; int rows = 2; int x = -1, y = -1; };   // x (en doceavos) e y: lugar elegido a mano; -1 = automático
     QVector<Item> grid;
     QSet<QString> cards;   // Mejoras 6.0: tarjetas sueltas que se ven (cada vista, simple o avanzada, tiene las suyas)
     bool has(const QString& id) const { return cards.contains(id); }
@@ -178,7 +178,9 @@ static QVector<StatsData::Item> parseGrid(const QString& s)
         bool dup = false;
         for (const auto& o : out) if (o.id == f[0]) dup = true;
         if (dup) continue;
-        out.append({f[0], qBound(2, f[1].toInt(), 12), qBound(2, f[2].toInt(), 24)});
+        StatsData::Item it{f[0], qBound(2, f[1].toInt(), 12), qBound(2, f[2].toInt(), 24)};
+        if (f.size() >= 5) { it.x = qBound(0, f[3].toInt(), 11); it.y = qMax(0, f[4].toInt()); }
+        out.append(it);
     }
     for (const auto& d : def) {
         bool has = false;
@@ -190,7 +192,10 @@ static QVector<StatsData::Item> parseGrid(const QString& s)
 static QString serializeGrid(const QVector<StatsData::Item>& v)
 {
     QStringList l;
-    for (const auto& it : v) l << QStringLiteral("%1:%2:%3").arg(it.id).arg(it.cols).arg(it.rows);
+    for (const auto& it : v) {
+        if (it.x >= 0 && it.y >= 0) l << QStringLiteral("%1:%2:%3:%4:%5").arg(it.id).arg(it.cols).arg(it.rows).arg(it.x).arg(it.y);
+        else l << QStringLiteral("%1:%2:%3").arg(it.id).arg(it.cols).arg(it.rows);
+    }
     return l.join(',');
 }
 static QString gridKey(bool simple) { return simple ? QStringLiteral("stats_grid_simple") : QStringLiteral("stats_grid_adv"); }
@@ -276,7 +281,13 @@ protected:
     {
         if (e->button() != Qt::LeftButton) return;
         if (!m_dragId.isEmpty() || !m_resId.isEmpty()) {
-            if (!m_preview.isEmpty()) data.grid = m_preview;
+            const QString who = !m_dragId.isEmpty() ? m_dragId : m_resId;
+            for (auto& v : m_vel) v = {0, 0, 0, 0};
+            (void)who;
+            if (!m_preview.isEmpty()) {
+                data.grid = m_preview;
+                pinPositions(data.grid, flow(data.grid, m_W, presentSet(), QString()));   // suelta: todo se apoya sin huecos
+            }
             m_preview.clear();
             m_dragId.clear();
             m_resId.clear();
@@ -305,7 +316,7 @@ protected:
         if (data.editing) y0 = paintEditHeader(p, L, y0, W) + 10;
         m_L = L; m_y0 = y0; m_W = W;
         const QSet<QString> pres = presentSet();
-        const auto placed = flow(currentItems(), W, pres);
+        const auto placed = flow(currentItems(), W, pres, !m_dragId.isEmpty() ? m_dragId : m_resId);
         QSet<QString> alive;
         bool needAnim = false;
         for (const Placed& pl : placed) {
@@ -505,8 +516,10 @@ private:
             return rowsFor(chartHeight(cols * cellW(W, n) + (cols - 1) * kGridGap));
         return it.rows;
     }
-    // Reparte las tarjetas en orden: cada una va al primer hueco libre, sin pasar para atrás del lugar de la anterior.
-    QVector<Placed> flow(const QVector<StatsData::Item>& items, double W, const QSet<QString>& pres) const
+    // Reparte las tarjetas: las que tienen lugar elegido van ahí (si chocan, la de abajo se corre hacia abajo),
+    // después todas «suben» hasta apoyarse (sin huecos de más), y las automáticas van al primer hueco libre.
+    // `priority` (la que se arrastra o estira) se acomoda primero y no sube.
+    QVector<Placed> flow(const QVector<StatsData::Item>& items, double W, const QSet<QString>& pres, const QString& priority = QString()) const
     {
         const int n = gridCols(W);
         QVector<QVector<char>> occ;
@@ -515,28 +528,60 @@ private:
                 for (int x = c; x < c + w; ++x) if (occ[y][x]) return false;
             return true;
         };
-        auto take = [&](int r, int c, int w, int h) {
+        auto mark = [&](int r, int c, int w, int h, char v) {
             while (occ.size() < r + h) occ.append(QVector<char>(n, 0));
-            for (int y = r; y < r + h; ++y) for (int x = c; x < c + w; ++x) occ[y][x] = 1;
+            for (int y = r; y < r + h; ++y) for (int x = c; x < c + w; ++x) occ[y][x] = v;
         };
+        QVector<Placed> fixed, autos;
+        QVector<int> order;   // índices de items con lugar propio
+        for (int i = 0; i < items.size(); ++i) if (pres.contains(items[i].id) && items[i].x >= 0 && items[i].y >= 0) order.append(i);
+        std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+            const bool pa = items[a].id == priority, pb = items[b].id == priority;
+            if (pa != pb) return pa;
+            return items[a].y != items[b].y ? items[a].y < items[b].y : items[a].x < items[b].x;
+        });
         QVector<Placed> out;
-        int pr = 0, pc = 0;
-        for (const auto& it : items) {
-            if (!pres.contains(it.id)) continue;
+        for (int i : order) {
+            const auto& it = items[i];
             const int c = itemCols(it, n), r = itemRows(it, W, c, n);
-            for (int row = pr;; ++row) {
+            int col = qBound(0, int(std::lround(it.x * n / 12.0)), n - c), row = it.y;
+            while (!isFree(row, col, c, r)) ++row;
+            mark(row, col, c, r, 1);
+            out.append({it.id, col, row, c, r});
+        }
+        // gravedad: cada una sube hasta apoyarse (la que se está moviendo se queda donde está)
+        std::stable_sort(out.begin(), out.end(), [&](const Placed& a, const Placed& b) { return a.row != b.row ? a.row < b.row : a.col < b.col; });
+        for (Placed& pl : out) {
+            if (pl.id == priority) continue;
+            mark(pl.row, pl.col, pl.cols, pl.rows, 0);
+            while (pl.row > 0 && isFree(pl.row - 1, pl.col, pl.cols, pl.rows)) --pl.row;
+            mark(pl.row, pl.col, pl.cols, pl.rows, 1);
+        }
+        // automáticas: primer hueco libre, en orden
+        for (const auto& it : items) {
+            if (!pres.contains(it.id) || (it.x >= 0 && it.y >= 0)) continue;
+            const int c = itemCols(it, n), r = itemRows(it, W, c, n);
+            for (int row = 0;; ++row) {
                 bool done = false;
-                for (int col = row == pr ? pc : 0; col + c <= n; ++col) {
+                for (int col = 0; col + c <= n; ++col) {
                     if (!isFree(row, col, c, r)) continue;
-                    take(row, col, c, r);
+                    mark(row, col, c, r, 1);
                     out.append({it.id, col, row, c, r});
-                    pr = row; pc = col; done = true;
+                    done = true;
                     break;
                 }
                 if (done) break;
             }
         }
         return out;
+    }
+    // Fija el lugar de cada tarjeta visible (al empezar a mover algo y al soltar), para que el resto no se corra solo.
+    void pinPositions(QVector<StatsData::Item>& items, const QVector<Placed>& placed) const
+    {
+        const int n = gridCols(m_W);
+        for (auto& it : items)
+            for (const Placed& pl : placed)
+                if (pl.id == it.id) { it.x = qBound(0, int(std::lround(pl.col * 12.0 / n)), 11); it.y = pl.row; break; }
     }
     QRectF placedRect(const Placed& pl) const
     {
@@ -549,8 +594,8 @@ private:
         const double W = w - 32;
         double y0 = 8 + (data.editing ? 34 + 10 : 0);
         int maxRow = 0;
-        for (const Placed& pl : flow(currentItems(), W, presentSet())) maxRow = qMax(maxRow, pl.row + pl.rows);
-        return int(y0 + (maxRow > 0 ? maxRow * (kCellH + kGridGap) - kGridGap : 0) + 24);
+        for (const Placed& pl : flow(currentItems(), W, presentSet(), !m_dragId.isEmpty() ? m_dragId : m_resId)) maxRow = qMax(maxRow, pl.row + pl.rows);
+        return int(y0 + (maxRow > 0 ? maxRow * (kCellH + kGridGap) - kGridGap : 0) + 6);
     }
 
     QString itemAt(const QPointF& pos) const
@@ -588,6 +633,7 @@ private:
         if (m_dragId.isEmpty() && m_resId.isEmpty()) {
             if (d.x() * d.x() + d.y() * d.y() < 25) return;
             m_preview = data.grid;
+            pinPositions(m_preview, flow(data.grid, m_W, presentSet()));
             if (m_grab) m_resId = m_pressId;
             else { m_dragId = m_pressId; m_dragOff = m_pressPos - m_pressRect.topLeft(); setCursor(Qt::ClosedHandCursor); }
         }
@@ -604,30 +650,17 @@ private:
     void dragTo(const QPointF& pos)
     {
         const QRectF cur = m_shown.value(m_dragId);
-        m_shown[m_dragId] = QRectF(pos - m_dragOff, cur.size());
-        QVector<StatsData::Item> others;
-        StatsData::Item dragged;
-        for (const auto& it : data.grid) { if (it.id == m_dragId) dragged = it; else others.append(it); }
-        const auto placed = flow(others, m_W, presentSet());
-        int at = others.size();
-        if (!placed.isEmpty()) {
-            double best = 1e18;
-            int bi = 0;
-            bool before = false;
-            for (int i = 0; i < placed.size(); ++i) {
-                const QRectF r = placedRect(placed[i]);
-                const double dx = qMax(qMax(r.left() - pos.x(), 0.0), pos.x() - r.right());
-                const double dy = qMax(qMax(r.top() - pos.y(), 0.0), pos.y() - r.bottom());
-                const double dist = dx * dx + dy * dy;
-                if (dist < best) {
-                    best = dist; bi = i;
-                    before = pos.y() < r.top() + r.height() * 0.3 || (pos.y() <= r.bottom() && pos.x() < r.center().x());
-                }
-            }
-            for (int i = 0; i < others.size(); ++i) if (others[i].id == placed[bi].id) { at = before ? i : i + 1; break; }
+        const QPointF tl = pos - m_dragOff;
+        m_shown[m_dragId] = QRectF(tl, cur.size());
+        const int n = gridCols(m_W);
+        const double cw = cellW(m_W, n);
+        for (auto& it : m_preview) {
+            if (it.id != m_dragId) continue;
+            const int c = itemCols(it, n);
+            const int col = qBound(0, int(std::lround((tl.x() - m_L) / (cw + kGridGap))), n - c);
+            it.x = qBound(0, int(std::lround(col * 12.0 / n)), 11);
+            it.y = qMax(0, int(std::lround((tl.y() - m_y0) / (kCellH + kGridGap))));
         }
-        others.insert(at, dragged);
-        m_preview = others;
     }
     void resizeStep(const QPointF& d)
     {
@@ -695,9 +728,24 @@ private:
             p.setPen(QPen(c, 1, Qt::DashLine));
             p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 10, 10);
-            p.setPen(QPen(theme::textDim, 1.2, Qt::SolidLine, Qt::RoundCap));
-            const QPointF g(r.right() - 5, r.bottom() - 5);
-            for (int k = 1; k <= 3; ++k) p.drawLine(g + QPointF(-k * 3.2, 0), g + QPointF(0, -k * 3.2));
+            // flechitas para agrandar o achicar: borde derecho, borde inferior y esquina
+            QColor ac = theme::text;
+            ac.setAlpha(190);
+            p.setPen(QPen(ac, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            auto arrow = [&](QPointF c, QPointF d, double len) {   // flecha de dos puntas, d = dirección unitaria
+                const QPointF a = c - d * (len / 2), b = c + d * (len / 2), nrm(-d.y(), d.x());
+                p.drawLine(a, b);
+                for (const auto& e : {QPair<QPointF, double>(a, 1.0), QPair<QPointF, double>(b, -1.0)}) {
+                    p.drawLine(e.first, e.first + (d * e.second + nrm * 0.7) * 3.6);
+                    p.drawLine(e.first, e.first + (d * e.second - nrm * 0.7) * 3.6);
+                }
+            };
+            const Limits lim = limitsFor(id);
+            arrow(QPointF(r.right() - 8, r.center().y()), QPointF(1, 0), 11);
+            if (lim.minR > 0) {
+                arrow(QPointF(r.center().x(), r.bottom() - 5), QPointF(0, 1), 9);
+                arrow(QPointF(r.right() - 11, r.bottom() - 11), QPointF(0.7071, 0.7071), 11);
+            }
             p.restore();
         }
     }

@@ -260,7 +260,7 @@ QWidget* SettingsDialog::pageGeneral()
     m_notepad->setToolTip(QStringLiteral("Apagado, el diario (ánimo y nota) queda dentro del panel del objetivo, como antes."));
     m_moodOffer = new QCheckBox(QStringLiteral("Preguntarme cómo me fue al terminar la sesión (Me voy)"), w);
     m_moodOffer->setChecked(m_db->setting("mood_offer", 1).toBool());
-    m_startOffer = new QCheckBox(QStringLiteral("Proponerme el arranque de mañana (hora y tarea mínima) al terminar la sesión"), w);
+    m_startOffer = new QCheckBox(QStringLiteral("Proponerme el arranque de mañana al irme"), w);
     m_startOffer->setChecked(m_db->setting("startgoal_offer", 1).toBool());
 
     auto* times = new QFormLayout;
@@ -801,11 +801,12 @@ QWidget* SettingsDialog::pageSystem()
     m_greeting = new QCheckBox(QStringLiteral("Saludarme la primera vez que uso la PC en el día"), w);
     m_greeting->setChecked(m_db->setting("greeting", 0).toBool());
     m_greeting->setToolTip(QStringLiteral("Al prender la PC, despertarla o desbloquearla."));
-    m_closeToTray = new QCheckBox(QStringLiteral("Al cerrar la ventana, seguir abierta en segundo plano (⋯ › Salir la cierra del todo)"), w);
+    m_closeToTray = new QCheckBox(QStringLiteral("Seguir en segundo plano al cerrar la ventana"), w);
     m_closeToTray->setChecked(m_db->setting("close_to_tray", 1).toBool());
-    m_appTrack = new QCheckBox(QStringLiteral("Anotar qué programas uso (solo con la app abierta, aunque esté en segundo plano)"), w);
+    m_appTrack = new QCheckBox(QStringLiteral("Anotar qué programas uso"), w);
+    m_closeToTray->setToolTip(QStringLiteral("⋯ › Salir (o la bandeja) la cierra del todo"));
     m_appTrack->setChecked(m_db->setting("apptrack_on", 0).toBool());
-    auto* appNote = new QLabel(QStringLiteral("Cada 5 segundos anota el programa y el título de la ventana al frente, y no cuenta si pasan 3 minutos sin tocar teclado ni mouse. Gasta casi nada de procesador. Todo queda solo en esta PC (no se sincroniza ni se exporta). Se ve en ⋯ › Uso de apps."), w);
+    auto* appNote = new QLabel(QStringLiteral("Solo con la app abierta, aunque esté en segundo plano. Cada 5 segundos anota el programa y el título de la ventana al frente, y no cuenta si pasan 3 minutos sin tocar teclado ni mouse. Gasta casi nada de procesador. Todo queda solo en esta PC (no se sincroniza ni se exporta). Se ve en ⋯ › Uso de apps."), w);
     appNote->setWordWrap(true);
     appNote->setStyleSheet(QStringLiteral("color:%1").arg(theme::textDim.name()));
     auto* wipe = new QPushButton(QStringLiteral("Borrar los datos de uso de apps…"), w);
