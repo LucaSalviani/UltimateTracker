@@ -1,4 +1,5 @@
 #include "ui/SettingsDialog.h"
+#include "core/AppUsage.h"
 #include "core/DayClock.h"
 #include "core/Stats.h"
 #include "core/Routine.h"
@@ -800,6 +801,20 @@ QWidget* SettingsDialog::pageSystem()
     m_greeting = new QCheckBox(QStringLiteral("Saludarme la primera vez que uso la PC en el día"), w);
     m_greeting->setChecked(m_db->setting("greeting", 0).toBool());
     m_greeting->setToolTip(QStringLiteral("Al prender la PC, despertarla o desbloquearla."));
+    m_closeToTray = new QCheckBox(QStringLiteral("Al cerrar la ventana, seguir abierta en segundo plano (⋯ › Salir la cierra del todo)"), w);
+    m_closeToTray->setChecked(m_db->setting("close_to_tray", 1).toBool());
+    m_appTrack = new QCheckBox(QStringLiteral("Anotar qué programas uso (solo con la app abierta, aunque esté en segundo plano)"), w);
+    m_appTrack->setChecked(m_db->setting("apptrack_on", 0).toBool());
+    auto* appNote = new QLabel(QStringLiteral("Cada 5 segundos anota el programa y el título de la ventana al frente, y no cuenta si pasan 3 minutos sin tocar teclado ni mouse. Gasta casi nada de procesador. Todo queda solo en esta PC (no se sincroniza ni se exporta). Se ve en ⋯ › Uso de apps."), w);
+    appNote->setWordWrap(true);
+    appNote->setStyleSheet(QStringLiteral("color:%1").arg(theme::textDim.name()));
+    auto* wipe = new QPushButton(QStringLiteral("Borrar los datos de uso de apps…"), w);
+    wipe->setAutoDefault(false);
+    connect(wipe, &QPushButton::clicked, this, [this] {
+        if (QMessageBox::question(this, QStringLiteral("Borrar uso de apps"), QStringLiteral("¿Borrar todo el historial de uso de programas? No toca tus pomodoros.")) == QMessageBox::Yes) {
+            appusage::clear(*m_db);
+        }
+    });
     m_hotkey = new QCheckBox(QStringLiteral("Atajo global Ctrl + Alt + P (pausar / seguir)"), w);
     m_hotkey->setChecked(m_db->setting("hotkey", 1).toBool());
     m_quietFullscreen = new QCheckBox(QStringLiteral("No saltar al frente en pantalla completa (solo aviso)"), w);
@@ -825,6 +840,12 @@ QWidget* SettingsDialog::pageSystem()
     lay->addWidget(subheading(QStringLiteral("Inicio"), w));
     lay->addWidget(m_autostart);
     lay->addWidget(m_greeting);
+    lay->addWidget(m_closeToTray);
+    lay->addSpacing(6);
+    lay->addWidget(subheading(QStringLiteral("Uso de apps"), w));
+    lay->addWidget(m_appTrack);
+    lay->addWidget(appNote);
+    lay->addWidget(wipe, 0, Qt::AlignLeft);
     lay->addSpacing(6);
     lay->addWidget(subheading(QStringLiteral("Atajos y avisos"), w));
     lay->addWidget(m_hotkey);
@@ -922,6 +943,8 @@ void SettingsDialog::accept()
     m_db->setSetting("tile_number_prefix", m_tilePrefix->isChecked() ? 1 : 0);
     m_db->setSetting("tile_highlight", m_tileHighlight->currentIndex());
     m_db->setSetting("autostart", m_autostart->isChecked() ? 1 : 0);
+    m_db->setSetting("apptrack_on", m_appTrack->isChecked() ? 1 : 0);
+    m_db->setSetting("close_to_tray", m_closeToTray->isChecked() ? 1 : 0);
     m_db->setSetting("greeting", m_greeting->isChecked() ? 1 : 0);
     m_db->setSetting("hotkey", m_hotkey->isChecked() ? 1 : 0);
     m_db->setSetting("quiet_fullscreen", m_quietFullscreen->isChecked() ? 1 : 0);
@@ -1026,6 +1049,8 @@ void SettingsDialog::resetSection(int page)
         break;
     case 6:   // Sistema
         m_autostart->setChecked(false);
+        m_appTrack->setChecked(false);
+        m_closeToTray->setChecked(true);
         m_greeting->setChecked(false);
         m_hotkey->setChecked(true);
         m_quietFullscreen->setChecked(true);

@@ -21,6 +21,7 @@ add_library(constancia_core STATIC
     src/core/Export.h          src/core/Export.cpp
     src/core/Report.h          src/core/Report.cpp
     src/core/StartGoal.h       src/core/StartGoal.cpp
+    src/core/AppUsage.h        src/core/AppUsage.cpp
     src/core/Milestones.h      src/core/Milestones.cpp
     src/core/SyncConfig.h
     src/core/Sync.h            src/core/Sync.cpp
@@ -51,6 +52,8 @@ qt_add_executable(UltimateTracker WIN32
     src/ui/Sounds.h            src/ui/Sounds.cpp
     src/ui/GridWidget.h        src/ui/GridWidget.cpp
     src/ui/RoutineDialog.h     src/ui/RoutineDialog.cpp
+    src/ui/AppTracker.h        src/ui/AppTracker.cpp
+    src/ui/AppUsageDialog.h    src/ui/AppUsageDialog.cpp
     src/ui/Libreta.h           src/ui/Libreta.cpp
     src/ui/EdgeTab.h           src/ui/EdgeTab.cpp
     src/ui/FolderMenu.h        src/ui/FolderMenu.cpp

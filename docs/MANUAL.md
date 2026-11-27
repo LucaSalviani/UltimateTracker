@@ -51,6 +51,8 @@
 - Festejo al romper un récord.
 
 ### Novedades de la beta 19
+- **Uso de apps** (⋯ → *Uso de apps…*): anota qué programa y qué ventana usás en la compu, y te lo muestra en dos tortas (con un pomodoro corriendo / fuera de uno) por día, semana o mes. Viene apagado: se prende en *Ajustes → Sistema*. Solo cuenta mientras UltimateTracker está abierta (aunque esté en segundo plano) y no suma si pasan 3 minutos sin tocar teclado ni mouse. Todo queda en tu PC; hay un botón para borrarlo.
+- **Cerrar la ventana no cierra el programa**: queda en segundo plano en la bandeja. Para cerrarlo del todo usá ⋯ → *Salir* (o el ícono de la bandeja). Se cambia en *Ajustes → Sistema*.
 - **Arranque de mañana**: al tocar **Me voy** te propone una hora de arranque y una tarea mínima (por ejemplo 8:00 y 2 pomodoros de una actividad). También está en ⋯ → *Arranque de mañana…*. Cuenta como cumplido si el primer pomodoro empieza hasta 15 minutos después de la hora y hacés lo mínimo. El saludo te cuenta cómo te fue con el de ayer y Estadísticas tiene la tarjeta *Arranque*. Se apaga en Ajustes.
 - **Recreo indebido** ahora es solo lo que pausás con un pomodoro en curso. Lo de antes (demoras entre pomodoros, recreos pasados de tiempo) se llama **Tiempo muerto**; tienen tarjetas separadas. Lo registrado antes de esta versión queda todo en «Tiempo muerto».
 - **Reiniciar pomodoro**: el botón ↺ en la esquina del visor (aparece con un pomodoro en marcha) descarta lo corrido y arranca de cero, con confirmación.

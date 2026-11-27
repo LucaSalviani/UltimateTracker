@@ -21,6 +21,9 @@
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
 #include "core/StartGoal.h"
+#include "core/AppUsage.h"
+#include "ui/AppTracker.h"
+#include "ui/AppUsageDialog.h"
 #include "core/Milestones.h"
 #include "core/Sync.h"
 #include "core/Live.h"
@@ -550,6 +553,7 @@ MainWindow::MainWindow(Database* db, QWidget* parent)
             m_tray->showMessage(QStringLiteral("UltimateTracker"), msg, QSystemTrayIcon::NoIcon, 1500);
     });
     applySystemSettings();
+    applyTrackerSettings();
     QTimer::singleShot(8000, this, &MainWindow::runDailyBackup);
     if (m_db->setting("mini_open", 0).toBool()) QTimer::singleShot(300, this, &MainWindow::toggleMini);
 
@@ -756,6 +760,12 @@ QWidget* MainWindow::buildTitleBar()
 
         menu->addAction(QStringLiteral("Libreta  (L)"), this, [this] { toggleLibreta(); });
         menu->addAction(QStringLiteral("Arranque de mañana…"), this, [this] { editStartGoal(m_today.addDays(1), false); });
+        menu->addAction(QStringLiteral("Uso de apps…"), this, [this] {
+            m_appTracker->flush();
+            AppUsageDialog dlg(m_db, m_today, this);
+            win::applyChrome(&dlg);
+            dlg.exec();
+        });
         auto* exportMenu = menu->addMenu(QStringLiteral("Exportar"));
         exportMenu->addAction(QStringLiteral("Informe completo (gráficos, diario, notas y CSVs)…"), this, [this] { m_stats->exportReport(); });
         exportMenu->addSeparator();
@@ -911,7 +921,10 @@ QWidget* MainWindow::buildDeck()
     m_guard = new FocusGuard(this);
     m_guardAlarm = new FocusAlarm;
     connect(this, &QObject::destroyed, m_guardAlarm, &QObject::deleteLater);
+    m_appTracker = new AppTracker(m_db, this);
+    applyTrackerSettings();
     connect(m_session, &SessionController::stateChanged, this, [this](SessionController::State s) {
+        m_appTracker->setInPomodoro(s == SessionController::State::Running || s == SessionController::State::Paused);
         m_guard->setWatching(s == SessionController::State::Running && !m_session->passive());
     });
     connect(m_guard, &FocusGuard::distracted, this, [this](const QString& what) {
@@ -2866,15 +2879,18 @@ void MainWindow::showEvent(QShowEvent* e)
 
 void MainWindow::closeEvent(QCloseEvent* e)
 {
-    // Con un pomodoro, pausa o recreo en marcha, cerrar la ventana la manda a la
-    // bandeja: el tiempo sigue corriendo. Si no, cierra la app.
-    if (m_session->inProgress() && m_tray) {
+    // Mejoras 7.0: con un pomodoro, pausa o recreo en marcha —o con «Seguir en segundo plano»
+    // prendido (por defecto)— cerrar la ventana la manda a la bandeja. Solo ⋯ › Salir (o el menú
+    // de la bandeja) cierra de verdad.
+    const bool keep = m_session->inProgress() || m_db->setting("close_to_tray", 1).toBool();
+    if (keep && m_tray && !m_quitting && !qApp->isSavingSession()) {
         e->ignore();
         hide();
         if (!m_trayHintShown) {
             m_trayHintShown = true;
             m_tray->showMessage(QStringLiteral("UltimateTracker"),
-                                QStringLiteral("Sigo contando en segundo plano. Te aviso cuando termine el timer."),
+                                m_session->inProgress() ? QStringLiteral("Sigo contando en segundo plano. Te aviso cuando termine el timer.")
+                                                    : QStringLiteral("Sigo abierta en segundo plano. Para cerrarla del todo: ⋯ › Salir."),
                                 QSystemTrayIcon::Information, 4000);
         }
         return;
@@ -2900,10 +2916,12 @@ void MainWindow::restartInPlace()
 
 void MainWindow::quitApp()
 {
+    m_quitting = true;
     // Si había un pomodoro corriendo, se guarda hasta donde llegó. Los que están
     // en pausa por actividad quedan guardados para retomarlos hoy.
     m_session->closeDay(false);
     m_sounds->stopAlarm();
+    m_appTracker->flush();
     if (m_tray) m_tray->hide();
     m_edgeTab->close();
     qApp->quit();
@@ -2943,6 +2961,7 @@ void MainWindow::openSettings(int page)
     applySizePreset();
     applyGroupStyle();
     applySystemSettings();
+    applyTrackerSettings();
     applySoundSettings();
     applyGuardSettings();
     reloadFolders();   // M25: colores por actividad prendidos/apagados
@@ -3009,6 +3028,12 @@ void MainWindow::startTour()
     auto* tour = new Tour(steps, this);
     connect(tour, &Tour::finished, this, [this] { m_db->setSetting("tutorial/done", 1); });
     tour->start();
+}
+
+// Mejoras 7.0: el seguimiento de programas es opcional y arranca apagado.
+void MainWindow::applyTrackerSettings()
+{
+    if (m_appTracker) m_appTracker->setEnabled(m_db->setting("apptrack_on", 0).toBool());
 }
 
 void MainWindow::applyGuardSettings()

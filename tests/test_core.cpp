@@ -9,6 +9,7 @@
 #include "core/Insights.h"
 #include "core/Report.h"
 #include "core/StartGoal.h"
+#include "core/AppUsage.h"
 #include "core/Routine.h"
 #include "core/Notebook.h"
 #include <QSqlQuery>
@@ -159,6 +160,29 @@ private slots:
         // Pausó y cortó: la pausa es recreo indebido desde el principio (no depende de volver a estudiar).
         QCOMPARE(sum(db, IntervalKind::Pause, d), 120);
         QCOMPARE(sum(db, IntervalKind::Undue, d), 0);
+    }
+
+    void appUsageAccumulatesAndSplits()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const QDate d(2026, 10, 26);
+        QVERIFY(!appusage::any(db));
+        appusage::add(db, d, "code", "main.cpp", true, 600);
+        appusage::add(db, d, "code", "main.cpp", true, 60);
+        appusage::add(db, d, "code", "otro.cpp", false, 100);
+        appusage::add(db, d, "chrome", "YouTube", false, 300);
+        appusage::add(db, d.addDays(1), "chrome", "YouTube", false, 50);
+        const auto day = appusage::byApp(db, d, d);
+        QCOMPARE(day.size(), 2);
+        QCOMPARE(day[0].exe, QString("code"));
+        QCOMPARE(day[0].pomoSec, qint64(660));
+        QCOMPARE(day[0].outSec, qint64(100));
+        const auto two = appusage::byApp(db, d, d.addDays(1));
+        QCOMPARE(two[1].outSec, qint64(350));
+        QCOMPARE(appusage::titles(db, d, d, "code").first().first, QString("main.cpp"));
+        appusage::clear(db);
+        QVERIFY(!appusage::any(db));
     }
 
     void startGoalMetAndLate()

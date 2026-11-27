@@ -55,6 +55,14 @@ const char* kSchema[] = {
         folder_id INTEGER NOT NULL DEFAULT 0,
         pomos     INTEGER NOT NULL DEFAULT 1
     ))",   // Mejoras 7.0: objetivo de arranque
+    R"(CREATE TABLE IF NOT EXISTS app_usage (
+        day    TEXT NOT NULL,
+        exe    TEXT NOT NULL,
+        title  TEXT NOT NULL DEFAULT '',
+        in_pomo INTEGER NOT NULL DEFAULT 0,
+        sec    INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, exe, title, in_pomo)
+    ))",   // Mejoras 7.0: uso de programas (local)
     R"(CREATE TABLE IF NOT EXISTS routine_events (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         title     TEXT NOT NULL DEFAULT '',

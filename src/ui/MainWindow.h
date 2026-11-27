@@ -46,7 +46,8 @@ public:
     void startTour();                             // Mejoras 2.0: mini tutorial
     void moveMany(const QList<qint64>& ids, qint64 folder);
     void showSelectionMenu(const QList<qint64>& ids, const QPoint& globalPos);
-    void applyGuardSettings();            // Mejoras 3.0: distracciones
+    void applyGuardSettings();
+    void applyTrackerSettings();            // Mejoras 3.0: distracciones
     void logStart(const QString& line);   // Mejoras 3.0: arranque.log
     void onWake();   // B2-4: la PC se despertó o se desbloqueó (saluda si es la primera vez en el día)
     void quitApp();
@@ -194,6 +195,7 @@ private:
     class SyncClient*   m_sync = nullptr;     // Celu-4
     class LiveLink*     m_live = nullptr;     // en vivo con el celu
     class FocusGuard*   m_guard = nullptr;    // Mejoras 3.0
+    class AppTracker*   m_appTracker = nullptr;   // Mejoras 7.0: uso de programas
     class FocusAlarm*   m_guardAlarm = nullptr;
     bool                m_guardPaused = false;
     QPointer<class Greeting> m_dayCard;       // Mejoras 2.0
@@ -241,6 +243,7 @@ private:
     EdgeTab*         m_edgeTab = nullptr;
     bool             m_docked = false;
     bool             m_trayHintShown = false;
+    bool             m_quitting = false;
 
     // Arrastre y redimensión
     bool      m_dragging = false;
