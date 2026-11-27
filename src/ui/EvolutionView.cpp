@@ -426,13 +426,13 @@ void EvolutionView::paintRhythm(QPainter& p, const QRectF& r)
         const bool peak = d == peakDay && avg > 0;
         p.setFont(theme::uiFont(8.5, peak ? QFont::Bold : QFont::DemiBold));
         p.setPen(peak ? theme::text : theme::textDim);
-        p.drawText(QRectF(left + d * cw, top - 22, cw, 16), Qt::AlignCenter, QString::fromUtf8(dn[d]));
+        p.drawText(QRectF(left + d * cw, bottom + 6, cw, 16), Qt::AlignCenter, QString::fromUtf8(dn[d]));
         p.setFont(theme::uiFont(8, peak ? QFont::Bold : QFont::Normal));
-        p.drawText(QRectF(left + d * cw, bottom + 6, cw, 16), Qt::AlignCenter, avg > 0 ? QStringLiteral("%1 / día").arg(fmtH(avg)) : QStringLiteral("—"));
-        m_zones.append({QRectF(left + d * cw, bottom + 4, cw, 20), QStringLiteral("Promedio de los %1: %2 por día").arg(QString::fromUtf8(dnFull[d]), fmtH(avg)), QString()});
+        p.drawText(QRectF(left + d * cw, top - 22, cw, 16), Qt::AlignCenter, avg > 0 ? QStringLiteral("%1 / día").arg(fmtH(avg)) : QStringLiteral("—"));
+        m_zones.append({QRectF(left + d * cw, top - 24, cw, 20), QStringLiteral("Promedio de los %1: %2 por día").arg(QString::fromUtf8(dnFull[d]), fmtH(avg)), QString()});
         for (int k = k0; k <= k1; ++k) {
             const int h = (startH + k) % 24;
-            const QRectF c(left + d * cw + 1.5, top + (k - k0) * ch + 1, cw - 3, ch - 2);
+            const QRectF c(left + d * cw + 1.5, bottom - (k - k0 + 1) * ch + 1, cw - 3, ch - 2);
             const qint64 v = R.sec[d][h];
             QColor col = theme::mix(theme::surface, theme::bg, 0.5);
             if (v > 0) {
@@ -450,7 +450,7 @@ void EvolutionView::paintRhythm(QPainter& p, const QRectF& r)
     p.setPen(theme::textFaint);
     for (int k = k0; k <= k1; ++k)
         if (rows <= 14 || (k - k0) % 2 == 0)
-            p.drawText(QRectF(r.left() + 4, top + (k - k0) * ch, 34, ch), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("%1 h").arg((startH + k) % 24));
+            p.drawText(QRectF(r.left() + 4, bottom - (k - k0 + 1) * ch, 34, ch), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("%1 h").arg((startH + k) % 24));
     // leyenda: de poco a mucho
     const QRectF lg(r.right() - 150, r.top() + 10, 90, 8);
     for (int i = 0; i < 20; ++i) {
