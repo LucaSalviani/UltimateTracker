@@ -9,6 +9,7 @@
 #include <QPainterPath>
 #include <QTextDocument>
 #include <QToolTip>
+#include <algorithm>
 #include <cmath>
 #include <functional>
 
@@ -18,7 +19,7 @@ constexpr double kCardH = 168;
 constexpr double kTilesH = 112;
 constexpr double kGranH = 36;   // fila de pastillas Semanas | Meses | Años
 constexpr double kProgH = 200;
-constexpr double kRhythmH = 250;
+constexpr double kRhythmH = 360;
 constexpr double kGap = 14;
 QColor ink() { return theme::pomoAccent; }
 
@@ -384,37 +385,82 @@ void EvolutionView::paintRhythm(QPainter& p, const QRectF& r)
                        .arg(bestH).arg((bestH + 2) % 24 == 0 ? 24 : (bestH + 2) % 24).arg(QString::fromUtf8(dnFull[bestD]), fmtH(bestA));
     }
     card(p, r, QStringLiteral("Cuándo estudiás (últimos %1 días)").arg(m_rhythmDays), sentence);
-    const double left = r.left() + 50, right = r.right() - 70, top = r.top() + 58, bottom = r.bottom() - 28;
-    const double cw = (right - left) / 24.0, ch = (bottom - top) / 7.0;
-    qint64 mx = 1;
-    for (int d = 0; d < 7; ++d) for (int h = 0; h < 24; ++h) mx = qMax(mx, R.sec[d][h]);
-    double mxAvg = 1;
-    for (int d = 0; d < 7; ++d) if (R.dayCount[d]) mxAvg = qMax(mxAvg, double(R.dayTotal[d]) / R.dayCount[d]);
+    // Horas a mostrar: desde una antes de la primera con datos hasta una después de la última (en orden de día lógico).
+    int k0 = 24, k1 = -1;
+    for (int k = 0; k < 24; ++k) {
+        const int h = (startH + k) % 24;
+        qint64 v = 0;
+        for (int d = 0; d < 7; ++d) v += R.sec[d][h];
+        if (v > 0) { k0 = qMin(k0, k); k1 = qMax(k1, k); }
+    }
+    if (k1 < 0) { k0 = 4; k1 = 16; }
+    k0 = qMax(0, k0 - 1); k1 = qMin(23, k1 + 1);
+    while (k1 - k0 < 9 && (k0 > 0 || k1 < 23)) { if (k1 < 23) ++k1; if (k1 - k0 < 9 && k0 > 0) --k0; }
+    const int rows = k1 - k0 + 1;
+    const double left = r.left() + 44, right = r.right() - 16, top = r.top() + 76, bottom = r.bottom() - 30;
+    const double cw = (right - left) / 7.0, ch = (bottom - top) / rows;
+    // Contraste: el color sale del puesto de la celda entre las que tienen estudio (no del valor bruto),
+    // así los picos se separan claramente del resto; el 10 % más alto se aclara.
+    QVector<qint64> vals;
+    for (int d = 0; d < 7; ++d) for (int h = 0; h < 24; ++h) if (R.sec[d][h] > 0) vals << R.sec[d][h];
+    std::sort(vals.begin(), vals.end());
+    auto rank = [&](qint64 v) {
+        if (vals.size() < 2) return 1.0;
+        const int lo = int(std::lower_bound(vals.begin(), vals.end(), v) - vals.begin());
+        return double(lo) / (vals.size() - 1);
+    };
+    // 0 (poco) … 1 (pico): del fondo al acento y de ahí a un acento claro.
+    auto ramp = [&](double t) {
+        return t < 0.5 ? theme::mix(theme::surface, ink(), 0.15 + 0.5 * t)
+                       : theme::mix(theme::mix(theme::surface, ink(), 0.4), ink().lighter(165), (t - 0.5) * 2);
+    };
+    double mxAvg = 0; int peakDay = -1;
     for (int d = 0; d < 7; ++d) {
-        p.setFont(theme::uiFont(8));
-        p.setPen(theme::textDim);
-        p.drawText(QRectF(r.left() + 10, top + d * ch, 36, ch), Qt::AlignRight | Qt::AlignVCenter, QString::fromUtf8(dn[d]));
-        for (int k = 0; k < 24; ++k) {
-            const int h = (startH + k) % 24;
-            const QRectF c(left + k * cw + 1, top + d * ch + 1, cw - 2, ch - 2);
-            const double t = double(R.sec[d][h]) / mx;
-            p.setPen(Qt::NoPen);
-            p.setBrush(R.sec[d][h] > 0 ? theme::mix(theme::surface, ink(), 0.18 + 0.82 * std::sqrt(t)) : theme::mix(theme::surface, theme::bg, 0.5));
-            p.drawRoundedRect(c, 3, 3);
-            m_zones.append({c, QStringLiteral("%1 de %2 a %3 h\n%4 en total (últimos %5 días)").arg(QString::fromUtf8(dn[d])).arg(h).arg(h + 1).arg(fmtH(double(R.sec[d][h]))).arg(m_rhythmDays), QString()});
-        }
-        // promedio por día de ese tipo, a la derecha
+        const double a = R.dayCount[d] ? double(R.dayTotal[d]) / R.dayCount[d] : 0;
+        if (a > mxAvg) { mxAvg = a; peakDay = d; }
+    }
+    qint64 mxCell = 0; int pd = -1, ph = -1;
+    for (int d = 0; d < 7; ++d) for (int h = 0; h < 24; ++h) if (R.sec[d][h] > mxCell) { mxCell = R.sec[d][h]; pd = d; ph = h; }
+    for (int d = 0; d < 7; ++d) {
         const double avg = R.dayCount[d] ? double(R.dayTotal[d]) / R.dayCount[d] : 0;
-        p.setPen(theme::textDim);
-        p.setFont(theme::uiFont(8));
-        p.drawText(QRectF(right + 8, top + d * ch, 60, ch), Qt::AlignLeft | Qt::AlignVCenter, avg > 0 ? fmtH(avg) : QStringLiteral("—"));
-        m_zones.append({QRectF(right + 8, top + d * ch, 60, ch), QStringLiteral("Promedio de los %1: %2 por día").arg(QString::fromUtf8(dnFull[d]), fmtH(avg)), QString()});
+        const bool peak = d == peakDay && avg > 0;
+        p.setFont(theme::uiFont(8.5, peak ? QFont::Bold : QFont::DemiBold));
+        p.setPen(peak ? theme::text : theme::textDim);
+        p.drawText(QRectF(left + d * cw, top - 22, cw, 16), Qt::AlignCenter, QString::fromUtf8(dn[d]));
+        p.setFont(theme::uiFont(8, peak ? QFont::Bold : QFont::Normal));
+        p.drawText(QRectF(left + d * cw, bottom + 6, cw, 16), Qt::AlignCenter, avg > 0 ? QStringLiteral("%1 / día").arg(fmtH(avg)) : QStringLiteral("—"));
+        m_zones.append({QRectF(left + d * cw, bottom + 4, cw, 20), QStringLiteral("Promedio de los %1: %2 por día").arg(QString::fromUtf8(dnFull[d]), fmtH(avg)), QString()});
+        for (int k = k0; k <= k1; ++k) {
+            const int h = (startH + k) % 24;
+            const QRectF c(left + d * cw + 1.5, top + (k - k0) * ch + 1, cw - 3, ch - 2);
+            const qint64 v = R.sec[d][h];
+            QColor col = theme::mix(theme::surface, theme::bg, 0.5);
+            if (v > 0) {
+                const double t = rank(v);                       // 0 (poco) … 1 (lo máximo)
+                col = ramp(t);
+            }
+            p.setPen(Qt::NoPen);
+            p.setBrush(col);
+            p.drawRoundedRect(c, 3, 3);
+            if (d == pd && h == ph) { p.setBrush(Qt::NoBrush); p.setPen(QPen(theme::text, 1.4)); p.drawRoundedRect(c.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3); }
+            m_zones.append({c, QStringLiteral("%1 de %2 a %3 h\n%4 en total (últimos %5 días)").arg(QString::fromUtf8(dn[d])).arg(h).arg(h + 1).arg(fmtH(double(v))).arg(m_rhythmDays), QString()});
+        }
+    }
+    p.setFont(theme::uiFont(7.5));
+    p.setPen(theme::textFaint);
+    for (int k = k0; k <= k1; ++k)
+        if (rows <= 14 || (k - k0) % 2 == 0)
+            p.drawText(QRectF(r.left() + 4, top + (k - k0) * ch, 34, ch), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("%1 h").arg((startH + k) % 24));
+    // leyenda: de poco a mucho
+    const QRectF lg(r.right() - 150, r.top() + 10, 90, 8);
+    for (int i = 0; i < 20; ++i) {
+        const double t = i / 19.0;
+        const QColor c = ramp(t);
+        p.fillRect(QRectF(lg.left() + i * lg.width() / 20, lg.top(), lg.width() / 20 + 0.5, lg.height()), c);
     }
     p.setFont(theme::uiFont(7));
-    p.setPen(theme::textFaint);
-    for (int k = 0; k < 24; k += 2)
-        p.drawText(QRectF(left + k * cw - 6, bottom + 4, cw + 12, 12), Qt::AlignCenter, QString::number((startH + k) % 24));
-    p.drawText(QRectF(right + 8, r.top() + 42, 62, 14), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("por día"));
+    p.drawText(QRectF(lg.left() - 34, lg.top() - 3, 32, 14), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("poco"));
+    p.drawText(QRectF(lg.right() + 4, lg.top() - 3, 40, 14), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("mucho"));
 }
 
 // Fichas: promedio diario del período elegido y variación contra el período anterior de igual largo.
