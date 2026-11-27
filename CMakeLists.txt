@@ -20,6 +20,7 @@ add_library(constancia_core STATIC
     src/core/Stats.h           src/core/Stats.cpp
     src/core/Export.h          src/core/Export.cpp
     src/core/Report.h          src/core/Report.cpp
+    src/core/StartGoal.h       src/core/StartGoal.cpp
     src/core/Milestones.h      src/core/Milestones.cpp
     src/core/SyncConfig.h
     src/core/Sync.h            src/core/Sync.cpp

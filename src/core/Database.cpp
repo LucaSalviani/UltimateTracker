@@ -49,6 +49,12 @@ const char* kSchema[] = {
         created_at INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL DEFAULT 0
     ))",   // Mejoras 6.0: libreta permanente
+    R"(CREATE TABLE IF NOT EXISTS start_goals (
+        day       TEXT PRIMARY KEY,
+        minute    INTEGER NOT NULL DEFAULT 480,
+        folder_id INTEGER NOT NULL DEFAULT 0,
+        pomos     INTEGER NOT NULL DEFAULT 1
+    ))",   // Mejoras 7.0: objetivo de arranque
     R"(CREATE TABLE IF NOT EXISTS routine_events (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         title     TEXT NOT NULL DEFAULT '',

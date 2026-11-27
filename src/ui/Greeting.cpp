@@ -4,6 +4,8 @@
 #include "core/Format.h"
 #include "core/Goals.h"
 #include "core/Kinds.h"
+#include "core/StartGoal.h"
+#include "core/FolderTree.h"
 #include "core/Stats.h"
 #include "ui/Icons.h"
 #include "ui/MoodBar.h"
@@ -153,6 +155,27 @@ Greeting::Greeting(Database* db, bool full, QWidget* parent)
     }
     if (const auto g = goals::resolve(m_db->goals(), today); g && !g->spec.isEmpty())
         facts << QStringLiteral("<b>Objetivo de hoy:</b> %1").arg(goals::describe(g->spec).toHtmlEscaped());
+    // ---- Objetivo de arranque (Mejoras 7.0): el de ayer, cómo salió, y el de hoy.
+    {
+        const QDate yday = today.addDays(-1);
+        if (const auto yg = startgoal::get(*m_db, yday)) {
+            const auto r = startgoal::evaluate(*m_db, *yg, QDateTime::currentDateTime());
+            QString how;
+            if (r.met) how = QStringLiteral("cumplido ✓");
+            else if (!r.started) how = QStringLiteral("no arrancaste");
+            else if (!r.onTime) how = QStringLiteral("arrancaste %1 min tarde").arg(r.lateMin);
+            else how = QStringLiteral("arrancaste a tiempo, faltó la tarea (%1/%2)").arg(r.done).arg(yg->pomos);
+            facts << QStringLiteral("<b>Arranque de ayer</b> (%1:%2): %3")
+                         .arg(yg->minute / 60, 2, 10, QLatin1Char('0')).arg(yg->minute % 60, 2, 10, QLatin1Char('0')).arg(how);
+        }
+        if (const auto tg = startgoal::get(*m_db, today)) {
+            const FolderTree tree(m_db->folders());
+            const QString what = tg->folderId > 0 && tree.contains(tg->folderId) ? tree.find(tg->folderId)->name : QStringLiteral("lo que sea");
+            facts << QStringLiteral("<b>Arranque de hoy:</b> %1:%2 · %3 %4 de %5")
+                         .arg(tg->minute / 60, 2, 10, QLatin1Char('0')).arg(tg->minute % 60, 2, 10, QLatin1Char('0'))
+                         .arg(tg->pomos).arg(tg->pomos == 1 ? "pomodoro" : "pomodoros", what.toHtmlEscaped());
+        }
+    }
     auto* info = line(facts.join(QStringLiteral("<br>")), "GreetFacts", m_card);
     info->setVisible(!facts.isEmpty());
 

@@ -11,6 +11,7 @@
 #include "core/Milestones.h"
 #include "core/Goals.h"
 #include "core/Insights.h"
+#include "core/StartGoal.h"
 #include "ui/ActivitiesWidget.h"
 #include "ui/Fade.h"
 #include "ui/Icons.h"
@@ -74,6 +75,8 @@ struct StatsData {
     // M44: hitos
     ms::Config ms;
     qint64 todaySec = 0, weekSec = 0, allSec = 0;
+    int startMet = 0, startCounted = 0;                       // Mejoras 7.0: objetivos de arranque (últimos 30 días)
+    QVector<QPair<QDate, QString>> startRows;                 // fecha + resultado, de más nuevo a más viejo
     int pomosToday = 0, weekMinMet = 0, weekMinCounted = 0;   // Mejoras 7.0: mínimo diario de pomodoros
     ms::Records records;   // incluye hoy
     int bestStreak = 0;
@@ -92,14 +95,14 @@ struct StatsData {
 // Mejoras 6.0: tarjetas sueltas. Cada vista (simple / avanzada) guarda las suyas.
 static const QStringList& allCards()
 {
-    static const QStringList l = {"streak", "study", "focus", "breaks", "undue", "paused", "inactive", "sessions", "goals", "mark", "weekly", "records", "level"};
+    static const QStringList l = {"streak", "study", "focus", "breaks", "undue", "paused", "inactive", "sessions", "goals", "mark", "startgoal", "weekly", "records", "level"};
     return l;
 }
 static QString cardName(const QString& id)
 {
     static const QMap<QString, QString> m = {{"streak", "Racha"}, {"study", "Estudio"}, {"focus", "Foco %"}, {"breaks", "Recreos"},
         {"undue", "Tiempo muerto"}, {"paused", "Recreo indebido"}, {"inactive", "Horas inactivas"}, {"sessions", "Sesiones"}, {"goals", "Objetivos"},
-        {"mark", "Marca de hoy"}, {"weekly", "Meta semanal"}, {"records", "Tus récords"}, {"level", "Nivel global"}};
+        {"mark", "Marca de hoy"}, {"startgoal", "Arranque"}, {"weekly", "Meta semanal"}, {"records", "Tus récords"}, {"level", "Nivel global"}};
     return m.value(id, id);
 }
 static QSet<QString> defaultCards(bool simple)
@@ -268,6 +271,10 @@ private:
                           (lvl ? ms::dayMarkName(lvl).left(1).toUpper() + ms::dayMarkName(lvl).mid(1) : QStringLiteral("Todavía no"))
                               + next, -1, lvl});
         }
+        if (data.startCounted > 0 || !data.startRows.isEmpty())
+            chips.append({QStringLiteral("startgoal"), QStringLiteral("Arranque"),
+                          data.startCounted > 0 ? QStringLiteral("%1 de %2 cumplidos").arg(data.startMet).arg(data.startCounted) : QStringLiteral("Todavía sin días"),
+                          data.startCounted > 0 ? double(data.startMet) / data.startCounted : -1.0});
         const bool wk = data.ms.weekly && data.ms.weeklyMin > 0, dm = data.ms.dailyPomos > 0;
         if (wk || dm) {
             const qint64 goal = qint64(data.ms.weeklyMin) * 60;
@@ -1440,6 +1447,25 @@ void StatsWidget::refresh()
             if (wd.value(x).pomos >= d.ms.dailyPomos) ++d.weekMinMet;
         }
     }
+    {   // Mejoras 7.0: objetivos de arranque de los últimos 30 días
+        const QDate from = d.today.addDays(-29);
+        auto goalsList = startgoal::between(*m_db, from, d.today);
+        for (int i = goalsList.size() - 1; i >= 0; --i) {
+            const auto& g = goalsList[i];
+            const auto r = startgoal::evaluate(*m_db, g, QDateTime::currentDateTime());
+            QString how;
+            if (r.met) how = QStringLiteral("cumplido");
+            else if (r.pending) how = QStringLiteral("en curso");
+            else if (!r.started) how = QStringLiteral("no arrancaste");
+            else if (!r.onTime) how = QStringLiteral("%1 min tarde").arg(r.lateMin);
+            else how = QStringLiteral("faltó la tarea (%1/%2)").arg(r.done).arg(g.pomos);
+            d.startRows.append({g.day, QStringLiteral("%1:%2 · %3")
+                                           .arg(g.minute / 60, 2, 10, QLatin1Char('0')).arg(g.minute % 60, 2, 10, QLatin1Char('0')).arg(how)});
+            if (r.pending) continue;
+            ++d.startCounted;
+            if (r.met) ++d.startMet;
+        }
+    }
     if (d.ms.stages) for (qint64 v : m_db->studyByFolder()) d.allSec += v;
     d.streak = stats::streak(m_db->studiedDays(), d.today, stats::StreakRules::load(*m_db));
     d.bestStreak = qMax(d.bestStreak, d.streak.days);
@@ -1580,6 +1606,8 @@ QString StatsWidget::tipFor(const QString& key) const
                    .arg(left == 1 ? "queda" : "quedan").arg(left).arg(d.bestStreak) + more;
     }
     if (key == "goals") return QStringLiteral("<b>Objetivos del período</b><br>Qué días se cumplió el objetivo y cuánto faltó en los que no.") + more;
+    if (key == "startgoal")
+        return QStringLiteral("<b>Arranque</b><br>Días en que arrancaste a la hora que te propusiste y hiciste lo mínimo (últimos 30 días).") + more;
     if (key == "mark") {
         const int lvl = ms::dayMark(d.todaySec, d.ms.markMin);
         QString s = QStringLiteral("<b>Marca de hoy: %1</b><br>Llevás %2 hoy").arg(lvl ? cap(ms::dayMarkName(lvl)) : QStringLiteral("todavía no"), fmt::hours(d.todaySec));
@@ -1867,6 +1895,10 @@ void StatsWidget::showDetail(const QString& key)
                                 : today ? QStringLiteral("en curso · faltan %1").arg(fmt::hours(it->missing)) : QStringLiteral("faltaron %1").arg(fmt::hours(it->missing)));
         }
         html = para(QStringLiteral("<b>%1 de %2</b> días cumplidos%3").arg(met).arg(n).arg(n ? QStringLiteral(" (%1 %)").arg(qRound(100.0 * met / n)) : QString())) + table(rows);
+    } else if (key == "startgoal") {
+        title = QStringLiteral("Arranque · últimos 30 días");
+        for (const auto& r : d.startRows) rows << row(cap(fmt::shortDate(r.first)), r.second.section(QStringLiteral(" · "), 0, 0), r.second.section(QStringLiteral(" · "), 1));
+        html = para(QStringLiteral("<b>%1 de %2</b> cumplidos").arg(d.startMet).arg(d.startCounted)) + table(rows);
     } else if (key == "mark") {
         const int lvl = ms::dayMark(d.todaySec, d.ms.markMin);
         title = QStringLiteral("Marca de hoy: %1").arg(lvl ? cap(ms::dayMarkName(lvl)) : QStringLiteral("todavía no"));

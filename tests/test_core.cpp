@@ -8,6 +8,7 @@
 #include "core/Kinds.h"
 #include "core/Insights.h"
 #include "core/Report.h"
+#include "core/StartGoal.h"
 #include "core/Routine.h"
 #include "core/Notebook.h"
 #include <QSqlQuery>
@@ -158,6 +159,33 @@ private slots:
         // Pausó y cortó: la pausa es recreo indebido desde el principio (no depende de volver a estudiar).
         QCOMPARE(sum(db, IntervalKind::Pause, d), 120);
         QCOMPARE(sum(db, IntervalKind::Undue, d), 0);
+    }
+
+    void startGoalMetAndLate()
+    {
+        Database db;
+        QVERIFY(db.open(":memory:"));
+        const QDate d(2026, 10, 26);
+        startgoal::Goal g{d, 9 * 60, 0, 2};
+        startgoal::save(db, g);
+        QVERIFY(startgoal::get(db, d).has_value());
+        QCOMPARE(startgoal::get(db, d)->pomos, 2);
+        const qint64 fid = db.addFolder(0, "X");
+        auto mk = [&](int hh, int mm) {
+            Pomodoro p; p.folderId = fid; p.day = d;
+            p.startedAt = QDateTime(d, QTime(hh, mm)).toSecsSinceEpoch();
+            p.endedAt = p.startedAt + 1500; p.plannedSec = 1500; p.studiedSec = 1500;
+            p.status = PomoStatus::Completed;
+            db.insertPomodoro(p);
+        };
+        mk(9, 10); mk(9, 40);
+        const auto r = startgoal::evaluate(db, g, QDateTime(d, QTime(12, 0)));
+        QVERIFY(r.started); QVERIFY(r.onTime); QVERIFY(r.taskDone); QVERIFY(r.met);
+        g.minute = 8 * 60;   // 8:00 → llegó 70 min tarde
+        const auto late = startgoal::evaluate(db, g, QDateTime(d, QTime(12, 0)));
+        QVERIFY(!late.onTime); QVERIFY(!late.met); QCOMPARE(late.lateMin, 70);
+        startgoal::remove(db, d);
+        QVERIFY(!startgoal::get(db, d).has_value());
     }
 
     void restartPomodoroDiscardsWhatRan()

@@ -79,6 +79,7 @@ private:
     QCheckBox* m_notepad = nullptr;    // Mejoras 4.1
     QComboBox* m_monthMode = nullptr;  // Mejoras 5.0
     QCheckBox* m_moodOffer = nullptr;
+    QCheckBox* m_startOffer = nullptr;
     QCheckBox* m_guardOn = nullptr;      // Mejoras 3.0: distracciones
     QCheckBox* m_guardPause = nullptr;
     QSpinBox*  m_guardGrace = nullptr;

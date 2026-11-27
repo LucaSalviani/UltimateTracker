@@ -20,6 +20,7 @@
 #include "ui/Celebration.h"
 #include "ui/SystemIntegration.h"
 #include "core/Goals.h"
+#include "core/StartGoal.h"
 #include "core/Milestones.h"
 #include "core/Sync.h"
 #include "core/Live.h"
@@ -754,6 +755,7 @@ QWidget* MainWindow::buildTitleBar()
         menu->addSeparator();
 
         menu->addAction(QStringLiteral("Libreta  (L)"), this, [this] { toggleLibreta(); });
+        menu->addAction(QStringLiteral("Arranque de mañana…"), this, [this] { editStartGoal(m_today.addDays(1), false); });
         auto* exportMenu = menu->addMenu(QStringLiteral("Exportar"));
         exportMenu->addAction(QStringLiteral("Informe completo (gráficos, diario, notas y CSVs)…"), this, [this] { m_stats->exportReport(); });
         exportMenu->addSeparator();
@@ -3026,6 +3028,66 @@ void MainWindow::leaveSession()
     toast(QStringLiteral("Sesión terminada. Hasta la vuelta"));
     reloadGrid();
     offerMood();
+    // Mejoras 7.0: ofrecer el arranque de mañana (una vez; si ya lo definiste, no).
+    if (m_db->setting("startgoal_offer", 1).toBool() && !startgoal::get(*m_db, m_today.addDays(1)))
+        editStartGoal(m_today.addDays(1), true);
+}
+
+// Mejoras 7.0: horario de arranque + tarea mínima para un día. «Quitar» lo borra; «Ahora no» no hace nada.
+void MainWindow::editStartGoal(const QDate& day, bool offered)
+{
+    const auto cur = startgoal::get(*m_db, day);
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Arranque"));
+    auto* lay = new QVBoxLayout(&dlg);
+    lay->setSpacing(10);
+    const QString dayName = day == m_today ? QStringLiteral("hoy") : day == m_today.addDays(1) ? QStringLiteral("mañana") : day.toString(QStringLiteral("dd/MM"));
+    lay->addWidget(new QLabel(QStringLiteral("¿A qué hora arrancás %1 y con qué tarea mínima?").arg(dayName), &dlg));
+    auto* form = new QFormLayout;
+    auto* time = new QTimeEdit(QTime(cur ? cur->minute / 60 : 8, cur ? cur->minute % 60 : 0), &dlg);
+    time->setDisplayFormat(QStringLiteral("HH:mm"));
+    form->addRow(QStringLiteral("Hora"), time);
+    auto* act = new QComboBox(&dlg);
+    act->addItem(QStringLiteral("Cualquier actividad"), qint64(0));
+    const FolderTree tree(m_db->folders());
+    for (const Folder& f : tree.all()) act->addItem(tree.path(f.id), f.id);
+    if (cur) { const int i = act->findData(cur->folderId); if (i >= 0) act->setCurrentIndex(i); }
+    form->addRow(QStringLiteral("Actividad"), act);
+    auto* pomos = new QSpinBox(&dlg);
+    pomos->setRange(1, 20);
+    pomos->setValue(cur ? cur->pomos : 1);
+    pomos->setSuffix(QStringLiteral(" pomodoro(s)"));
+    form->addRow(QStringLiteral("Mínimo"), pomos);
+    lay->addLayout(form);
+    lay->addWidget(new QLabel(QStringLiteral("<span style='color:%1'>Se cumple si el primer pomodoro arranca hasta %2 min después de la hora y hacés lo mínimo.</span>")
+                                  .arg(theme::textDim.name()).arg(startgoal::kToleranceMin), &dlg));
+    auto* row = new QHBoxLayout;
+    auto* save = new QPushButton(QStringLiteral("Guardar"), &dlg);
+    auto* skip = new QPushButton(offered ? QStringLiteral("Ahora no") : QStringLiteral("Cancelar"), &dlg);
+    skip->setObjectName("GreetLater");
+    row->addStretch();
+    if (cur) {
+        auto* del = new QPushButton(QStringLiteral("Quitar"), &dlg);
+        del->setObjectName("GreetLater");
+        del->setAutoDefault(false);
+        connect(del, &QPushButton::clicked, &dlg, [this, &dlg, day] { startgoal::remove(*m_db, day); dlg.accept(); });
+        row->addWidget(del);
+    }
+    row->addWidget(skip);
+    row->addWidget(save);
+    lay->addLayout(row);
+    skip->setAutoDefault(false);
+    connect(skip, &QPushButton::clicked, &dlg, &QDialog::reject);
+    connect(save, &QPushButton::clicked, &dlg, [&] {
+        startgoal::Goal g;
+        g.day = day;
+        g.minute = time->time().hour() * 60 + time->time().minute();
+        g.folderId = act->currentData().toLongLong();
+        g.pomos = pomos->value();
+        startgoal::save(*m_db, g);
+        dlg.accept();
+    });
+    if (dlg.exec() == QDialog::Accepted) toast(QStringLiteral("Arranque guardado"));
 }
 
 void MainWindow::showShortcuts()

@@ -51,6 +51,7 @@
 - Festejo al romper un récord.
 
 ### Novedades de la beta 19
+- **Arranque de mañana**: al tocar **Me voy** te propone una hora de arranque y una tarea mínima (por ejemplo 8:00 y 2 pomodoros de una actividad). También está en ⋯ → *Arranque de mañana…*. Cuenta como cumplido si el primer pomodoro empieza hasta 15 minutos después de la hora y hacés lo mínimo. El saludo te cuenta cómo te fue con el de ayer y Estadísticas tiene la tarjeta *Arranque*. Se apaga en Ajustes.
 - **Recreo indebido** ahora es solo lo que pausás con un pomodoro en curso. Lo de antes (demoras entre pomodoros, recreos pasados de tiempo) se llama **Tiempo muerto**; tienen tarjetas separadas. Lo registrado antes de esta versión queda todo en «Tiempo muerto».
 - **Reiniciar pomodoro**: el botón ↺ en la esquina del visor (aparece con un pomodoro en marcha) descarta lo corrido y arranca de cero, con confirmación.
 

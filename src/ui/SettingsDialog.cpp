@@ -259,6 +259,8 @@ QWidget* SettingsDialog::pageGeneral()
     m_notepad->setToolTip(QStringLiteral("Apagado, el diario (ánimo y nota) queda dentro del panel del objetivo, como antes."));
     m_moodOffer = new QCheckBox(QStringLiteral("Preguntarme cómo me fue al terminar la sesión (Me voy)"), w);
     m_moodOffer->setChecked(m_db->setting("mood_offer", 1).toBool());
+    m_startOffer = new QCheckBox(QStringLiteral("Proponerme el arranque de mañana (hora y tarea mínima) al terminar la sesión"), w);
+    m_startOffer->setChecked(m_db->setting("startgoal_offer", 1).toBool());
 
     auto* times = new QFormLayout;
     times->addRow(QStringLiteral("Pomodoro por defecto"), m_work);
@@ -285,6 +287,7 @@ QWidget* SettingsDialog::pageGeneral()
     lay->addLayout(goalForm);
     lay->addWidget(m_notepad);
     lay->addWidget(m_moodOffer);
+    lay->addWidget(m_startOffer);
     lay->addSpacing(8);
     lay->addWidget(collapsible(QStringLiteral("Avanzado"), w, [&](QVBoxLayout* l) {
         auto* f = new QFormLayout;
@@ -854,6 +857,7 @@ void SettingsDialog::accept()
     m_db->setSetting("notepad_on", m_notepad->isChecked() ? 1 : 0);
     m_db->setSetting("month_mode", m_monthMode->currentData().toString());
     m_db->setSetting("mood_offer", m_moodOffer->isChecked() ? 1 : 0);
+    m_db->setSetting("startgoal_offer", m_startOffer->isChecked() ? 1 : 0);
     m_db->setSetting("goal_running", m_goalRunning->currentIndex());
     m_db->setSetting("goal_break_source", m_goalBreak->currentIndex());
 
@@ -971,6 +975,7 @@ void SettingsDialog::resetSection(int page)
         m_notepad->setChecked(true);
         m_monthMode->setCurrentIndex(0);
         m_moodOffer->setChecked(true);
+        m_startOffer->setChecked(true);
         break;
     case 1:   // Cronómetro
         m_wheel->setChecked(true);

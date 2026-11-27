@@ -115,6 +115,7 @@ private:
     void placeNotePad(bool open, bool animate);
     QRect notePadRect(int w) const;
     void offerMood();
+    void editStartGoal(const QDate& day, bool offered);   // Mejoras 7.0: objetivo de arranque
     void placeGoalPanel(bool open, bool animate);
     void refreshGoals();                  // fantasmas de la grilla + progreso del panel
     void updateObjectiveBand();
