@@ -485,7 +485,7 @@ private:
     static double heatCell(double W) { return qBound(6.0, (W - 30) / 53.0 - 3, 14.0); }
 
     // ---- Mejoras 7.0: motor de la grilla ----------------------------------------------------
-    static constexpr double kCellH = 22, kGridGap = 10, kEdgeGrab = 8, kSpringK = 420, kSpringC = 28;
+    static constexpr double kCellH = 28, kGridGap = 4, kEdgeGrab = 8, kSpringK = 420, kSpringC = 28;
     int gridCols(double W) const { return W < 520 ? 6 : 12; }
     struct Placed { QString id; int col = 0, row = 0, cols = 1, rows = 1; };
     struct Limits { int minC, maxC, minR, maxR; };   // en columnas de 12; minR = 0: el alto no se toca
