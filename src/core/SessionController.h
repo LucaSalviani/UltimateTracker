@@ -92,6 +92,7 @@ public:
     void pause();          // Running → Paused
     void resume();         // Paused → Running
     void endPomodoro();    // Running / Paused → WorkDone (guarda lo que llegó a correr)
+    void restartPomodoro(); // Mejoras 7.0: descarta lo corrido y arranca el mismo pomodoro de cero
     void startBreak();     // WorkDone → Break
     void skipBreak();      // WorkDone → Running (el siguiente, pegado al anterior)
     void endBreakEarly();  // Break → Ready
@@ -154,7 +155,7 @@ signals:
     void tookOver();                            // este aparato tomó el reloj que manejaba el otro
 
 private:
-    enum class IvKind { None, Break, Pending };
+    enum class IvKind { None, Break, Pending, Pause };
     static IvKind kindFor(State s);
 
     qint64 now() const { return m_clock(); }

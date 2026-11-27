@@ -66,7 +66,7 @@ void EvolutionView::reload(Database* db, const QSet<qint64>* filter)
         Week& w = weeks[mon];
         w.monday = mon;
         ++w.days;
-        w.study += m_days[i].study; w.undue += m_days[i].undue; w.inactive += m_days[i].inactive; w.breaks += m_days[i].breaks;
+        w.study += m_days[i].study; w.undue += m_days[i].undue; w.paused += m_days[i].paused; w.inactive += m_days[i].inactive; w.breaks += m_days[i].breaks;
         const int lv = db->setting("ms/day/" + fmt::dayKey(m_dates[i]), 0).toInt();
         if (lv >= 1 && lv <= 3) ++w.marks[lv - 1];
     }
@@ -148,7 +148,8 @@ QString EvolutionView::summaryHtml() const
     struct M { QString name; std::function<double(const insights::DayStat&)> get; bool lowerBetter; };
     const QVector<M> ms = {
         {m_studyLabel + QStringLiteral(" por día"), [](const insights::DayStat& d) { return double(d.study); }, false},
-        {QStringLiteral("Recreo indebido"), [](const insights::DayStat& d) { return double(d.undue); }, true},
+        {QStringLiteral("Tiempo muerto"), [](const insights::DayStat& d) { return double(d.undue); }, true},
+        {QStringLiteral("Recreo indebido"), [](const insights::DayStat& d) { return double(d.paused); }, true},
         {QStringLiteral("Horas inactivas"), [](const insights::DayStat& d) { return double(d.inactive); }, true},
         {QStringLiteral("Pomodoros por día"), [](const insights::DayStat& d) { return double(d.pomos); }, false},
     };
@@ -174,7 +175,7 @@ QString EvolutionView::summaryHtml() const
 int EvolutionView::contentHeight(int) const
 {
     // pastillas + fichas + 5 tarjetas
-    return int(8 + 40 + kGranH + kProgH + kGap + kTilesH + kGap + kRhythmH + kGap + 5 * (kCardH + kGap) + 20);
+    return int(8 + 40 + kGranH + kProgH + kGap + kTilesH + kGap + kRhythmH + kGap + 6 * (kCardH + kGap) + 20);
 }
 
 void EvolutionView::card(QPainter& p, const QRectF& r, const QString& title, const QString& sentence) const
@@ -256,9 +257,12 @@ void EvolutionView::paintEvent(QPaintEvent*)
 
     paintRhythm(p, QRectF(L, y, W, kRhythmH)); y += kRhythmH + kGap;
     paintHours(p, QRectF(L, y, W, kCardH)); y += kCardH + kGap;
-    paintWeeklyBars(p, QRectF(L, y, W, kCardH), QStringLiteral("Recreo indebido por semana"), QString(),
-                    [](const Week& w) { return double(w.undue); }, [](double v) { return fmtH(v); },
+    paintWeeklyBars(p, QRectF(L, y, W, kCardH), QStringLiteral("Recreo indebido (pausas) por semana"), QString(),
+                    [](const Week& w) { return double(w.paused); }, [](double v) { return fmtH(v); },
                     theme::squareFinal, QStringLiteral("indebido")); y += kCardH + kGap;
+    paintWeeklyBars(p, QRectF(L, y, W, kCardH), QStringLiteral("Tiempo muerto por semana"), QString(),
+                    [](const Week& w) { return double(w.undue); }, [](double v) { return fmtH(v); },
+                    theme::squareFinal.darker(140), QStringLiteral("tiempo muerto")); y += kCardH + kGap;
     paintWeeklyBars(p, QRectF(L, y, W, kCardH), QStringLiteral("Horas inactivas por día (promedio de cada semana)"), QString(),
                     [](const Week& w) { return w.days ? double(w.inactive) / w.days : 0.0; }, [](double v) { return QStringLiteral("%1 h").arg(v / 3600.0, 0, 'f', 1); },
                     theme::mix(theme::surface, theme::text, 0.7), QStringLiteral("inactivo")); y += kCardH + kGap;
@@ -474,12 +478,13 @@ void EvolutionView::paintTiles(QPainter& p, const QRectF& r)
     const QVector<M> ms = {
         {m_studyLabel + QStringLiteral(" / día"), [](const insights::DayStat& d) { return double(d.study); }, false, false},
         {QStringLiteral("Pomodoros / día"), [](const insights::DayStat& d) { return double(d.pomos); }, false, true},
-        {QStringLiteral("Indebido / día"), [](const insights::DayStat& d) { return double(d.undue); }, true, false},
+        {QStringLiteral("Tiempo muerto / día"), [](const insights::DayStat& d) { return double(d.undue); }, true, false},
+        {QStringLiteral("Indebido / día"), [](const insights::DayStat& d) { return double(d.paused); }, true, false},
         {QStringLiteral("Inactivo / día"), [](const insights::DayStat& d) { return double(d.inactive); }, true, false},
     };
     auto sum = [&](const M& m, int from, int to) { double s = 0; for (int i = from; i < to; ++i) s += m.get(m_cmp[i]); return s; };
     auto fmtV = [&](const M& m, double v) { return m.count ? QString::number(v, 'f', 1) : fmtH(v); };
-    const double gap = 8, w = (r.width() - 3 * gap) / 4;
+    const double gap = 8, w = (r.width() - (ms.size() - 1) * gap) / ms.size();
     for (int k = 0; k < ms.size(); ++k) {
         const M& m = ms[k];
         const QRectF t(r.left() + k * (w + gap), r.top(), w, r.height());

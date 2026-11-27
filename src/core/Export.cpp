@@ -50,7 +50,7 @@ QString build(const QVector<Pomodoro>& pomos, const QVector<Interval>& intervals
         for (const Interval& i : intervals) {
             if (i.kind == IntervalKind::Pending) continue;   // todavía sin decidir: no es un dato
             rows.append({i.startedAt, {i.day.toString(Qt::ISODate), clock(i.startedAt), clock(i.startedAt + i.seconds),
-                                       i.kind == IntervalKind::Break ? QStringLiteral("recreo") : QStringLiteral("recreo indebido"),
+                                       i.kind == IntervalKind::Break ? QStringLiteral("recreo") : i.kind == IntervalKind::Pause ? QStringLiteral("recreo indebido (pausa)") : QStringLiteral("tiempo muerto"),
                                        QString(), minutes(i.seconds), QString(), QString(), QString()}});
         }
     }

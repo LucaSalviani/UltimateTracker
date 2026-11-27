@@ -14,7 +14,8 @@ namespace insights {
 struct DayStat {
     qint64 study = 0;     // estudio (con el filtro de actividad, si hay)
     qint64 breaks = 0;    // recreos
-    qint64 undue = 0;     // recreo indebido
+    qint64 undue = 0;     // tiempo muerto (antes «recreo indebido»)
+    qint64 paused = 0;    // Mejoras 7.0: recreo indebido = pausas con el pomodoro en curso
     qint64 inactive = 0;  // el resto del día que no estuvo en la app
     int    pomos = 0;     // pomodoros (con tramos seguidos: valen más)
     int    sessions = 0;  // Mejoras 5.1: sesiones del día

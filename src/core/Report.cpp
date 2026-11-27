@@ -224,10 +224,10 @@ QString html(const Database& db, const QDateTime& now)
     for (QDate d = first; d <= today; d = d.addDays(1)) daily[d] = dailyMap.value(d);
 
     // ---- totales
-    qint64 study = 0, breaks = 0, undue = 0; int nPomos = 0, studiedDays = 0, sessions = 0;
+    qint64 study = 0, breaks = 0, undue = 0, paused = 0; int nPomos = 0, studiedDays = 0, sessions = 0;
     QDate bestDay; qint64 bestDayV = 0;
     for (auto it = daily.cbegin(); it != daily.cend(); ++it) {
-        study += it->study; breaks += it->breaks; undue += it->undue; nPomos += it->pomos; sessions += it->sessions;
+        study += it->study; breaks += it->breaks; undue += it->undue; paused += it->paused; nPomos += it->pomos; sessions += it->sessions;
         if (it->study > 0) ++studiedDays;
         if (it->study > bestDayV) { bestDayV = it->study; bestDay = it.key(); }
     }
@@ -258,7 +258,8 @@ QString html(const Database& db, const QDateTime& now)
     tile(studiedDays ? dur(double(study) / studiedDays) : QStringLiteral("—"), QStringLiteral("promedio por día con estudio"));
     tile(QString::number(sessions), QStringLiteral("sesiones"));
     tile(dur(double(breaks)), QStringLiteral("en recreos"));
-    tile(dur(double(undue)), QStringLiteral("recreo indebido"));
+    tile(dur(double(undue)), QStringLiteral("tiempo muerto"));
+    tile(dur(double(paused)), QStringLiteral("recreo indebido (pausas)"));
     tile(bestDayV ? dur(double(bestDayV)) : QStringLiteral("—"), bestDayV ? QStringLiteral("mejor día (%1)").arg(esc(fmt::shortDate(bestDay))) : QStringLiteral("mejor día"));
     tile(bestWeek && bestWeek->study ? dur(double(bestWeek->study)) : QStringLiteral("—"), QStringLiteral("mejor semana"));
     tile(moodN ? QStringLiteral("%1 / 5").arg(num(moodSum / moodN)) : QStringLiteral("—"), QStringLiteral("ánimo promedio (%1 días)").arg(moodN));
@@ -280,7 +281,7 @@ QString html(const Database& db, const QDateTime& now)
         t += std::abs(sl) < 0.03 * (sy / n) ? QStringLiteral(". Tendencia: estable.") : QStringLiteral(". Tendencia: %1%2 por período.").arg(sl > 0 ? QStringLiteral("+") : QStringLiteral("−"), dur(std::abs(sl)));
         return t;
     };
-    const QStringList pHead{"Período", "Estudio", "Pomodoros", "Promedio/día con estudio", "Días con estudio", "Recreos", "Indebido", "vs anterior"};
+    const QStringList pHead{"Período", "Estudio", "Pomodoros", "Promedio/día con estudio", "Días con estudio", "Recreos", "Tiempo muerto", "vs anterior"};
     h += QStringLiteral("<section class='card'><h2>Semana a semana</h2><p class='lead'>%1</p>%2<details><summary>Ver todas las semanas (%3)</summary>%4</details></section>")
              .arg(esc(trendSentence(weeks, QStringLiteral("semanas"))), svgBars(toBars(weeks, 26, QStringLiteral("Semana del"))), QString::number(weeks.size()), table(pHead, periodRows(weeks)));
     h += QStringLiteral("<section class='card'><h2>Mes a mes</h2><p class='lead'>%1</p>%2%3</section>")
@@ -403,11 +404,11 @@ QString daysCsv(const Database& db, const QDateTime& now)
     const auto daily = insights::daily(db, first, today, nullptr, now);
     auto m = [](qint64 s) { return QString::number(s / 60.0, 'f', 1).replace(QLatin1Char('.'), QLatin1Char(',')); };
     QString out = QString::fromUtf8("\xEF\xBB\xBF");
-    out += QStringLiteral("fecha;día;estudio (min);pomodoros;recreos (min);recreo indebido (min);inactivo (min);sesiones;ánimo (1-5);nota del día\r\n");
+    out += QStringLiteral("fecha;día;estudio (min);pomodoros;recreos (min);tiempo muerto (min);recreo indebido (min);inactivo (min);sesiones;ánimo (1-5);nota del día\r\n");
     for (QDate d = first; d <= today; d = d.addDays(1)) {
         const insights::DayStat s = daily.value(d);
         const auto dd = diaries.value(d);
-        QStringList cells{d.toString(Qt::ISODate), QString::fromUtf8(kDay[d.dayOfWeek() - 1]), m(s.study), QString::number(s.pomos), m(s.breaks), m(s.undue), m(s.inactive),
+        QStringList cells{d.toString(Qt::ISODate), QString::fromUtf8(kDay[d.dayOfWeek() - 1]), m(s.study), QString::number(s.pomos), m(s.breaks), m(s.undue), m(s.paused), m(s.inactive),
                           QString::number(s.sessions), dd.mood ? QString::number(dd.mood) : QString(), dd.note};
         for (QString& c : cells) c = csvexport::escape(c);
         out += cells.join(QLatin1Char(';')) + QStringLiteral("\r\n");

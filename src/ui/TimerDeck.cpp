@@ -231,7 +231,7 @@ TimerDeck::TimerDeck(QWidget* parent)
     m_leave->setText(QStringLiteral("Me voy"));
     m_leave->setFocusPolicy(Qt::NoFocus);
     m_leave->setCursor(Qt::PointingHandCursor);
-    m_leave->setToolTip(QStringLiteral("Terminar la sesión (Ctrl+Shift+Q): guarda lo que llevás y el tiempo hasta que vuelvas no cuenta como recreo indebido"));
+    m_leave->setToolTip(QStringLiteral("Terminar la sesión (Ctrl+Shift+Q): guarda lo que llevás y el tiempo hasta que vuelvas no cuenta como tiempo muerto"));
     connect(m_leave, &QToolButton::clicked, this, &TimerDeck::leaveClicked);
     m_hintTimer.setInterval(450);
     connect(&m_hintTimer, &QTimer::timeout, this, [this] {
@@ -240,6 +240,19 @@ TimerDeck::TimerDeck(QWidget* parent)
         repolish(m_activity);
         if (m_hintBlinks <= 0) m_hintTimer.stop();
     });
+
+    // Mejoras 7.0: reiniciar el pomodoro. Chiquito, en la esquina superior derecha del visor (lejos de los botones
+    // de uso diario) y con confirmación (la pide MainWindow).
+    m_reset = new QToolButton(m_display);
+    m_reset->setObjectName("DeckReset");
+    m_reset->setText(QStringLiteral("↺"));
+    m_reset->setFixedSize(22, 22);
+    m_reset->setFocusPolicy(Qt::NoFocus);
+    m_reset->setCursor(Qt::PointingHandCursor);
+    m_reset->setToolTip(QStringLiteral("Reiniciar el pomodoro (descarta lo corrido; pide confirmación)"));
+    m_reset->hide();
+    connect(m_reset, &QToolButton::clicked, this, &TimerDeck::resetPomodoroClicked);
+    m_display->installEventFilter(this);
 
     auto* transport = new QHBoxLayout;
     transport->setSpacing(12);
@@ -352,6 +365,7 @@ void TimerDeck::finishTyping(bool commit)
 
 bool TimerDeck::eventFilter(QObject* o, QEvent* e)
 {
+    if (o == m_display && e->type() == QEvent::Resize && m_reset) m_reset->move(m_display->width() - m_reset->width() - 6, 6);
     if (m_editor->isVisible() && e->type() == QEvent::MouseButtonPress) {
         auto* w = qobject_cast<QWidget*>(o);
         const QPoint g = static_cast<QMouseEvent*>(e)->globalPosition().toPoint();
@@ -401,6 +415,7 @@ void TimerDeck::applyMode()
 {
     const Mode m = m_model.mode;
     const bool brk = isBreakMode(m) && m != Mode::BreakOver;
+    if (m_reset) { m_reset->setVisible(m == Mode::Running || m == Mode::Paused); m_reset->move(m_display->width() - m_reset->width() - 6, 6); m_reset->raise(); }
     const QColor onAccent(0xff, 0xff, 0xff);
 
     // Botón grande
@@ -430,7 +445,7 @@ void TimerDeck::applyMode()
     case Mode::Break:
         m_primary->setIcon(icons::get(m_model.breakPaused ? icons::Id::Play : icons::Id::Pause, onAccent));
         m_primary->setToolTip(m_model.breakPaused ? QStringLiteral("Seguir el recreo (Espacio)")
-                                                  : QStringLiteral("Pausar el recreo (Espacio): el tiempo en pausa cuenta como recreo indebido"));
+                                                  : QStringLiteral("Pausar el recreo (Espacio): el tiempo en pausa cuenta como tiempo muerto"));
         break;
     }
 
@@ -446,7 +461,7 @@ void TimerDeck::applyMode()
     m_takeBreak->setEnabled(m_model.canTakeBreak);
     m_takeBreak->setText(m_model.canTakeBreak ? QStringLiteral("Tomar recreo guardado (%1m)").arg(m_model.bankSec / 60)
                                               : QStringLiteral("Recreo guardado: %1m").arg(m_model.bankSec / 60));
-    m_takeBreak->setToolTip(QStringLiteral("Recreos que salteaste. Con un pomodoro en marcha: lo pausa, corre el recreo (cuenta como recreo, no como indebido) y después seguís el mismo pomodoro."));
+    m_takeBreak->setToolTip(QStringLiteral("Recreos que salteaste. Con un pomodoro en marcha: lo pausa, corre el recreo (cuenta como recreo, no como tiempo muerto) y después seguís el mismo pomodoro."));
     m_secondary->setProperty("accent", brk ? "break" : "pomo");
     switch (m) {
     case Mode::Running:

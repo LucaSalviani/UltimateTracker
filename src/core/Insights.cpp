@@ -31,11 +31,12 @@ QMap<QDate, DayStat> daily(const Database& db, const QDate& from, const QDate& t
         DayStat& d = out[i.day];
         if (i.kind == IntervalKind::Break) d.breaks += i.seconds;
         else if (i.kind == IntervalKind::Undue) d.undue += i.seconds;
+        else if (i.kind == IntervalKind::Pause) d.paused += i.seconds;
     }
     for (QDate day = from; day <= last; day = day.addDays(1)) {
         DayStat& d = out[day];   // todos los días del rango existen (con ceros)
         const qint64 elapsed = day == today ? qMax<qint64>(0, dayclock::dayStart(today).secsTo(now)) : 86400;
-        d.inactive = qMax<qint64>(0, elapsed - allStudy.value(day) - d.breaks - d.undue);
+        d.inactive = qMax<qint64>(0, elapsed - allStudy.value(day) - d.breaks - d.undue - d.paused);
     }
     return out;
 }

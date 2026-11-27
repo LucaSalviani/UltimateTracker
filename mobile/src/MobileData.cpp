@@ -413,6 +413,7 @@ QVariantMap MobileApp::stats(const QString& period, int offset, qint64 folder) c
     out["pomodoros"] = count;
     out["breaks"] = fmt::duration(t.breaks);
     out["undue"] = fmt::duration(t.undue);
+    out["paused"] = fmt::duration(t.paused);
     out["inactive"] = fmt::duration(t.inactive);
     out["average"] = fmt::duration(study / days);
     out["days"] = days;

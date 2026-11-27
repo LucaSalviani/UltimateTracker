@@ -66,6 +66,7 @@ signals:
     void playClicked();          // arrancar pomodoro / seguir / siguiente
     void pauseClicked();
     void endPomodoroClicked();
+    void resetPomodoroClicked();   // Mejoras 7.0: reiniciar (MainWindow pide confirmación)
     void startBreakClicked();
     void skipBreakClicked();
     void endBreakClicked();
@@ -93,6 +94,7 @@ private:
 
     QToolButton* m_activity;
     DeckDisplay* m_display;
+    QToolButton* m_reset = nullptr;   // Mejoras 7.0: ↺ en la esquina del visor, lejos de play / terminar / me voy
     QWidget*     m_stepper;
     QToolButton* m_minus;
     QToolButton* m_plus;

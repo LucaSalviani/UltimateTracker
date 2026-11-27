@@ -92,13 +92,13 @@ struct StatsData {
 // Mejoras 6.0: tarjetas sueltas. Cada vista (simple / avanzada) guarda las suyas.
 static const QStringList& allCards()
 {
-    static const QStringList l = {"streak", "study", "focus", "breaks", "undue", "inactive", "sessions", "goals", "mark", "weekly", "records", "level"};
+    static const QStringList l = {"streak", "study", "focus", "breaks", "undue", "paused", "inactive", "sessions", "goals", "mark", "weekly", "records", "level"};
     return l;
 }
 static QString cardName(const QString& id)
 {
     static const QMap<QString, QString> m = {{"streak", "Racha"}, {"study", "Estudio"}, {"focus", "Foco %"}, {"breaks", "Recreos"},
-        {"undue", "Recreo indebido"}, {"inactive", "Horas inactivas"}, {"sessions", "Sesiones"}, {"goals", "Objetivos"},
+        {"undue", "Tiempo muerto"}, {"paused", "Recreo indebido"}, {"inactive", "Horas inactivas"}, {"sessions", "Sesiones"}, {"goals", "Objetivos"},
         {"mark", "Marca de hoy"}, {"weekly", "Meta semanal"}, {"records", "Tus récords"}, {"level", "Nivel global"}};
     return m.value(id, id);
 }
@@ -106,7 +106,7 @@ static QSet<QString> defaultCards(bool simple)
 {
     QSet<QString> s;
     for (const QString& id : allCards()) {
-        const bool advancedOnly = id == QLatin1String("breaks") || id == QLatin1String("undue") || id == QLatin1String("inactive") ||
+        const bool advancedOnly = id == QLatin1String("breaks") || id == QLatin1String("undue") || id == QLatin1String("paused") || id == QLatin1String("inactive") ||
                                   id == QLatin1String("sessions") || id == QLatin1String("level");
         if (!simple || !advancedOnly) s.insert(id);
     }
@@ -456,7 +456,7 @@ private:
     double heroH() const { static const double v[3] = {76, 96, 120}; return v[qBound(0, data.sizeOf(QStringLiteral("hero")), 2)]; }
     bool heroRow() const { return data.has("streak") || data.has("study") || recordsCard(); }
     bool recordsCard() const { return data.has("records") && data.ms.streaks; }
-    bool smallRow() const { return data.has("breaks") || data.has("undue") || data.has("inactive") || data.has("sessions"); }
+    bool smallRow() const { return data.has("breaks") || data.has("undue") || data.has("paused") || data.has("inactive") || data.has("sessions"); }
     double heroHeight() const { return (heroRow() ? heroH() : 0) + (heroRow() && smallRow() ? 10 : 0) + (smallRow() ? kSmallH : 0); }
     // En edición, cada tarjeta lleva una ✕ (zona delante de las demás: se agrega al final de paintEvent).
     QVector<Zone> pendingX;
@@ -474,7 +474,7 @@ private:
     }
     int focusPct() const
     {
-        const qint64 den = data.totals.study + data.totals.breaks + data.totals.undue;
+        const qint64 den = data.totals.study + data.totals.breaks + data.totals.undue + data.totals.paused;
         return den > 0 ? int(std::lround(100.0 * data.totals.study / den)) : -1;
     }
     void card(QPainter& p, const QRectF& r, const QString& label, const QString& value, const QString& sub,
@@ -600,7 +600,8 @@ private:
         for (const auto& s : data.sessions) sesSec += s.length();
         const QVector<Small> smalls = {
             {"breaks", QStringLiteral("Recreos"), fmt::hours(data.totals.breaks), QString(), theme::text},
-            {"undue", QStringLiteral("Recreo indebido"), fmt::hours(data.totals.undue), QString(), data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text},
+            {"undue", QStringLiteral("Tiempo muerto"), fmt::hours(data.totals.undue), QString(), data.totals.undue > 0 ? theme::squareFinal.lighter(125) : theme::text},
+            {"paused", QStringLiteral("Recreo indebido"), fmt::hours(data.totals.paused), QString(), data.totals.paused > 0 ? theme::squareFinal.lighter(125) : theme::text},
             {"inactive", QStringLiteral("Horas inactivas"), fmt::hours(data.totals.inactive), QString(), theme::textDim},
             {"sessions", QStringLiteral("Sesiones"),
              data.sessions.isEmpty() ? QStringLiteral("0") : QStringLiteral("%1 · prom. %2").arg(data.sessions.size()).arg(fmt::duration(int(sesSec / data.sessions.size()))), QString(), theme::text}};
@@ -644,7 +645,7 @@ private:
         };
         for (const Interval& i : data.intervals)
             block(i.startedAt, i.startedAt + i.seconds,
-                  i.kind == IntervalKind::Break ? theme::timelineBreak : theme::squareFinal.darker(140));
+                  i.kind == IntervalKind::Break ? theme::timelineBreak : i.kind == IntervalKind::Pause ? theme::squareFinal : theme::squareFinal.darker(140));
         for (const Pomodoro& pm : data.pomos) {
             if (data.filter && !data.filter->contains(pm.folderId)) continue;
             block(pm.startedAt, qMax(pm.endedAt, pm.startedAt + pm.studiedSec), data.colorOf(pm.folderId));
@@ -770,6 +771,7 @@ private:
         const QString m = data.heatMetric;
         if (m == QLatin1String("pomos"))     return s.pomos;
         if (m == QLatin1String("undue"))     return double(s.undue);
+        if (m == QLatin1String("paused"))    return double(s.paused);
         if (m == QLatin1String("inactive"))  return double(s.inactive);
         if (m == QLatin1String("goal")) {
             if (!data.goals.contains(d)) return -1;
@@ -781,7 +783,7 @@ private:
     {
         const QString m = data.heatMetric;
         if (m == QLatin1String("goal"))     return theme::breakAccent;
-        if (m == QLatin1String("undue"))    return theme::squareFinal;
+        if (m == QLatin1String("undue") || m == QLatin1String("paused")) return theme::squareFinal;
         if (m == QLatin1String("inactive")) return theme::mix(theme::surface, theme::text, 0.8);
         return statsInk();
     }
@@ -789,7 +791,8 @@ private:
     {
         if (m == QLatin1String("pomos")) return QStringLiteral("Pomodoros");
         if (m == QLatin1String("goal")) return QStringLiteral("Objetivo");
-        if (m == QLatin1String("undue")) return QStringLiteral("Indebido");
+        if (m == QLatin1String("undue")) return QStringLiteral("Tiempo muerto");
+        if (m == QLatin1String("paused")) return QStringLiteral("Recreo indebido");
         if (m == QLatin1String("inactive")) return QStringLiteral("Inactivo");
         return QStringLiteral("Horas");
     }
@@ -804,10 +807,10 @@ private:
         sectionTitle(p, L, y, QStringLiteral("Mapa de calor"));
         // Selector de qué se colorea (a la derecha del título; solo en la vista avanzada)
         if (!data.simple) {
-            static const char* metrics[] = {"hours", "pomos", "goal", "undue", "inactive"};
+            static const char* metrics[] = {"hours", "pomos", "goal", "undue", "paused", "inactive"};
             p.setFont(theme::uiFont(8, QFont::DemiBold));
             double x = L + W;
-            for (int k = 4; k >= 0; --k) {
+            for (int k = 5; k >= 0; --k) {
                 const QString name = heatName(QString::fromLatin1(metrics[k]));
                 const double w = QFontMetricsF(p.font()).horizontalAdvance(name) + 18;
                 x -= w;
@@ -1373,6 +1376,13 @@ void StatsWidget::refresh()
     d.sessions = insights::sessions(*m_db, d.from, qMin(d.to, now.date().addDays(1)), d.filter);
     d.simple = !m_db->setting("stats_advanced", 0).toBool();
     d.layout = parseLayout(m_db->setting(layoutKey(d.simple), m_db->setting("stats_layout", "").toString()).toString());
+    if (!m_db->setting("stats_paused_migrated", 0).toBool()) {   // beta 19: la tarjeta nueva aparece junto a «Tiempo muerto»
+        for (bool sm : {true, false}) {
+            const QString v = m_db->setting(cardsKey(sm), "").toString();
+            if (!v.isEmpty() && v != QLatin1String("none") && v.contains(QLatin1String("undue"))) m_db->setSetting(cardsKey(sm), v + QStringLiteral(",paused"));
+        }
+        m_db->setSetting("stats_paused_migrated", 1);
+    }
     d.cards = parseCards(m_db->setting(cardsKey(d.simple), "").toString(), d.simple);
     d.editing = m_editing && m_period != Period::Evolution;
     d.heatMetric = d.simple ? QStringLiteral("hours") : m_db->setting("stats/heat", "hours").toString();
@@ -1505,7 +1515,8 @@ QString StatsWidget::dayHtml(const QDate& day, bool brief) const
     QStringList rows;
     rows << row(d.studyLabel, fmt::duration(int(s.study)), s.pomos > 0 ? QStringLiteral("%1 pomodoro%2").arg(s.pomos).arg(s.pomos == 1 ? "" : "s") : QString());
     rows << row(QStringLiteral("Recreos"), fmt::duration(int(s.breaks)));
-    rows << row(QStringLiteral("Recreo indebido"), fmt::duration(int(s.undue)));
+    rows << row(QStringLiteral("Tiempo muerto"), fmt::duration(int(s.undue)));
+    rows << row(QStringLiteral("Recreo indebido (pausas)"), fmt::duration(int(s.paused)));
     rows << row(QStringLiteral("Inactivo"), fmt::hours(s.inactive));
     if (!brief) {
         const routine::Explain ex = routineExplain(m_db, day, day);
@@ -1552,7 +1563,8 @@ QString StatsWidget::tipFor(const QString& key) const
                    .arg(fmt::hours(best), fmt::hours(d.totals.study / qMax(1, days))) + more;
     }
     if (key == "breaks") return QStringLiteral("<b>Recreos: %1</b><br>El tiempo de recreo dentro de lo pactado.").arg(fmt::hours(d.totals.breaks)) + more;
-    if (key == "undue") return QStringLiteral("<b>Recreos indebidos: %1</b><br>Tiempo muerto en medio de la jornada: pausas, demoras en arrancar y recreos pasados de largo.").arg(fmt::hours(d.totals.undue)) + more;
+    if (key == "undue") return QStringLiteral("<b>Tiempo muerto: %1</b><br>Demoras en arrancar el recreo o el próximo pomodoro y recreos pasados de largo.").arg(fmt::hours(d.totals.undue)) + more;
+    if (key == "paused") return QStringLiteral("<b>Recreo indebido: %1</b><br>Tiempo en pausa con un pomodoro en curso.").arg(fmt::hours(d.totals.paused)) + more;
     if (key == "focus") {
         const qint64 den = d.totals.study + d.totals.breaks + d.totals.undue;
         return QStringLiteral("<b>Foco: %1</b><br>De todo el tiempo de sesión, cuánto fue de %2 de verdad.")
@@ -1739,18 +1751,23 @@ void StatsWidget::showDetail(const QString& key)
         title = QStringLiteral("Recreos · %1").arg(m_label->text());
         intervalsDetail(IntervalKind::Break, QStringLiteral("recreos"));
     } else if (key == "undue") {
-        title = QStringLiteral("Recreos indebidos · %1").arg(m_label->text());
+        title = QStringLiteral("Tiempo muerto · %1").arg(m_label->text());
         intervalsDetail(IntervalKind::Undue, QStringLiteral("ratos"));
-        html = para(dim(QStringLiteral("Tiempo muerto en medio de la jornada: pausas, demoras en arrancar el recreo o el próximo pomodoro, y recreos pasados de largo. "
-                                       "Solo cuenta si después volviste a arrancar ese día; «Me voy» lo corta."))) + html;
+        html = para(dim(QStringLiteral("Tiempo muerto en medio de la jornada: demoras en arrancar el recreo o el próximo pomodoro, y recreos pasados de largo. "
+                                       "Solo cuenta si después volviste a arrancar ese día; «Me voy» lo corta. (Antes de la beta 19 también incluía las pausas.)"))) + html;
+    } else if (key == "paused") {
+        title = QStringLiteral("Recreo indebido · %1").arg(m_label->text());
+        intervalsDetail(IntervalKind::Pause, QStringLiteral("pausas"));
+        html = para(dim(QStringLiteral("Tiempo que pausaste un pomodoro en curso. Cuenta desde que apretás pausa hasta que seguís."))) + html;
     } else if (key == "focus") {
         title = QStringLiteral("Foco · %1").arg(m_label->text());
-        const qint64 den = d.totals.study + d.totals.breaks + d.totals.undue;
+        const qint64 den = d.totals.study + d.totals.breaks + d.totals.undue + d.totals.paused;
         auto pct = [&](qint64 v) { return QStringLiteral("%1 %").arg(den ? qRound(100.0 * v / den) : 0); };
         rows << row(d.studyLabel, fmt::hours(d.totals.study), pct(d.totals.study))
              << row(QStringLiteral("Recreos"), fmt::hours(d.totals.breaks), pct(d.totals.breaks))
-             << row(QStringLiteral("Recreo indebido"), fmt::hours(d.totals.undue), pct(d.totals.undue));
-        html = para(dim(QStringLiteral("Foco = %1 ÷ (%1 + recreos + recreo indebido). Mide qué parte del tiempo de sesión estuviste de verdad en lo tuyo; "
+             << row(QStringLiteral("Tiempo muerto"), fmt::hours(d.totals.undue), pct(d.totals.undue))
+             << row(QStringLiteral("Recreo indebido (pausas)"), fmt::hours(d.totals.paused), pct(d.totals.paused));
+        html = para(dim(QStringLiteral("Foco = %1 ÷ (%1 + recreos + tiempo muerto + recreo indebido). Mide qué parte del tiempo de sesión estuviste de verdad en lo tuyo; "
                                        "el tiempo muerto entre pomodoros lo baja.").arg(d.studyLabel.toLower()))) + table(rows);
         html += para(QStringLiteral("<br>") + dim(QStringLiteral("El detalle del recreo indebido está en su tarjeta (vista avanzada) y en cada día.")));
     } else if (key == "sessions") {
@@ -1772,10 +1789,10 @@ void StatsWidget::showDetail(const QString& key)
         if (!list.isEmpty()) html += para(QStringLiteral("<br>") + dim(QStringLiteral("Últimas:"))) + table(list);
     } else if (key == "inactive") {
         title = QStringLiteral("Horas inactivas · %1").arg(m_label->text());
-        const qint64 all = d.totals.study + d.totals.breaks + d.totals.undue + d.totals.inactive;
+        const qint64 all = d.totals.study + d.totals.breaks + d.totals.undue + d.totals.paused + d.totals.inactive;
         auto pct = [&](qint64 v) { return QStringLiteral("%1 %").arg(all ? qRound(100.0 * v / all) : 0); };
         rows << row(d.studyLabel, fmt::hours(d.totals.study), pct(d.totals.study)) << row(QStringLiteral("Recreos"), fmt::hours(d.totals.breaks), pct(d.totals.breaks))
-             << row(QStringLiteral("Recreos indebidos"), fmt::hours(d.totals.undue), pct(d.totals.undue)) << row(QStringLiteral("Inactivas"), fmt::hours(d.totals.inactive), pct(d.totals.inactive));
+             << row(QStringLiteral("Tiempo muerto"), fmt::hours(d.totals.undue), pct(d.totals.undue)) << row(QStringLiteral("Recreo indebido"), fmt::hours(d.totals.paused), pct(d.totals.paused)) << row(QStringLiteral("Inactivas"), fmt::hours(d.totals.inactive), pct(d.totals.inactive));
         html = para(dim(QStringLiteral("Todo lo que no es pomodoro ni recreo: dormir, comer, cursar, la vida. Así se reparte el período:"))) + table(rows);
         const routine::Explain ex = routineExplain(m_db, d.from, d.to);
         if (!ex.byCategory.isEmpty()) {

@@ -50,6 +50,10 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 19
+- **Recreo indebido** ahora es solo lo que pausás con un pomodoro en curso. Lo de antes (demoras entre pomodoros, recreos pasados de tiempo) se llama **Tiempo muerto**; tienen tarjetas separadas. Lo registrado antes de esta versión queda todo en «Tiempo muerto».
+- **Reiniciar pomodoro**: el botón ↺ en la esquina del visor (aparece con un pomodoro en marcha) descarta lo corrido y arranca de cero, con confirmación.
+
 ### Novedades de la beta 18
 - **Objetivo**: ahora se carga por pomodoros (se cambia a por tiempo en *Ajustes › General › Estilo del objetivo*). Cada fila admite su actividad (ej. 3×25 de Sistemas Operativos + 3×25 de ADS). Debajo ves «Arrancás ahora… · terminás ≈ HH:MM» (solo informativo).
 - **Pomodoros de duración rara**: lo que sobra se descuenta del final de la cola (4×25 con un primero de 40 → 25, 25, 10).

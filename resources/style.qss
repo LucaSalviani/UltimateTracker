@@ -308,6 +308,8 @@ QToolButton#DeckLeave {
     font-size: 9.5pt;
     color: @t3;
 }
+QToolButton#DeckReset { background: transparent; border: none; color: @t3; font-size: 13px; border-radius: 11px; }
+QToolButton#DeckReset:hover { color: @t1; background: @s3; }
 QToolButton#DeckLeave:hover { color: @t1; border-color: @s6; background: @s3; }
 
 /* ---- Ajustes por secciones ---- */

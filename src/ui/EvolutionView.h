@@ -32,7 +32,7 @@ private:
     struct Week {
         QDate monday;
         int days = 0;                 // días del rango dentro de la semana (hasta hoy)
-        qint64 study = 0, undue = 0, inactive = 0, breaks = 0;
+        qint64 study = 0, undue = 0, paused = 0, inactive = 0, breaks = 0;
         int marks[3] = {0, 0, 0};     // días con marca de bronce / plata / oro
         int goalMin = -1;             // meta de esa semana (-1 = no quedó anotada)
     };

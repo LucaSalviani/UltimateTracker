@@ -883,6 +883,19 @@ QWidget* MainWindow::buildDeck()
     });
     connect(m_deck, &TimerDeck::pauseClicked, m_session, &SessionController::pause);
     connect(m_deck, &TimerDeck::endPomodoroClicked, m_session, &SessionController::endPomodoro);
+    connect(m_deck, &TimerDeck::resetPomodoroClicked, this, [this] {   // Mejoras 7.0
+        QMessageBox box(this);
+        box.setWindowTitle(QStringLiteral("Reiniciar pomodoro"));
+        box.setText(QStringLiteral("¿Reiniciar el pomodoro?"));
+        box.setInformativeText(QStringLiteral("Se descarta lo que llevabas y vuelve a empezar de cero con la misma duración y actividad."));
+        auto* yes = box.addButton(QStringLiteral("Reiniciar"), QMessageBox::DestructiveRole);
+        auto* no = box.addButton(QStringLiteral("Cancelar"), QMessageBox::RejectRole);
+        box.setDefaultButton(no);
+        box.setEscapeButton(no);
+        win::applyChrome(&box);
+        box.exec();
+        if (box.clickedButton() == yes) m_session->restartPomodoro();
+    });
     connect(m_deck, &TimerDeck::startBreakClicked, m_session, &SessionController::startBreak);
     connect(m_deck, &TimerDeck::skipBreakClicked, m_session, &SessionController::skipBreak);
     connect(m_deck, &TimerDeck::endBreakClicked, m_session, &SessionController::endBreakEarly);

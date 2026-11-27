@@ -17,6 +17,7 @@ Totals totals(const Database& db, const QDate& from, const QDate& to,
     for (const Interval& i : db.intervalsBetween(from, to)) {
         if (i.kind == IntervalKind::Break)      t.breaks += i.seconds;
         else if (i.kind == IntervalKind::Undue) t.undue  += i.seconds;
+        else if (i.kind == IntervalKind::Pause) t.paused += i.seconds;
         // Pending = tiempo que terminó siendo el final del día: cuenta como inactivo.
     }
 
@@ -34,7 +35,7 @@ Totals totals(const Database& db, const QDate& from, const QDate& to,
             allStudy = 0;
             for (const Pomodoro& p : db.pomodorosBetween(from, to)) allStudy += p.studiedSec;
         }
-        t.inactive = qMax<qint64>(0, elapsed - allStudy - t.breaks - t.undue);
+        t.inactive = qMax<qint64>(0, elapsed - allStudy - t.breaks - t.undue - t.paused);
     }
     return t;
 }

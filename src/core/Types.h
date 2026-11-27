@@ -17,7 +17,8 @@ enum class PomoStatus {
 // Tipos de intervalos que no son estudio.
 enum class IntervalKind {
     Break   = 1,  // recreo dentro del tiempo pactado
-    Undue   = 2,  // recreo indebido: tiempo muerto entre medio de la jornada
+    Undue   = 2,  // (Mejoras 7.0: se muestra como «tiempo muerto») entre medio de la jornada
+    Pause   = 4,  // Mejoras 7.0: pausa con un pomodoro en curso = el recreo indebido de verdad
     Pending = 3,  // tiempo muerto todavía sin decidir: si después se vuelve a
                   // estudiar pasa a Undue; si no, era el final del día (inactivo)
 };

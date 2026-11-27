@@ -206,14 +206,15 @@ Flickable {
 
         // Tiempo fuera del estudio
         Card {
-            visible: page.period !== "day" || page.d.undue !== "0m"
+            visible: page.period !== "day" || page.d.undue !== "0m" || page.d.paused !== "0m"
             Layout.fillWidth: true
             Layout.topMargin: 4
             SectionLabel { text: "Fuera del " + (page.d.noun === "práctica" || page.d.noun === "lectura" ? "foco" : page.d.noun) }
             RowLayout {
                 Layout.fillWidth: true
                 Stat { value: page.d.breaks; label: "recreos" }
-                Stat { value: page.d.undue; label: "recreo indebido" }
+                Stat { value: page.d.undue; label: "tiempo muerto" }
+                Stat { value: page.d.paused; label: "recreo indebido" }
                 Stat { value: page.d.inactive; label: "inactivo" }
             }
         }

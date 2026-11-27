@@ -11,7 +11,8 @@ namespace stats {
 struct Totals {
     qint64 study    = 0;
     qint64 breaks   = 0;
-    qint64 undue    = 0;
+    qint64 undue    = 0;   // «tiempo muerto» (entre pomodoros, recreo pasado de tiempo)
+    qint64 paused   = 0;   // Mejoras 7.0: «recreo indebido» = pausas con un pomodoro en curso
     qint64 inactive = 0;
 };
 

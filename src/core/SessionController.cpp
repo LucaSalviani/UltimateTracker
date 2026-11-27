@@ -39,10 +39,10 @@ SessionController::IvKind SessionController::kindFor(State s)
 {
     switch (s) {
     case State::Ready:
-    case State::Paused:
     case State::WorkDone:
     case State::BreakOver: return IvKind::Pending;
     case State::Break:     return IvKind::Break;
+    case State::Paused:    return IvKind::Pause;   // Mejoras 7.0: pausa dentro del pomodoro = recreo indebido
     default:               return IvKind::None;
     }
 }
@@ -291,6 +291,26 @@ void SessionController::pause()
     setState(State::Paused);
 }
 
+void SessionController::restartPomodoro()
+{
+    takeOver();
+    tick();
+    if ((m_state != State::Running && m_state != State::Paused) || !m_hasPomo) return;
+    const qint64 t = now();
+    // Lo corrido no se guarda: el pomodoro vuelve a empezar con la misma duración y actividad.
+    m_pomo.plannedSec = qMax(kMinStudySec, m_pomo.plannedSec - m_pomo.baseSec());
+    m_pomo.segments.clear();
+    m_pomo.studiedSec = 0;
+    m_pomo.startedAt = t / 1000;
+    m_pomo.endedAt = t / 1000;
+    m_pomo.status = PomoStatus::Running;
+    m_db->updatePomodoro(m_pomo);
+    m_pomoMs = 0;
+    setState(State::Running);
+    persist();
+    emit pomodoroStarted(m_pomo.id);
+}
+
 void SessionController::resume()
 {
     takeOver();
@@ -508,7 +528,7 @@ void SessionController::openInterval(IvKind kind)
     m_ivKind = kind;
     m_ivMs = 0;
     m_ivDay = today();
-    m_ivId = m_db->insertInterval(kind == IvKind::Break ? IntervalKind::Break : IntervalKind::Pending,
+    m_ivId = m_db->insertInterval(kind == IvKind::Break ? IntervalKind::Break : kind == IvKind::Pause ? IntervalKind::Pause : IntervalKind::Pending,
                                   m_ivDay, now() / 1000, 0);
     if (kind == IvKind::Pending) m_pendingIds.append(m_ivId);
 }

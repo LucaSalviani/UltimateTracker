@@ -129,7 +129,7 @@ Greeting::Greeting(Database* db, bool full, QWidget* parent)
         QString s = (when.isEmpty() ? QString() : QStringLiteral("<b>%1:</b> ").arg(when)) +
                     QStringLiteral("%1 · %2 %3 · recreos %4").arg(fmt::hours(t.study)).arg(pomos)
                         .arg(pomos == 1 ? "pomodoro" : "pomodoros", fmt::hours(t.breaks));
-        if (t.undue > 0) s += QStringLiteral(" · indebidos %1").arg(fmt::hours(t.undue));
+        if (t.paused > 0) s += QStringLiteral(" · recreo indebido %1").arg(fmt::hours(t.paused));
         facts << s;
         m_db->setSetting("summary/last_shown", last.toString(Qt::ISODate));   // no sale otro cartel
     }
