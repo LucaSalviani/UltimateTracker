@@ -247,6 +247,7 @@ protected:
             p.restore();
         }
     }
+    static QFont italic(QFont f) { f.setItalic(true); return f; }   // los datos que importan, en cursiva (prueba)
     bool m_inScale = false, m_skipBg = false;
     QRectF m_zoneRect;
     QString m_hoverKey;
@@ -740,7 +741,8 @@ private:
     {
         // Mejoras 7.0: al agrandar una tarjeta, su contenido crece con ella y queda centrado (se dibuja a escala).
         auto scaled = [&](double bw, double bh, bool outline, const std::function<void(const QRectF&)>& fn) {
-            const double sc = qBound(1.0, qMin(r.width() / bw, r.height() / bh), 3.0);
+            const double raw = qBound(1.0, qMin(r.width() / bw, r.height() / bh), 3.0);
+            const double sc = 1.0 + (raw - 1.0) * 0.45;   // crece, pero más despacio que la tarjeta
             p.save();
             p.setBrush(outline ? Qt::NoBrush : QBrush(theme::surface));
             p.setPen(outline ? QPen(theme::line, 1) : QPen(Qt::NoPen));
@@ -877,7 +879,7 @@ private:
         p.drawText(r.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop,
                    QFontMetrics(p.font()).elidedText(label, Qt::ElideRight, int(r.width() - 22)));
         p.setPen(accent);
-        p.setFont(theme::uiFont(valuePt, QFont::DemiBold));
+        p.setFont(italic(theme::uiFont(valuePt, QFont::DemiBold)));
         p.drawText(r.adjusted(14, 0, -8, sub.isEmpty() ? -10 : -26), Qt::AlignLeft | Qt::AlignBottom, value);
         if (!sub.isEmpty()) {
             p.setFont(theme::uiFont(8));
@@ -898,7 +900,7 @@ private:
         p.drawText(sr.adjusted(14, 10, -8, 0), Qt::AlignLeft | Qt::AlignTop, QStringLiteral("RACHA"));
         const QRectF er = sr;
         const QString num = QString::number(data.streak.days);
-        p.setFont(theme::uiFont(34, QFont::DemiBold));
+        p.setFont(italic(theme::uiFont(34, QFont::DemiBold)));
         p.setPen(data.streak.days > 0 ? theme::text : theme::textDim);
         p.drawText(er.adjusted(14, 0, 0, -8), Qt::AlignLeft | Qt::AlignBottom, num);
         const double numW = QFontMetricsF(p.font()).horizontalAdvance(num);
@@ -950,7 +952,7 @@ private:
             p.setFont(theme::uiFont(9));
             p.setPen(theme::textDim);
             p.drawText(row, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(labs[i], Qt::ElideRight, int(row.width() * 0.62)));
-            p.setFont(theme::uiFont(10.5, QFont::DemiBold));
+            p.setFont(italic(theme::uiFont(10.5, QFont::DemiBold)));
             p.setPen(theme::text);
             p.drawText(row, Qt::AlignRight | Qt::AlignVCenter, vals[i]);
         }
