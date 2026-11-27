@@ -666,6 +666,12 @@ private slots:
         QVERIFY(t.enough);
         QVERIFY(t.slope > 0 && t.pct > 0);   // va al alza
         QVERIFY(t.sentence().contains("alza"));
+        const auto rh = insights::rhythm(db, today.addDays(-39), today, nullptr);
+        QVERIFY(rh.total > 0);
+        qint64 cells = 0;
+        for (int d = 0; d < 7; ++d) for (int h = 0; h < 24; ++h) cells += rh.sec[d][h];
+        QCOMPARE(cells, rh.total);
+        QVERIFY(rh.dayCount[0] + rh.dayCount[1] + rh.dayCount[2] + rh.dayCount[3] + rh.dayCount[4] + rh.dayCount[5] + rh.dayCount[6] > 0);
         const auto avg = insights::movingAverage({1, 2, 3, 4}, 2);
         QCOMPARE(avg.value(3), 3.5);
         // Historial de meta semanal: el pasado no se reescribe

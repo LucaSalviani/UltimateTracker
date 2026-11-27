@@ -237,6 +237,9 @@ Tres plazos; cada uno se prende, se apaga y se ajusta en *Ajustes › Hitos*.
 - **Personalizar estadísticas**: botón *Personalizar* en la vista avanzada (en la simple no existe). Cuatro paneles: *Resumen*, *Hitos y objetivos*, *Gráfico* y *Actividades*. Cada uno se puede **ocultar/mostrar**, **subir/bajar** y tiene tres tamaños **S / M / L**: Resumen (alto de las tarjetas), Hitos (ancho mínimo → cuántos por fila), Gráfico (alto de las barras), Actividades (3 / 6 / 12 filas antes del scroll). **Restablecer** vuelve al orden y tamaños originales; **Listo** sale del modo edición. Se guarda en `stats_layout` (`id:visible:tamaño`, p. ej. `hero:1:1,chips:1:1,chart:1:1,folders:1:1`). Vale también para la vista simple (lo que ocultes o reordenes sigue igual), pero solo se edita desde la avanzada.
 - Los paneles ocultos solo aparecen (apagados, con «Mostrar») mientras editás.
 
+## Mejoras 6.3 (beta 13, PC)
+- **Evolución · mapa de calor semanal/horario** (`insights::rhythm`): matriz día de la semana (por día lógico, 0 = lunes) × hora del reloj; el tiempo de cada pomodoro se reparte por hora desde su inicio real (sin descontar pausas). Columnas desde la hora de inicio del día; promedio por día de cada día de la semana (días transcurridos desde el primer dato) a la derecha. Ventana: `min(rango elegido, 90 días)`, es decir, al menos 90 días. Frase: mejor franja de 2 h y mejor día.
+
 ## Mejoras 6.2 (beta 12, PC)
 - **Evolución · progreso por período**: tarjeta arriba de las fichas con selector *Semana a semana | Mes a mes | Año a año* (`stats/evo_gran`, independiente del rango). Últimos 12 períodos (10 años) desde el primer día con datos; barra = horas del período, % contra el anterior solo entre períodos completos, recta de mínimos cuadrados sobre los completos y frase con el último período y la pendiente (estable si |pendiente| < 3 % del promedio). El período en curso va más claro y queda fuera del % y la tendencia. Necesita ≥2 períodos completos.
 

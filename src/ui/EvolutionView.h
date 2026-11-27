@@ -67,6 +67,9 @@ private:
     QString m_gran = QStringLiteral("week");
     QVector<Bucket> m_buckets;
     void paintProgress(QPainter& p, const QRectF& r);
+    void paintRhythm(QPainter& p, const QRectF& r);
+    insights::Rhythm m_rhythm;
+    int m_rhythmDays = 90;
     // Comparación: los últimos m_cmpLen días contra los m_cmpLen anteriores (m_cmp = 2*len días).
     int m_cmpLen = 30;
     QVector<insights::DayStat> m_cmp;

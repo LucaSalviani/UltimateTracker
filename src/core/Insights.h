@@ -52,6 +52,15 @@ struct Trend {
 // `perDay`: una serie diaria ascendente (todos los días, con 0 en los vacíos).
 Trend trend(const QVector<double>& perDay, int recentDays = 28);
 
+// Cuándo estudiás: segundos por día de la semana (0 = lunes) y hora del reloj (0–23).
+struct Rhythm {
+    qint64 sec[7][24] = {};
+    qint64 dayTotal[7] = {};   // segundos por día de la semana
+    int    dayCount[7] = {};   // cuántos de esos días hubo en el período (desde el primer día con datos)
+    qint64 total = 0;
+};
+Rhythm rhythm(const Database& db, const QDate& from, const QDate& to, const QSet<qint64>* folders);
+
 // Historial de la meta semanal: desde cuándo rige cada valor (no se reescribe el pasado).
 void recordWeekGoal(Database& db, const QDate& monday, int goalMin);
 QMap<QDate, int> weekGoals(const Database& db);   // lunes → minutos

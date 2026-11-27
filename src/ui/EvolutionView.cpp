@@ -18,6 +18,7 @@ constexpr double kCardH = 168;
 constexpr double kTilesH = 112;
 constexpr double kGranH = 36;   // fila de pastillas Semanas | Meses | Años
 constexpr double kProgH = 200;
+constexpr double kRhythmH = 250;
 constexpr double kGap = 14;
 QColor ink() { return theme::pomoAccent; }
 
@@ -116,6 +117,12 @@ void EvolutionView::reload(Database* db, const QSet<qint64>* filter)
             m_buckets << b;
         }
     }
+    // Ritmo semanal/horario: al menos los últimos 90 días, para que haya de qué hablar.
+    {
+        const QDate rf = qMin(m_from, m_today.addDays(-89));
+        m_rhythmDays = int(rf.daysTo(m_today)) + 1;
+        m_rhythm = insights::rhythm(*db, rf, m_today, m_filter);
+    }
     m_diary = db->dayDiaries(m_from, m_today);
     m_summary = summaryHtml();
     setMinimumHeight(contentHeight(width()));
@@ -166,7 +173,7 @@ QString EvolutionView::summaryHtml() const
 int EvolutionView::contentHeight(int) const
 {
     // pastillas + fichas + 5 tarjetas
-    return int(8 + 40 + kGranH + kProgH + kGap + kTilesH + kGap + 5 * (kCardH + kGap) + 20);
+    return int(8 + 40 + kGranH + kProgH + kGap + kTilesH + kGap + kRhythmH + kGap + 5 * (kCardH + kGap) + 20);
 }
 
 void EvolutionView::card(QPainter& p, const QRectF& r, const QString& title, const QString& sentence) const
@@ -246,6 +253,7 @@ void EvolutionView::paintEvent(QPaintEvent*)
 
     paintTiles(p, QRectF(L, y, W, kTilesH)); y += kTilesH + kGap;
 
+    paintRhythm(p, QRectF(L, y, W, kRhythmH)); y += kRhythmH + kGap;
     paintHours(p, QRectF(L, y, W, kCardH)); y += kCardH + kGap;
     paintWeeklyBars(p, QRectF(L, y, W, kCardH), QStringLiteral("Recreo indebido por semana"), QString(),
                     [](const Week& w) { return double(w.undue); }, [](double v) { return fmtH(v); },
@@ -346,6 +354,67 @@ void EvolutionView::paintProgress(QPainter& p, const QRectF& r)
     p.setPen(theme::textDim);
     p.drawText(QRectF(r.left() + 14, r.top() + 8, r.width() - 28, 14), Qt::AlignRight | Qt::AlignVCenter,
                QStringLiteral("horas de cada %1 (la clara sigue en curso)   - -  tendencia").arg(unit));
+}
+
+// Mapa de calor: día de la semana × hora del reloj.
+void EvolutionView::paintRhythm(QPainter& p, const QRectF& r)
+{
+    static const char* dn[] = {"lun", "mar", "mié", "jue", "vie", "sáb", "dom"};
+    static const char* dnFull[] = {"lunes", "martes", "miércoles", "jueves", "viernes", "sábados", "domingos"};
+    const insights::Rhythm& R = m_rhythm;
+    const int startH = dayclock::startHour();
+    QString sentence;
+    if (R.total < 3600) {
+        sentence = QStringLiteral("Hace falta algo más de estudio registrado para ver tus horarios.");
+    } else {
+        // mejor franja de 2 horas seguidas y mejor día (promedio por día de ese tipo)
+        int bestH = 0; qint64 bestV = -1;
+        for (int k = 0; k < 24; ++k) {
+            const int h = (startH + k) % 24, h2 = (h + 1) % 24;
+            qint64 v = 0;
+            for (int d = 0; d < 7; ++d) v += R.sec[d][h] + R.sec[d][h2];
+            if (v > bestV) { bestV = v; bestH = h; }
+        }
+        int bestD = 0; double bestA = -1;
+        for (int d = 0; d < 7; ++d) {
+            const double a = R.dayCount[d] ? double(R.dayTotal[d]) / R.dayCount[d] : 0;
+            if (a > bestA) { bestA = a; bestD = d; }
+        }
+        sentence = QStringLiteral("Rendís más entre las %1 y las %2 h, y los %3 (%4 por día).")
+                       .arg(bestH).arg((bestH + 2) % 24 == 0 ? 24 : (bestH + 2) % 24).arg(QString::fromUtf8(dnFull[bestD]), fmtH(bestA));
+    }
+    card(p, r, QStringLiteral("Cuándo estudiás (últimos %1 días)").arg(m_rhythmDays), sentence);
+    const double left = r.left() + 50, right = r.right() - 70, top = r.top() + 58, bottom = r.bottom() - 28;
+    const double cw = (right - left) / 24.0, ch = (bottom - top) / 7.0;
+    qint64 mx = 1;
+    for (int d = 0; d < 7; ++d) for (int h = 0; h < 24; ++h) mx = qMax(mx, R.sec[d][h]);
+    double mxAvg = 1;
+    for (int d = 0; d < 7; ++d) if (R.dayCount[d]) mxAvg = qMax(mxAvg, double(R.dayTotal[d]) / R.dayCount[d]);
+    for (int d = 0; d < 7; ++d) {
+        p.setFont(theme::uiFont(8));
+        p.setPen(theme::textDim);
+        p.drawText(QRectF(r.left() + 10, top + d * ch, 36, ch), Qt::AlignRight | Qt::AlignVCenter, QString::fromUtf8(dn[d]));
+        for (int k = 0; k < 24; ++k) {
+            const int h = (startH + k) % 24;
+            const QRectF c(left + k * cw + 1, top + d * ch + 1, cw - 2, ch - 2);
+            const double t = double(R.sec[d][h]) / mx;
+            p.setPen(Qt::NoPen);
+            p.setBrush(R.sec[d][h] > 0 ? theme::mix(theme::surface, ink(), 0.18 + 0.82 * std::sqrt(t)) : theme::mix(theme::surface, theme::bg, 0.5));
+            p.drawRoundedRect(c, 3, 3);
+            m_zones.append({c, QStringLiteral("%1 de %2 a %3 h\n%4 en total (últimos %5 días)").arg(QString::fromUtf8(dn[d])).arg(h).arg(h + 1).arg(fmtH(double(R.sec[d][h]))).arg(m_rhythmDays), QString()});
+        }
+        // promedio por día de ese tipo, a la derecha
+        const double avg = R.dayCount[d] ? double(R.dayTotal[d]) / R.dayCount[d] : 0;
+        p.setPen(theme::textDim);
+        p.setFont(theme::uiFont(8));
+        p.drawText(QRectF(right + 8, top + d * ch, 60, ch), Qt::AlignLeft | Qt::AlignVCenter, avg > 0 ? fmtH(avg) : QStringLiteral("—"));
+        m_zones.append({QRectF(right + 8, top + d * ch, 60, ch), QStringLiteral("Promedio de los %1: %2 por día").arg(QString::fromUtf8(dnFull[d]), fmtH(avg)), QString()});
+    }
+    p.setFont(theme::uiFont(7));
+    p.setPen(theme::textFaint);
+    for (int k = 0; k < 24; k += 2)
+        p.drawText(QRectF(left + k * cw - 6, bottom + 4, cw + 12, 12), Qt::AlignCenter, QString::number((startH + k) % 24));
+    p.drawText(QRectF(right + 8, r.top() + 42, 62, 14), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("por día"));
 }
 
 // Fichas: promedio diario del período elegido y variación contra el período anterior de igual largo.

@@ -78,6 +78,33 @@ QVector<double> movingAverage(const QVector<double>& v, int window)
     return out;
 }
 
+Rhythm rhythm(const Database& db, const QDate& from, const QDate& to, const QSet<qint64>* folders)
+{
+    Rhythm r;
+    QDate first = to;
+    for (const Pomodoro& p : db.pomodorosBetween(from, to)) {
+        if (p.status == PomoStatus::Running && p.studiedSec <= 0) continue;
+        if (folders && !folders->contains(p.folderId)) continue;
+        if (p.studiedSec <= 0) continue;
+        first = qMin(first, p.day);
+        const int wd = p.day.dayOfWeek() - 1;
+        qint64 t = p.startedAt;
+        const qint64 end = p.startedAt + p.studiedSec;
+        while (t < end) {
+            const QDateTime dt = QDateTime::fromSecsSinceEpoch(t);
+            const qint64 nextHour = QDateTime(dt.date(), QTime(dt.time().hour(), 0)).addSecs(3600).toSecsSinceEpoch();
+            const qint64 chunk = qMin(end, nextHour) - t;
+            r.sec[wd][dt.time().hour()] += chunk;
+            r.dayTotal[wd] += chunk;
+            r.total += chunk;
+            t += chunk;
+        }
+    }
+    if (r.total > 0)
+        for (QDate d = first; d <= to; d = d.addDays(1)) ++r.dayCount[d.dayOfWeek() - 1];
+    return r;
+}
+
 Trend trend(const QVector<double>& perDay, int recentDays)
 {
     Trend t;

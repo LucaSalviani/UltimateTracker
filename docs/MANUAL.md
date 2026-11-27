@@ -50,6 +50,9 @@
 - **Diario del día**: en Objetivo, una nota y cómo te va hoy (1–5). El historial de metas semanales empieza desde esta versión.
 - Festejo al romper un récord.
 
+### Novedades de la beta 13
+- **Evolución › Cuándo estudiás**: mapa de calor con los **días de la semana** (filas) y la **hora del reloj** (columnas, empezando en la hora de inicio del día). Cuanto más rojo, más estudiaste en esa franja; a la derecha, el promedio por día de cada día de la semana. La frase de arriba dice tu mejor franja de 2 horas y tu mejor día. Mira los últimos 90 días como mínimo (más si elegís 12 meses o Todo) y respeta el filtro de actividad. Pasá el mouse o hacé click en una celda para ver las horas exactas.
+
 ### Novedades de la beta 12
 - **Evolución › Semana a semana / Mes a mes / Año a año**: arriba de todo, las horas de cada semana (12), mes (12) o año, con el **% contra el período anterior** sobre cada barra, una **recta de tendencia** y una frase ("Última semana completa: 8h00 (−40 % vs la anterior). Tendencia: +24m por semana"). La barra clara es el período en curso: no entra en el % ni en la tendencia hasta que termina. Pasá el mouse o hacé click en una barra para ver horas, pomodoros y promedio por día.
 
