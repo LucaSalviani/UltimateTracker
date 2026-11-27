@@ -498,8 +498,8 @@ private:
     {
         if (id == QLatin1String("chart")) return {24, 48, isBarsChart() ? 20 : 0, isBarsChart() ? 64 : 0};
         if (id == QLatin1String("folders")) return {24, 48, 16, 96};
-        if (id == QLatin1String("streak") || id == QLatin1String("records")) return {12, 48, 12, 24};   // llevan varias líneas
-        return {8, 48, 8, 24};
+        if (id == QLatin1String("streak") || id == QLatin1String("records")) return {12, 48, 12, 64};   // llevan varias líneas
+        return {8, 48, 8, 64};
     }
     // Qué tarjetas tienen algo para mostrar hoy (las prendidas que tienen datos).
     QSet<QString> presentSet() const
