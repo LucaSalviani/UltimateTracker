@@ -238,6 +238,10 @@ QWidget* SettingsDialog::pageGeneral()
     m_goalInput = new QComboBox(w);
     m_goalInput->addItem(QStringLiteral("Botones (cantidad × minutos)"), "buttons");
     m_goalInput->addItem(QStringLiteral("Texto (3x30 + 2x25)"), "text");
+    m_goalStyle = new QComboBox(w);   // Mejoras 7.0
+    m_goalStyle->addItem(QStringLiteral("Por pomodoros (ej. 3×25 de SO)"), QStringLiteral("pomodoros"));
+    m_goalStyle->addItem(QStringLiteral("Por tiempo (ej. 3h30)"), QStringLiteral("time"));
+    m_goalStyle->setCurrentIndex(m_db->setting("goal_style", "pomodoros").toString() == QLatin1String("time") ? 1 : 0);
     m_goalInput->setCurrentIndex(m_db->setting("goal_input", "buttons").toString() == QLatin1String("text") ? 1 : 0);
     // B2-1: qué pasa con el fantasma del objetivo cuando arrancás ese pomodoro.
     m_goalRunning = new QComboBox(w);
@@ -268,6 +272,7 @@ QWidget* SettingsDialog::pageGeneral()
     m_monthMode->setCurrentIndex(m_db->setting("month_mode", "calendar").toString() == QLatin1String("rolling") ? 1 : 0);
     times->addRow(QStringLiteral("Mes en Estadísticas"), m_monthMode);
     auto* goalForm = new QFormLayout;
+    goalForm->addRow(QStringLiteral("Estilo del objetivo"), m_goalStyle);
     goalForm->addRow(QStringLiteral("Cargar por pomodoros con"), m_goalInput);
 
     auto* lay = new QVBoxLayout(w);
@@ -842,6 +847,7 @@ void SettingsDialog::accept()
     m_db->setSetting("day_start_hour", m_dayStart->value());
     m_db->setSetting("session_gap_min", m_sessionGap->value());
     m_db->setSetting("goal_input", m_goalInput->currentData().toString());
+    m_db->setSetting("goal_style", m_goalStyle->currentData().toString());
     m_db->setSetting("notepad_on", m_notepad->isChecked() ? 1 : 0);
     m_db->setSetting("month_mode", m_monthMode->currentData().toString());
     m_db->setSetting("mood_offer", m_moodOffer->isChecked() ? 1 : 0);

@@ -233,10 +233,20 @@ GoalPanel::GoalPanel(QWidget* parent)
     lay->addSpacing(6);
     showModePage(0);
     lay->addWidget(caption(QStringLiteral("CUÁNTO"), this));
-    lay->addLayout(seg);
+    byTime->hide(); byPomos->hide();   // Mejoras 7.0: el estilo se elige en Ajustes; acá no hay selector
     lay->addWidget(m_modePages);
     lay->addWidget(m_preview);
     lay->addWidget(m_summary);
+    m_schedule = new QLabel(this);
+    m_schedule->setProperty("dim", true);
+    m_schedule->setWordWrap(true);
+    lay->addWidget(m_schedule);
+    {
+        auto* tick = new QTimer(this);   // la hora estimada de fin se mueve con el reloj
+        tick->setInterval(30000);
+        connect(tick, &QTimer::timeout, this, [this] { if (isVisible() && m_isToday) refreshPreview(); });
+        tick->start();
+    }
     lay->addSpacing(4);
     lay->addWidget(caption(QStringLiteral("REPETIR"), this));
     lay->addWidget(m_repeat);
@@ -320,7 +330,8 @@ void GoalPanel::load(const QDate& day, const std::optional<GoalRule>& rule, cons
     const bool has = rule && !rule->spec.isEmpty();
     m_recurring = rule && rule->weekdays != 0;
     const QString spec = has ? rule->spec : QString();
-    const bool timeMode = !has || spec.startsWith(QLatin1String("t:"));
+    m_isToday = isToday;
+    const bool timeMode = has ? spec.startsWith(QLatin1String("t:")) : m_goalStyle == QLatin1String("time");
     m_mode->button(timeMode ? 0 : 1)->setChecked(true);
     showModePage(timeMode ? 0 : 1);
     const int total = has && timeMode ? spec.mid(2).toInt() : (has ? 0 : 0);
@@ -364,6 +375,8 @@ void GoalPanel::setProgress(const Progress& p)
     m_progress = p;
     refreshPreview();
 }
+
+void GoalPanel::setGoalStyle(const QString& style) { m_goalStyle = style == QLatin1String("time") ? style : QStringLiteral("pomodoros"); }
 
 void GoalPanel::setComboStyle(const QString& style)
 {
@@ -417,6 +430,7 @@ void GoalPanel::refreshPreview()
     if (!p.ok) {
         m_preview->setBlocks({}, {});
         m_summary->setText(QString());
+        m_schedule->setText(QString());
         m_status->setText(m_offDay ? QStringLiteral("Este día está marcado sin objetivo.") : QString());
         return;
     }
@@ -442,6 +456,19 @@ void GoalPanel::refreshPreview()
               .arg(fmt::duration(m_pomoMin * 60))
         : QStringLiteral("%1 %2 · %3").arg(p.blocks.size()).arg(p.blocks.size() == 1 ? "pomodoro" : "pomodoros")
               .arg(fmt::duration(p.totalMin * 60))) + breaks);
+    // Mejoras 7.0: solo informativo. Hoy: arrancás ahora y, con lo que falta (y un recreo entre bloque y bloque), terminás ≈ a tal hora.
+    if (m_isToday && !done) {
+        const QVector<int> rem = goals::remainingBlocks(p, fills);
+        int left = 0, blocks = 0;
+        for (int r : rem) if (r >= 3) { left += r; ++blocks; }
+        const QDateTime now = QDateTime::currentDateTime();
+        const QDateTime end = now.addSecs(qint64(left) * 60 + qint64(qMax(0, blocks - 1)) * m_breakSec);
+        m_schedule->setText(left > 0 ? QStringLiteral("Arrancás ahora (%1) · terminás ≈ %2%3").arg(now.toString(QStringLiteral("HH:mm")), end.toString(QStringLiteral("HH:mm")),
+                                                                                                     end.date() != now.date() ? QStringLiteral(" (mañana)") : QString())
+                                  : QString());
+    } else {
+        m_schedule->setText(QString());
+    }
     m_summary->setToolTip(QStringLiteral("Con un recreo de %1 entre bloque y bloque (%2; se cambia en Ajustes › General).")
                               .arg(fmt::duration(m_breakSec),
                                    m_breakFromAverage ? QStringLiteral("tu promedio real") : QStringLiteral("tu duración de recreo")));

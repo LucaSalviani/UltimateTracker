@@ -73,6 +73,7 @@ private:
     QSpinBox*  m_sessionGap;
     QComboBox* m_goalInput;   // M17
     QComboBox* m_goalRunning; // B2-1
+    QComboBox* m_goalStyle = nullptr;   // Mejoras 7.0
     QComboBox* m_goalBreak;   // Mejoras 2.0
     QCheckBox* m_notepad = nullptr;    // Mejoras 4.1
     QComboBox* m_monthMode = nullptr;  // Mejoras 5.0

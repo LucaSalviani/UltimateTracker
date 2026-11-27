@@ -44,6 +44,7 @@ public:
               int pomodoroMin, bool isToday);
     // M17: "buttons" (filas cantidad × minutos con − / +) o "text" ("3x30 + 2x25").
     void setComboStyle(const QString& style);
+    void setGoalStyle(const QString& style);   // Mejoras 7.0: "pomodoros" (default) o "time": cómo se carga un objetivo nuevo
     void setProgress(const Progress& p);
     // B2: actividades para elegir en cada fila del objetivo (y sus colores).
     void setActivities(const FolderTree& tree, const QHash<qint64, QColor>& colors);
@@ -103,6 +104,9 @@ private:
     QLabel*         m_comboHint;
     GoalPreview*    m_preview;
     QLabel*         m_summary;
+    QLabel*         m_schedule = nullptr;   // Mejoras 7.0: arranque (ahora) y fin estimado
+    QString         m_goalStyle = QStringLiteral("pomodoros");
+    bool            m_isToday = false;
     QComboBox*      m_repeat;
     QWidget*        m_daysRow;
     QButtonGroup*   m_days;

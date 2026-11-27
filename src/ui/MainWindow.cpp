@@ -2323,7 +2323,7 @@ void MainWindow::openGoalPanel(const QDate& day)
     if (!m_goalPanel) {
         m_goalPanel = new GoalPanel(this);
         m_goalPanel->hide();
-        m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString());
+        m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString()); m_goalPanel->setGoalStyle(m_db->setting("goal_style", "pomodoros").toString());
         connect(m_goalPanel, &GoalPanel::closeRequested, this, &MainWindow::closeGoalPanel);
         connect(m_goalPanel, &GoalPanel::notepadRequested, this, [this] {
             if (m_notePadOpen) closeNotePad(); else { openNotePad(m_goalPanel->day()); m_notePad->showTab(0); m_notePad->focusNote(); }
@@ -2930,7 +2930,7 @@ void MainWindow::openSettings(int page)
     applyGuardSettings();
     reloadFolders();   // M25: colores por actividad prendidos/apagados
     applySizeMode(GridWidget::SizeMode(m_db->setting("size_mode", 0).toInt()), false);
-    if (m_goalPanel) { m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString()); m_goalPanel->setNotepadMode(m_db->setting("notepad_on", 1).toBool()); if (!m_db->setting("notepad_on", 1).toBool() && !(m_notePad && m_notePad->tab() == 1)) closeNotePad(false); }
+    if (m_goalPanel) { m_goalPanel->setComboStyle(m_db->setting("goal_input", "buttons").toString()); m_goalPanel->setGoalStyle(m_db->setting("goal_style", "pomodoros").toString()); m_goalPanel->setNotepadMode(m_db->setting("notepad_on", 1).toBool()); if (!m_db->setting("notepad_on", 1).toBool() && !(m_notePad && m_notePad->tab() == 1)) closeNotePad(false); }
     if (!m_session->inProgress()) {
         m_session->setWorkSec(m_db->setting("work_min", 25).toInt() * 60);
         m_session->setBreakSec(m_db->setting("break_min", 10).toInt() * 60);
