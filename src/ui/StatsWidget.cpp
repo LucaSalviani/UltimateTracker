@@ -293,10 +293,9 @@ protected:
         if (!m_dragId.isEmpty() || !m_resId.isEmpty()) {
             const QString who = !m_dragId.isEmpty() ? m_dragId : m_resId;
             for (auto& v : m_vel) v = {0, 0, 0, 0};
-            (void)who;
             if (!m_preview.isEmpty()) {
                 data.grid = m_preview;
-                pinPositions(data.grid, flow(data.grid, m_W, presentSet(), QString()));   // suelta: quedan fijas donde están (con lo que se corrió)
+                pinPositions(data.grid, flow(data.grid, m_W, presentSet(), who));   // suelta: quedan fijas donde están (con lo que se corrió)
             }
             m_preview.clear();
             m_dragId.clear();
@@ -660,6 +659,16 @@ private:
         setMinimumHeight(contentHeight(width()));
         update();
     }
+    // Imán de bordes: acerca el borde a menos de kSnap pasos de otro borde vecino (así quedan pegadas sin esfuerzo).
+    static constexpr int kSnap = 3;
+    static int snapTo(int v, const QVector<int>& cands) { int best = v, bd = kSnap + 1; for (int c : cands) if (qAbs(c - v) < bd) { bd = qAbs(c - v); best = c; } return best; }
+    QVector<Placed> othersOf(const QString& id, int n) const
+    {
+        QVector<Placed> v;
+        for (const Placed& pl : flow(data.grid, m_W, presentSet())) if (pl.id != id) v.append(pl);
+        (void)n;
+        return v;
+    }
     void dragTo(const QPointF& pos)
     {
         const QRectF cur = m_shown.value(m_dragId);
@@ -670,9 +679,21 @@ private:
         for (auto& it : m_preview) {
             if (it.id != m_dragId) continue;
             const int c = itemCols(it, n);
-            const int col = qBound(0, int(std::lround((tl.x() - m_L) / cw)), n - c);
+            int col = qBound(0, int(std::lround((tl.x() - m_L) / cw)), n - c);
+            int row = qMax(0, int(std::lround((tl.y() - m_y0) / kCellH)));
+            const int r = itemRows(it, m_W, c, n);
+            const auto oth = othersOf(it.id, n);
+            QVector<int> ys, xs;
+            for (const Placed& o : oth) {
+                if (col < o.col + o.cols + kSnap && col + c > o.col - kSnap) { ys << o.row - r << o.row + o.rows << o.row << o.row + o.rows - r; }
+            }
+            row = qMax(0, snapTo(row, ys));
+            for (const Placed& o : oth) {
+                if (row < o.row + o.rows + kSnap && row + r > o.row - kSnap) { xs << o.col - c << o.col + o.cols << o.col << o.col + o.cols - c; }
+            }
+            col = qBound(0, snapTo(col, xs), n - c);
             it.x = qBound(0, int(std::lround(col * 48.0 / n)), 47);
-            it.y = qMax(0, int(std::lround((tl.y() - m_y0) / kCellH)));
+            it.y = row;
         }
     }
     void resizeStep(const QPointF& d)
@@ -693,6 +714,20 @@ private:
             if (lim.minR > 0) {
                 if (m_grab & 2) r = qBound(lim.minR, r0 + dyc, lim.maxR);
                 if (m_grab & 8) { r = qBound(lim.minR, qMin(r0 - dyc, y0 + r0), lim.maxR); y = y0 + r0 - r; }
+            }
+            {
+                const auto oth = othersOf(it.id, n);
+                QVector<int> vx, vy;
+                for (const Placed& o : oth) {
+                    if (y < o.row + o.rows && y + r > o.row) { vx << o.col << o.col + o.cols; }
+                    if (x < o.col + o.cols && x + c > o.col) { vy << o.row << o.row + o.rows; }
+                }
+                if (m_grab & 1) c = qBound(effMin, snapTo(x + c, vx) - x, n - x0);
+                if (m_grab & 4) { const int nx = qBound(0, snapTo(x, vx), x0 + c0 - effMin); c = x0 + c0 - nx; x = nx; }
+                if (lim.minR > 0) {
+                    if (m_grab & 2) r = qBound(lim.minR, snapTo(y + r, vy) - y, lim.maxR);
+                    if (m_grab & 8) { const int ny = qBound(qMax(0, y0 + r0 - lim.maxR), snapTo(y, vy), y0 + r0 - lim.minR); r = y0 + r0 - ny; y = ny; }
+                }
             }
             it.cols = qBound(4, int(std::lround(c * 48.0 / n)), 48);
             it.x = qBound(0, int(std::lround(x * 48.0 / n)), 47);
