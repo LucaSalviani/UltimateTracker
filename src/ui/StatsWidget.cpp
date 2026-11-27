@@ -160,10 +160,10 @@ static QString serializeLayout(const QVector<StatsData::Panel>& v)
 static QVector<StatsData::Item> defaultGrid()
 {
     static const struct { const char* id; int c, r; } d[] = {
-        {"streak", 4, 3}, {"study", 3, 3}, {"records", 5, 3},
-        {"breaks", 3, 2}, {"undue", 3, 2}, {"paused", 3, 2}, {"inactive", 3, 2}, {"sessions", 3, 2},
-        {"goals", 4, 2}, {"mark", 4, 2}, {"startgoal", 4, 2}, {"weekly", 4, 3}, {"focus", 4, 2}, {"level", 4, 2},
-        {"chart", 12, 7}, {"folders", 12, 9}};
+        {"streak", 16, 12}, {"study", 12, 12}, {"records", 20, 12},
+        {"breaks", 12, 8}, {"undue", 12, 8}, {"paused", 12, 8}, {"inactive", 12, 8}, {"sessions", 12, 8},
+        {"goals", 16, 8}, {"mark", 16, 8}, {"startgoal", 16, 8}, {"weekly", 16, 12}, {"focus", 16, 8}, {"level", 16, 8},
+        {"chart", 48, 28}, {"folders", 48, 36}};
     QVector<StatsData::Item> v;
     for (const auto& x : d) v.append({QString::fromLatin1(x.id), x.c, x.r});
     return v;
@@ -178,8 +178,8 @@ static QVector<StatsData::Item> parseGrid(const QString& s)
         bool dup = false;
         for (const auto& o : out) if (o.id == f[0]) dup = true;
         if (dup) continue;
-        StatsData::Item it{f[0], qBound(2, f[1].toInt(), 12), qBound(2, f[2].toInt(), 24)};
-        if (f.size() >= 5) { it.x = qBound(0, f[3].toInt(), 11); it.y = qMax(0, f[4].toInt()); }
+        StatsData::Item it{f[0], qBound(4, f[1].toInt(), 48), qBound(4, f[2].toInt(), 96)};
+        if (f.size() >= 5) { it.x = qBound(0, f[3].toInt(), 47); it.y = qMax(0, f[4].toInt()); }
         out.append(it);
     }
     for (const auto& d : def) {
@@ -488,19 +488,19 @@ private:
     static double heatCell(double W) { return qBound(6.0, (W - 30) / 53.0 - 3, 14.0); }
 
     // ---- Mejoras 7.0: motor de la grilla ----------------------------------------------------
-    static constexpr double kCellH = 28, kGridGap = 4, kEdgeGrab = 8, kSpringK = 420, kSpringC = 28;
-    int gridCols(double W) const { return W < 520 ? 6 : 12; }
+    static constexpr double kCellH = 8, kGridGap = 0, kInset = 2, kEdgeGrab = 8, kSpringK = 420, kSpringC = 28;
+    int gridCols(double W) const { return W < 520 ? 24 : 48; }
     struct Placed { QString id; int col = 0, row = 0, cols = 1, rows = 1; };
-    struct Limits { int minC, maxC, minR, maxR; };   // en columnas de 12; minR = 0: el alto no se toca
+    struct Limits { int minC, maxC, minR, maxR; };   // en columnas de 48; minR = 0: el alto no se toca
 
     const QVector<StatsData::Item>& currentItems() const { return m_preview.isEmpty() ? data.grid : m_preview; }
     bool isBarsChart() const { return data.period != StatsWidget::Period::Day && data.period != StatsWidget::Period::Year; }
     Limits limitsFor(const QString& id) const
     {
-        if (id == QLatin1String("chart")) return {6, 12, isBarsChart() ? 5 : 0, isBarsChart() ? 16 : 0};
-        if (id == QLatin1String("folders")) return {6, 12, 4, 24};
-        if (id == QLatin1String("streak") || id == QLatin1String("records")) return {3, 12, 3, 6};   // llevan varias líneas
-        return {2, 12, 2, 6};
+        if (id == QLatin1String("chart")) return {24, 48, isBarsChart() ? 20 : 0, isBarsChart() ? 64 : 0};
+        if (id == QLatin1String("folders")) return {24, 48, 16, 96};
+        if (id == QLatin1String("streak") || id == QLatin1String("records")) return {12, 48, 12, 24};   // llevan varias líneas
+        return {8, 48, 8, 24};
     }
     // Qué tarjetas tienen algo para mostrar hoy (las prendidas que tienen datos).
     QSet<QString> presentSet() const
@@ -515,14 +515,14 @@ private:
         for (const Chip& c : buildChips()) s.insert(c.key);
         return s;
     }
-    static double cellW(double W, int n) { return (W - (n - 1) * kGridGap) / n; }
-    static double rowsPx(int r) { return r * kCellH + (r - 1) * kGridGap; }
-    static int rowsFor(double h) { return qMax(2, int(std::ceil((h + kGridGap) / (kCellH + kGridGap) - 1e-9))); }
-    static int itemCols(const StatsData::Item& it, int n) { return qBound(1, int(std::lround(it.cols * n / 12.0)), n); }
+    static double cellW(double W, int n) { return W / n; }
+    static double rowsPx(int r) { return r * kCellH; }
+    static int rowsFor(double h) { return qMax(8, int(std::ceil(h / kCellH - 1e-9))); }
+    static int itemCols(const StatsData::Item& it, int n) { return qBound(1, int(std::lround(it.cols * n / 48.0)), n); }
     int itemRows(const StatsData::Item& it, double W, int cols, int n) const
     {
         if (it.id == QLatin1String("chart") && !isBarsChart())   // día y año tienen alto propio
-            return rowsFor(chartHeight(cols * cellW(W, n) + (cols - 1) * kGridGap));
+            return rowsFor(chartHeight(cols * cellW(W, n)));
         return it.rows;
     }
     // Reparte las tarjetas como en el escritorio de Android: cada una queda exactamente donde la dejaste (se permiten huecos);
@@ -553,18 +553,10 @@ private:
         for (int i : order) {
             const auto& it = items[i];
             const int c = itemCols(it, n), r = itemRows(it, W, c, n);
-            int col = qBound(0, int(std::lround(it.x * n / 12.0)), n - c), row = it.y;
+            int col = qBound(0, int(std::lround(it.x * n / 48.0)), n - c), row = it.y;
             while (!isFree(row, col, c, r)) ++row;
             mark(row, col, c, r, 1);
             out.append({it.id, col, row, c, r});
-        }
-        // las secciones (gráfico, actividades) suben hasta apoyarse en lo de arriba: así no queda un margen suelto
-        std::stable_sort(out.begin(), out.end(), [&](const Placed& a, const Placed& b) { return a.row != b.row ? a.row < b.row : a.col < b.col; });
-        for (Placed& pl : out) {
-            if (pl.id == priority || (pl.id != QLatin1String("chart") && pl.id != QLatin1String("folders"))) continue;
-            mark(pl.row, pl.col, pl.cols, pl.rows, 0);
-            while (pl.row > 0 && isFree(pl.row - 1, pl.col, pl.cols, pl.rows)) --pl.row;
-            mark(pl.row, pl.col, pl.cols, pl.rows, 1);
         }
         // automáticas: primer hueco libre, en orden
         for (const auto& it : items) {
@@ -590,13 +582,13 @@ private:
         const int n = gridCols(m_W);
         for (auto& it : items)
             for (const Placed& pl : placed)
-                if (pl.id == it.id) { it.x = qBound(0, int(std::lround(pl.col * 12.0 / n)), 11); it.y = pl.row; break; }
+                if (pl.id == it.id) { it.x = qBound(0, int(std::lround(pl.col * 48.0 / n)), 47); it.y = pl.row; break; }
     }
     QRectF placedRect(const Placed& pl) const
     {
         const int n = gridCols(m_W);
         const double cw = cellW(m_W, n);
-        return QRectF(m_L + pl.col * (cw + kGridGap), m_y0 + pl.row * (kCellH + kGridGap), pl.cols * cw + (pl.cols - 1) * kGridGap, rowsPx(pl.rows));
+        return QRectF(m_L + pl.col * cw + kInset, m_y0 + pl.row * kCellH + kInset, pl.cols * cw - 2 * kInset, rowsPx(pl.rows) - 2 * kInset);
     }
     int contentHeight(int w) const
     {
@@ -604,7 +596,7 @@ private:
         double y0 = 8 + (data.editing ? 34 + 10 : 0);
         int maxRow = 0;
         for (const Placed& pl : flow(currentItems(), W, presentSet(), !m_dragId.isEmpty() ? m_dragId : m_resId)) maxRow = qMax(maxRow, pl.row + pl.rows);
-        return int(y0 + (maxRow > 0 ? maxRow * (kCellH + kGridGap) - kGridGap : 0) + 6);
+        return int(y0 + (maxRow > 0 ? maxRow * kCellH : 0) + 6);
     }
 
     QString itemAt(const QPointF& pos) const
@@ -642,9 +634,9 @@ private:
         QColor c = theme::textFaint;
         c.setAlpha(110);
         p.setBrush(c);
-        for (int r = 0; r < rows; ++r)
-            for (int k = 0; k <= n; ++k)
-                p.drawEllipse(QPointF(m_L + k * (cw + kGridGap) - kGridGap / 2, m_y0 + r * (kCellH + kGridGap) - kGridGap / 2), 1.2, 1.2);
+        for (int r = 0; r * 4 < rows; ++r)
+            for (int k = 0; k <= n; k += 4)
+                p.drawEllipse(QPointF(m_L + k * cw, m_y0 + r * 4 * kCellH), 1.2, 1.2);
     }
 
     void dragStep(const QPointF& pos)
@@ -678,9 +670,9 @@ private:
         for (auto& it : m_preview) {
             if (it.id != m_dragId) continue;
             const int c = itemCols(it, n);
-            const int col = qBound(0, int(std::lround((tl.x() - m_L) / (cw + kGridGap))), n - c);
-            it.x = qBound(0, int(std::lround(col * 12.0 / n)), 11);
-            it.y = qMax(0, int(std::lround((tl.y() - m_y0) / (kCellH + kGridGap))));
+            const int col = qBound(0, int(std::lround((tl.x() - m_L) / cw)), n - c);
+            it.x = qBound(0, int(std::lround(col * 48.0 / n)), 47);
+            it.y = qMax(0, int(std::lround((tl.y() - m_y0) / kCellH)));
         }
     }
     void resizeStep(const QPointF& d)
@@ -688,13 +680,13 @@ private:
         const int n = gridCols(m_W);
         const double cw = cellW(m_W, n);
         const Limits lim = limitsFor(m_resId);
-        const int dxc = int(std::lround(d.x() / (cw + kGridGap))), dyc = int(std::lround(d.y() / (kCellH + kGridGap)));
+        const int dxc = int(std::lround(d.x() / cw)), dyc = int(std::lround(d.y() / kCellH));
         for (auto& it : m_preview) {
             if (it.id != m_resId) continue;
             // casilleros de partida (los de la tarjeta al agarrarla)
             const int c0 = itemCols(it0(), n), r0 = it0().rows;
-            const int x0 = qBound(0, int(std::lround(it0().x * n / 12.0)), n - c0), y0 = it0().y;
-            const int effMin = qMax(1, int(std::lround(lim.minC * n / 12.0)));
+            const int x0 = qBound(0, int(std::lround(it0().x * n / 48.0)), n - c0), y0 = it0().y;
+            const int effMin = qMax(1, int(std::lround(lim.minC * n / 48.0)));
             int c = c0, x = x0, r = r0, y = y0;
             if (m_grab & 1) c = qBound(effMin, c0 + dxc, n - x0);
             if (m_grab & 4) { c = qBound(effMin, c0 - dxc, x0 + c0); x = x0 + c0 - c; }
@@ -702,8 +694,8 @@ private:
                 if (m_grab & 2) r = qBound(lim.minR, r0 + dyc, lim.maxR);
                 if (m_grab & 8) { r = qBound(lim.minR, qMin(r0 - dyc, y0 + r0), lim.maxR); y = y0 + r0 - r; }
             }
-            it.cols = qBound(2, int(std::lround(c * 12.0 / n)), 12);
-            it.x = qBound(0, int(std::lround(x * 12.0 / n)), 11);
+            it.cols = qBound(4, int(std::lround(c * 48.0 / n)), 48);
+            it.x = qBound(0, int(std::lround(x * 48.0 / n)), 47);
             it.rows = r;
             it.y = qMax(0, y);
         }
@@ -1737,6 +1729,7 @@ void StatsWidget::refresh()
     d.sessions = insights::sessions(*m_db, d.from, qMin(d.to, now.date().addDays(1)), d.filter);
     d.simple = !m_db->setting("stats_advanced", 0).toBool();
     migrateGrid();
+    migrateGridFine();
     d.grid = parseGrid(m_db->setting(gridKey(d.simple)).toString());
     if (!m_db->setting("stats_paused_migrated", 0).toBool()) {   // beta 19: la tarjeta nueva aparece junto a «Tiempo muerto»
         for (bool sm : {true, false}) {
@@ -2095,6 +2088,23 @@ void StatsWidget::migrateGrid()
         m_db->setSetting(cardsKey(simple), l.isEmpty() ? QStringLiteral("none") : l.join(','));
     }
     m_db->setSetting("stats_grid_migrated", 1);
+    m_db->setSetting("stats_grid_fine", 1);   // lo recién armado ya está en la grilla fina
+}
+
+// Beta 29: la grilla pasó de 12 columnas x 32 px a 48 x 8 px (cada paso viejo = 4 nuevos).
+void StatsWidget::migrateGridFine()
+{
+    if (m_db->setting("stats_grid_fine", 0).toBool()) return;
+    for (bool simple : {true, false}) {
+        QStringList out;
+        for (const QString& part : m_db->setting(gridKey(simple), "").toString().split(',', Qt::SkipEmptyParts)) {
+            QStringList f = part.split(':');
+            for (int i = 1; i < f.size(); ++i) f[i] = QString::number(f[i].toInt() * 4);
+            out << f.join(':');
+        }
+        if (!out.isEmpty()) m_db->setSetting(gridKey(simple), out.join(','));
+    }
+    m_db->setSetting("stats_grid_fine", 1);
 }
 
 void StatsWidget::showDetail(const QString& key)

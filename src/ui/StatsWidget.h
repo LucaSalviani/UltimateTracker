@@ -71,6 +71,7 @@ private:
     bool           m_editing = false;
     void           layoutAction(const QString& key);
     void           migrateGrid();
+    void           migrateGridFine();
     QToolButton*   m_prev = nullptr;
     QToolButton*   m_next = nullptr;
 };
