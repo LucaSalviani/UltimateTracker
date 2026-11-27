@@ -243,6 +243,12 @@ Tres plazos; cada uno se prende, se apaga y se ajusta en *Ajustes › Hitos*.
 - **Menú ⋯ por secciones**: Siempre visible · Esconder en el borde · Pantalla completa · Mini reproductor / Tamaño de los cuadraditos · Personalizar estadísticas (solo en Estadísticas) / Libreta · **Exportar ▸** (informe completo, CSV de lo que veo, CSV de todo) · Sincronizar con el celu / Atajos · Ver tutorial / Ajustes · Salir. El botón de exportar salió de Estadísticas.
 - **Libreta ampliable**: botón ⤢ en la aleta (⤡ para volver); ampliada mide 680 px de ancho y hasta 640 de alto (`notepad_expanded`, se recuerda).
 
+### 7.0-b (beta 18)
+- **Resto al final de la cola**: lo estudiado de más en un pomodoro de duración rara se descuenta del *final* de los bloques pendientes (`goals::remainingBlocks`): 4×25 con un primero de 40 → quedan 25, 25, 10. Con actividades, cada actividad descuenta de sus propios últimos bloques; el próximo pomodoro viene con la duración del primer bloque que queda.
+- **Objetivo por pomodoros por defecto**: sin selector «Por tiempo / Por pomodoros» en el panel; *Ajustes › General › Estilo del objetivo* (`goal_style`: `pomodoros` por defecto o `time`) define cómo se carga uno nuevo (un objetivo ya guardado se abre en su propio estilo). Cada fila puede llevar su actividad (3×25 de SO + 3×25 de ADS).
+- **Arranque y fin estimado** (solo informativo, hoy): debajo del resumen, «Arrancás ahora (14:32) · terminás ≈ 18:40», con lo que falta y un recreo entre bloque y bloque; se actualiza cada 30 s.
+- **Mínimo diario de pomodoros** (`ms_daily_pomos`, Ajustes › Hitos junto a la meta semanal; 0 = sin mínimo): debajo de la meta semanal, «Mín. 4 pom/día · hoy 3/4 · semana 5/7» (hoy todavía no cuenta como incumplido); el detalle de la meta semanal lo explica.
+
 ## Mejoras 6.4 (beta 16, PC)
 - **Informe completo** (`core/Report`): en Estadísticas › ⤓ › *Informe completo*, se elige una carpeta y se crea `UltimateTracker informe AAAA-MM-DD/` con `informe.html` (se abre solo en el navegador; autocontenido, gráficos en SVG, imprimible a PDF), `pomodoros.csv` (como el export anterior, con notas), `dias.csv` (por día: estudio, pomodoros, recreos, indebido, inactivo, sesiones, ánimo y nota del diario), `actividades.csv` y `libreta.txt`. Siempre todo el historial. El HTML trae resumen, semana/mes/año a año con % y tendencia (tablas completas), día a día, mapa de calor, por actividad, ánimo, diario, notas de pomodoros, libreta y rutina. Los textos del usuario van escapados. Los exports CSV anteriores siguen en el mismo menú.
 

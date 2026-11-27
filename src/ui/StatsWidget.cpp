@@ -74,6 +74,7 @@ struct StatsData {
     // M44: hitos
     ms::Config ms;
     qint64 todaySec = 0, weekSec = 0, allSec = 0;
+    int pomosToday = 0, weekMinMet = 0, weekMinCounted = 0;   // Mejoras 7.0: mínimo diario de pomodoros
     ms::Records records;   // incluye hoy
     int bestStreak = 0;
     // Mejoras 5.2: paneles de la pantalla (orden, visibilidad y tamaño 0/1/2 = S/M/L), editables en la vista avanzada
@@ -232,7 +233,7 @@ protected:
 private:
     int maxFolderRows() const { static const int v[3] = {3, 6, 12}; return v[qBound(0, data.sizeOf(QStringLiteral("folders")), 2)]; }   // más que eso → scroll adentro del bloque
     static constexpr double kRowH = 26;
-    static constexpr double kChipH = 52;
+    double chipH() const { for (const Chip& c : buildChips()) if (!c.sub.isEmpty()) return 68; return 52; }
 
     bool goalChip() const { return data.period != StatsWidget::Period::Day && !data.goals.isEmpty(); }
     bool hasChips() const { return !buildChips().isEmpty(); }
@@ -240,7 +241,7 @@ private:
     // M44: tarjetitas con los hitos de corto y largo plazo.
     // Mejoras 3.0: si no entran en una fila (ventana chica) bajan a dos o más, así el
     // texto se lee entero; cada una abre su detalle.
-    struct Chip { QString key, label, value; double frac = -1; int dots = -1; };
+    struct Chip { QString key, label, value; double frac = -1; int dots = -1; QString sub; };
     QVector<Chip> buildChips() const
     {
         QVector<Chip> chips;
@@ -267,11 +268,16 @@ private:
                           (lvl ? ms::dayMarkName(lvl).left(1).toUpper() + ms::dayMarkName(lvl).mid(1) : QStringLiteral("Todavía no"))
                               + next, -1, lvl});
         }
-        if (data.ms.weekly && data.ms.weeklyMin > 0) {
+        const bool wk = data.ms.weekly && data.ms.weeklyMin > 0, dm = data.ms.dailyPomos > 0;
+        if (wk || dm) {
             const qint64 goal = qint64(data.ms.weeklyMin) * 60;
-            chips.append({QStringLiteral("weekly"), QStringLiteral("Meta semanal"),
-                          QStringLiteral("%1 de %2").arg(fmt::hours(data.weekSec), fmt::hours(goal)),
-                          double(data.weekSec) / goal});
+            Chip c{QStringLiteral("weekly"), QStringLiteral("Meta semanal"),
+                   wk ? QStringLiteral("%1 de %2").arg(fmt::hours(data.weekSec), fmt::hours(goal)) : QStringLiteral("%1 esta semana").arg(fmt::hours(data.weekSec)),
+                   wk ? double(data.weekSec) / goal : -1.0};
+            if (dm)   // Mejoras 7.0: el mínimo diario de pomodoros va debajo, en el mismo bloque
+                c.sub = QStringLiteral("Mín. %1 pom/día · hoy %2/%1 · semana %3/%4")
+                            .arg(data.ms.dailyPomos).arg(data.pomosToday).arg(data.weekMinMet).arg(data.weekMinCounted);
+            chips.append(c);
         }
         {   // Mejoras 7.0: el Foco pasó acá (los récords ocupan su lugar arriba)
             const int fp = focusPct();
@@ -296,7 +302,7 @@ private:
         const int n = int(buildChips().size());
         if (n == 0) return 0;
         const int rows = (n + chipsPerRow(W, n) - 1) / chipsPerRow(W, n);
-        return rows * kChipH + (rows - 1) * kChipGap;
+        return rows * chipH() + (rows - 1) * kChipGap;
     }
 
     double paintChips(QPainter& p, double L, double y, double W)
@@ -312,7 +318,7 @@ private:
             const int row = i / per;
             const int inRow = row == rows - 1 ? n - row * per : per;   // la última fila reparte el ancho entre las que tiene
             const double cw = (W - (inRow - 1) * kChipGap) / inRow;
-            const QRectF r(L + (i % per) * (cw + kChipGap), y + row * (kChipH + kChipGap), cw, kChipH);
+            const QRectF r(L + (i % per) * (cw + kChipGap), y + row * (chipH() + kChipGap), cw, chipH());
             p.setPen(QPen(theme::line, 1));
             p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8);
@@ -337,6 +343,12 @@ private:
             }
             p.setPen(theme::text);
             p.drawText(vr, Qt::AlignLeft | Qt::AlignVCenter, QFontMetrics(p.font()).elidedText(c.value, Qt::ElideRight, int(vr.width())));
+            if (!c.sub.isEmpty()) {
+                p.setFont(theme::uiFont(8));
+                p.setPen(theme::textDim);
+                p.drawText(QRectF(r.left() + 12, r.top() + 42, r.width() - 22, 14), Qt::AlignLeft | Qt::AlignVCenter,
+                           QFontMetrics(p.font()).elidedText(c.sub, Qt::ElideRight, int(r.width() - 22)));
+            }
             if (c.frac >= 0) {
                 const QRectF track(r.left() + 12, r.bottom() - 9, r.width() - 24, 3);
                 p.setPen(Qt::NoPen);
@@ -1400,13 +1412,23 @@ void StatsWidget::refresh()
     }
     // M44: hitos (siempre sobre todo, sin el filtro de actividad)
     d.ms = ms::Config::load(*m_db);
-    if (d.ms.dayMark || d.ms.weekly || d.ms.streaks) {
+    if (d.ms.dayMark || d.ms.weekly || d.ms.streaks || d.ms.dailyPomos > 0) {
         const auto all = stats::studyByDay(*m_db, QDate(2000, 1, 1), d.today, nullptr);
         d.todaySec = all.value(d.today);
         d.weekSec = ms::weekTotal(all, d.today);
         d.records = ms::records(all, d.today.addDays(1));
         if (d.weekSec > d.records.bestWeek) d.records.bestWeek = d.weekSec;   // la semana en curso también puede ser récord
         d.bestStreak = qMax(m_db->setting("ms/best_streak", 0).toInt(), 0);
+    }
+    if (d.ms.dailyPomos > 0) {   // Mejoras 7.0
+        const QDate mon = fmt::mondayOf(d.today);
+        const auto wd = insights::daily(*m_db, mon, d.today, nullptr, QDateTime::currentDateTime());
+        d.pomosToday = wd.value(d.today).pomos;
+        for (QDate x = mon; x <= d.today; x = x.addDays(1)) {
+            if (x == d.today && wd.value(x).pomos < d.ms.dailyPomos) continue;   // hoy todavía puede cumplirse
+            ++d.weekMinCounted;
+            if (wd.value(x).pomos >= d.ms.dailyPomos) ++d.weekMinMet;
+        }
     }
     if (d.ms.stages) for (qint64 v : m_db->studyByFolder()) d.allSec += v;
     d.streak = stats::streak(m_db->studiedDays(), d.today, stats::StreakRules::load(*m_db));
@@ -1861,6 +1883,8 @@ void StatsWidget::showDetail(const QString& key)
                                       : QStringLiteral("Faltan <b>%1</b>: son <b>%2 por día</b> en los %3 %4 que quedan (contando hoy).")
                                             .arg(fmt::hours(goal - d.weekSec), fmt::hours((goal - d.weekSec) / qMax(1, left))).arg(left).arg(left == 1 ? "día" : "días")) +
                table(rows) +
+               (d.ms.dailyPomos > 0 ? para(QStringLiteral("<br>Mínimo diario: <b>%1 pomodoros</b>. Hoy llevás <b>%2</b>; esta semana lo cumpliste <b>%3 de %4</b> días.")
+                                               .arg(d.ms.dailyPomos).arg(d.pomosToday).arg(d.weekMinMet).arg(d.weekMinCounted)) : QString()) +
                para(QStringLiteral("<br>") + dim(QStringLiteral("Semanas seguidas cumpliéndola: %1. Se cambia en Ajustes › Hitos.").arg(ms::weeksInARow(all, d.today, goal))));
     } else if (key == "records") {
         title = QStringLiteral("Tus récords");

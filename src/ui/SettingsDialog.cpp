@@ -701,6 +701,8 @@ QWidget* SettingsDialog::pageMilestones()
         m_markH[i]->setEnabled(m_msToggle[0]->isChecked());
     }
     m_weeklyH = spin(1, 100, m_db->setting("ms_weekly_min", 20 * 60).toInt() / 60, QStringLiteral(" h por semana"), w);
+    m_dailyPomos = spin(0, 50, m_db->setting("ms_daily_pomos", 0).toInt(), QStringLiteral(" pomodoros por día"), w);   // Mejoras 7.0
+    m_dailyPomos->setSpecialValueText(QStringLiteral("sin mínimo"));
     connect(m_msToggle[2], &QCheckBox::toggled, m_weeklyH, &QWidget::setEnabled);
     m_weeklyH->setEnabled(m_msToggle[2]->isChecked());
 
@@ -710,6 +712,7 @@ QWidget* SettingsDialog::pageMilestones()
     mform->addRow(QStringLiteral("Oro"), m_markH[2]);
     auto* wform = new QFormLayout;
     wform->addRow(QStringLiteral("Meta"), m_weeklyH);
+    wform->addRow(QStringLiteral("Mínimo diario"), m_dailyPomos);
 
     auto* lay = new QVBoxLayout(w);
     lay->addWidget(heading(QStringLiteral("Hitos"), w));
@@ -890,6 +893,7 @@ void SettingsDialog::accept()
     m_db->setSetting("ms_silver_min", int(std::lround(qMax(m_markH[0]->value(), m_markH[1]->value()) * 60)));
     m_db->setSetting("ms_gold_min", int(std::lround(qMax(m_markH[1]->value(), m_markH[2]->value()) * 60)));
     m_db->setSetting("ms_weekly_min", m_weeklyH->value() * 60);
+    m_db->setSetting("ms_daily_pomos", m_dailyPomos->value());
     m_db->setSetting("activity_colors", m_activityColors->isChecked() ? 1 : 0);
     {
         const char* keys[] = {"celebration_pomodoro", "celebration_goal", "celebration_milestone"};

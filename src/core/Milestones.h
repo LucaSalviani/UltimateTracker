@@ -25,6 +25,7 @@ struct Config {
     bool month   = true;    // resumen del mes
     int  markMin[3] = {120, 240, 360};   // bronce, plata, oro (minutos en el día)
     int  weeklyMin = 20 * 60;
+    int  dailyPomos = 0;    // Mejoras 7.0: mínimo de pomodoros por día (0 = sin mínimo)
     static Config load(const Database& db);
 };
 

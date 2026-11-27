@@ -17,6 +17,7 @@ Config Config::load(const Database& db)
     c.markMin[1] = qMax(c.markMin[0], db.setting("ms_silver_min", 240).toInt());
     c.markMin[2] = qMax(c.markMin[1], db.setting("ms_gold_min", 360).toInt());
     c.weeklyMin = db.setting("ms_weekly_min", 20 * 60).toInt();
+    c.dailyPomos = qBound(0, db.setting("ms_daily_pomos", 0).toInt(), 50);
     return c;
 }
 
