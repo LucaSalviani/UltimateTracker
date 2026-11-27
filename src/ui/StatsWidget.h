@@ -72,6 +72,7 @@ private:
     void           layoutAction(const QString& key);
     void           migrateGrid();
     void           migrateGridFine();
+    void           migrateGridTidy();
     QToolButton*   m_prev = nullptr;
     QToolButton*   m_next = nullptr;
 };

@@ -157,20 +157,34 @@ static QString serializeLayout(const QVector<StatsData::Panel>& v)
 }
 
 // Mejoras 7.0: orden y tamaño de las tarjetas ("id:columnas:filas,…"; las que falten vuelven con su tamaño por defecto, al final).
-static QVector<StatsData::Item> defaultGrid()
+static QVector<StatsData::Item> defaultGrid(bool simple)
 {
-    static const struct { const char* id; int c, r; } d[] = {
-        {"streak", 16, 12}, {"study", 12, 12}, {"records", 20, 12},
-        {"breaks", 12, 8}, {"undue", 12, 8}, {"paused", 12, 8}, {"inactive", 12, 8}, {"sessions", 12, 8},
-        {"goals", 16, 8}, {"mark", 16, 8}, {"startgoal", 16, 8}, {"weekly", 16, 12}, {"focus", 16, 8}, {"level", 16, 8},
-        {"chart", 48, 28}, {"folders", 48, 36}};
+    // {id, cols, rows, x, y} en 48avos de ancho y pasos de 8 px; x = -1: sin lugar propio (va al primer hueco libre).
+    struct D { const char* id; int c, r, x, y; };
     QVector<StatsData::Item> v;
-    for (const auto& x : d) v.append({QString::fromLatin1(x.id), x.c, x.r});
+    if (simple) {   // el diseño armado a mano por el usuario
+        static const D d[] = {
+            {"streak", 16, 20, 0, 0}, {"study", 12, 20, 16, 0}, {"records", 20, 28, 28, 0},
+            {"focus", 8, 8, 0, 20}, {"mark", 8, 8, 8, 20}, {"weekly", 12, 8, 16, 20},
+            {"goals", 16, 8, -1, -1},
+            {"breaks", 12, 8, -1, -1}, {"undue", 12, 8, -1, -1}, {"paused", 12, 8, -1, -1}, {"inactive", 12, 8, -1, -1}, {"sessions", 12, 8, -1, -1},
+            {"startgoal", 16, 8, -1, -1}, {"level", 16, 8, -1, -1},
+            {"chart", 48, 28, 0, 28}, {"folders", 48, 28, 0, 56}};
+        for (const auto& x : d) { StatsData::Item it{QString::fromLatin1(x.id), x.c, x.r}; it.x = x.x; it.y = x.y; v.append(it); }
+    } else {        // avanzada: todo prolijo, en filas de ancho completo
+        static const D d[] = {
+            {"streak", 16, 12, 0, 0}, {"study", 12, 12, 16, 0}, {"records", 20, 12, 28, 0},
+            {"breaks", 12, 8, 0, 12}, {"undue", 12, 8, 12, 12}, {"paused", 12, 8, 24, 12}, {"inactive", 12, 8, 36, 12},
+            {"sessions", 12, 8, 0, 20}, {"focus", 12, 8, 12, 20}, {"goals", 12, 8, 24, 20}, {"startgoal", 12, 8, 36, 20},
+            {"mark", 16, 12, 0, 28}, {"weekly", 16, 12, 16, 28}, {"level", 16, 12, 32, 28},
+            {"chart", 48, 28, 0, 40}, {"folders", 48, 36, 0, 68}};
+        for (const auto& x : d) { StatsData::Item it{QString::fromLatin1(x.id), x.c, x.r}; it.x = x.x; it.y = x.y; v.append(it); }
+    }
     return v;
 }
-static QVector<StatsData::Item> parseGrid(const QString& s)
+static QVector<StatsData::Item> parseGrid(const QString& s, bool simple)
 {
-    const QVector<StatsData::Item> def = defaultGrid();
+    const QVector<StatsData::Item> def = defaultGrid(simple);
     QVector<StatsData::Item> out;
     for (const QString& part : s.split(',', Qt::SkipEmptyParts)) {
         const QStringList f = part.split(':');
@@ -1765,7 +1779,8 @@ void StatsWidget::refresh()
     d.simple = !m_db->setting("stats_advanced", 0).toBool();
     migrateGrid();
     migrateGridFine();
-    d.grid = parseGrid(m_db->setting(gridKey(d.simple)).toString());
+    migrateGridTidy();
+    d.grid = parseGrid(m_db->setting(gridKey(d.simple)).toString(), d.simple);
     if (!m_db->setting("stats_paused_migrated", 0).toBool()) {   // beta 19: la tarjeta nueva aparece junto a «Tiempo muerto»
         for (bool sm : {true, false}) {
             const QString v = m_db->setting(cardsKey(sm), "").toString();
@@ -2115,7 +2130,7 @@ void StatsWidget::migrateGrid()
             }
         }
         QVector<StatsData::Item> grid;
-        const auto def = defaultGrid();
+        const auto def = defaultGrid(simple);
         for (const QString& id : order) for (const auto& d : def) if (d.id == id) grid.append(d);
         m_db->setSetting(gridKey(simple), serializeGrid(grid));
         QStringList l;
@@ -2140,6 +2155,17 @@ void StatsWidget::migrateGridFine()
         if (!out.isEmpty()) m_db->setSetting(gridKey(simple), out.join(','));
     }
     m_db->setSetting("stats_grid_fine", 1);
+}
+
+// Beta 32: la vista avanzada que nunca se acomodó a mano (sin lugares propios) vuelve al diseño prolijo por defecto.
+void StatsWidget::migrateGridTidy()
+{
+    if (m_db->setting("stats_adv_tidy", 0).toBool()) return;
+    const QString raw = m_db->setting(gridKey(false), "").toString();
+    bool pinned = false;
+    for (const QString& part : raw.split(',', Qt::SkipEmptyParts)) if (part.split(':').size() >= 5) pinned = true;
+    if (!pinned) m_db->setSetting(gridKey(false), "");
+    m_db->setSetting("stats_adv_tidy", 1);
 }
 
 void StatsWidget::showDetail(const QString& key)
