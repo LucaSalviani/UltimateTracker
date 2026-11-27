@@ -2583,9 +2583,10 @@ void MainWindow::refreshGoals()
         // que sigue: en vez de un pedazo gris tapado, el fantasma queda más corto
         // (8×25 con un primero de 30 → el segundo pasa a 20). Si lo que queda es
         // menos de 3 minutos no vale la pena un cuadradito y se descarta.
+        // Mejoras 7.0: el resto se descuenta del final de la cola (4×25 con un primero de 40 → 25, 25, 10).
+        const QVector<int> rem = goals::remainingBlocks(parsed, fills);
         for (int i = 0; i < parsed.blocks.size(); ++i) {
-            if (fills[i] >= 0.999) continue;
-            const int rest = int(qRound(parsed.blocks[i] * (1.0 - qBound(0.0, fills[i], 1.0))));
+            const int rest = rem[i];
             if (rest < 3) continue;
             left.append({rest, parsed.folders.value(i), 0.0, i});
         }

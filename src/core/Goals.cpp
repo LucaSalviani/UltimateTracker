@@ -128,6 +128,32 @@ QVector<double> fillByActivity(const Parsed& p, const QHash<qint64, qint64>& stu
     return fills;
 }
 
+QVector<int> remainingBlocks(const Parsed& p, const QVector<double>& fills)
+{
+    const int n = int(p.blocks.size());
+    QVector<double> rest(n);
+    QHash<qint64, double> consumed;   // por actividad (0 = cualquiera)
+    QHash<qint64, QVector<int>> group;
+    for (int i = 0; i < n; ++i) {
+        const qint64 f = p.folders.value(i);
+        consumed[f] += p.blocks[i] * qBound(0.0, fills.value(i), 1.0);
+        group[f].append(i);
+        rest[i] = p.blocks[i];
+    }
+    for (auto it = group.cbegin(); it != group.cend(); ++it) {
+        double c = consumed.value(it.key());
+        for (int k = int(it->size()) - 1; k >= 0 && c > 0; --k) {
+            const int i = it->at(k);
+            const double eat = qMin(rest[i], c);
+            rest[i] -= eat;
+            c -= eat;
+        }
+    }
+    QVector<int> out(n);
+    for (int i = 0; i < n; ++i) out[i] = int(qRound(rest[i]));
+    return out;
+}
+
 bool allDone(const QVector<double>& fills)
 {
     for (double f : fills) if (f < 0.999) return false;

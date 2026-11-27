@@ -667,6 +667,12 @@ private slots:
         QVERIFY(t.enough);
         QVERIFY(t.slope > 0 && t.pct > 0);   // va al alza
         QVERIFY(t.sentence().contains("alza"));
+        {   // Mejoras 7.0: el resto de un pomodoro raro se descuenta del final de la cola
+            const auto g = goals::parse("4x25", 25);
+            QCOMPARE(goals::remainingBlocks(g, goals::fillByActivity(g, {{0, 40 * 60}}, FolderTree())), (QVector<int>{25, 25, 10, 0}));
+            const auto g2 = goals::parse("3x30+2x25", 25);
+            QCOMPARE(goals::remainingBlocks(g2, goals::fillByActivity(g2, {{0, 40 * 60}}, FolderTree())), (QVector<int>{30, 30, 30, 10, 0}));
+        }
         const auto rh = insights::rhythm(db, today.addDays(-39), today, nullptr);
         QVERIFY(rh.total > 0);
         qint64 cells = 0;

@@ -62,6 +62,10 @@ BlockFill fillBlocks(const QVector<int>& blocksMin, qint64 studiedSec);
 // Devuelve un valor 0..1 por bloque. Sin actividades da lo mismo que fillBlocks.
 QVector<double> fillByActivity(const Parsed& p, const QHash<qint64, qint64>& studiedByFolder, const FolderTree& tree);
 bool allDone(const QVector<double>& fills);
+// Mejoras 7.0: lo que falta de cada bloque (en minutos). Lo ya estudiado se descuenta del FINAL
+// de la cola (4×25 con un primero de 40 → quedan 25, 25, 10), no del que sigue. Con actividades,
+// cada actividad descuenta de sus propios últimos bloques.
+QVector<int> remainingBlocks(const Parsed& p, const QVector<double>& fills);
 
 // Partes "3x30@7" → {3, 30, 7}. Para armar y desarmar el spec en la interfaz.
 struct Part { int count = 0; int minutes = 0; qint64 folder = 0; };
